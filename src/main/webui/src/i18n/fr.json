@@ -1,0 +1,158 @@
+{
+  "common": {
+    "comingSoon": "Bientôt disponible.",
+    "cancel": "Annuler",
+    "failed": "L'opération a échoué"
+  },
+  "app": {
+    "backendUnreachable": "Backend injoignable"
+  },
+  "layout": {
+    "logout": "Se déconnecter"
+  },
+  "menu": {
+    "home": "Accueil",
+    "realm": "Realm",
+    "organisations": "Organisations",
+    "organisation": "Organisation {{org}}",
+    "members": "Membres"
+  },
+  "login": {
+    "subtitle": "Connectez-vous pour gérer vos organisations.",
+    "signIn": "Se connecter"
+  },
+  "home": {
+    "welcome": "Bienvenue {{name}}",
+    "realmRoles": "Rôles du realm",
+    "organisations": "Organisations",
+    "none": "Aucune"
+  },
+  "notFound": {
+    "title": "Page introuvable",
+    "text": "Cette page n'existe pas, ou vos rôles n'y donnent pas accès."
+  },
+  "organisations": {
+    "title": "Organisations",
+    "subtitle": "Une organisation par client, avec son owner, ses membres et ses produits.",
+    "new": "Nouvelle organisation",
+    "searchLabel": "Rechercher des organisations",
+    "searchPlaceholder": "Rechercher par nom",
+    "allProducts": "Tous les produits",
+    "productFilterLabel": "Filtrer par produit",
+    "count_one": "{{count}} organisation",
+    "count_other": "{{count}} organisations",
+    "empty": "Aucune organisation pour l'instant. Créez la première avec le bouton « Nouvelle organisation ».",
+    "noMatch": "Aucune organisation ne correspond à cette recherche.",
+    "loadError": "Impossible de charger les organisations",
+    "columns": {
+      "name": "Nom",
+      "emailDomains": "Domaines email",
+      "owner": "Owner",
+      "members": "Membres",
+      "products": "Produits",
+      "status": "Statut"
+    },
+    "noOwner": "Pas d'owner",
+    "noProducts": "Aucun",
+    "productCount_one": "{{count}} produit",
+    "productCount_other": "{{count}} produits",
+    "status": {
+      "active": "Active",
+      "disabled": "Désactivée"
+    },
+    "create": {
+      "title": "Nouvelle organisation",
+      "name": "Nom",
+      "nameDescription": "Lettres minuscules, chiffres et tirets. Non modifiable ensuite : c'est l'identifiant.",
+      "nameInvalid": "Lettres minuscules, chiffres et tirets internes uniquement",
+      "emailDomains": "Domaines email",
+      "emailDomainsDescription": "Les users de ces domaines sont dirigés vers cette organisation au login. Entrée ou virgule pour valider un domaine.",
+      "owner": "Owner (facultatif)",
+      "ownerEmail": "Email",
+      "ownerFirstName": "Prénom",
+      "ownerLastName": "Nom",
+      "ownerDescription": "Un user existant est réutilisé, sauf s'il appartient déjà à une autre organisation.",
+      "emailInvalid": "Adresse email invalide",
+      "submit": "Créer",
+      "failed": "Organisation non créée"
+    }
+  },
+  "orgDetail": {
+    "breadcrumb": "Organisations",
+    "loadError": "Impossible de charger l'organisation {{org}}",
+    "domains": "Domaines :",
+    "owners_one": "Owner :",
+    "owners_other": "Owners :",
+    "client": "Client :",
+    "none": "Aucun",
+    "tabs": {
+      "members": "Membres",
+      "products": "Produits"
+    },
+    "roles": {
+      "ORG_OWNER": "org-owner",
+      "ORG_ADMIN": "org-admin",
+      "ORG_USER": "org-user"
+    },
+    "cycles": {
+      "DAILY": "Quotidien",
+      "MONTHLY": "Mensuel",
+      "YEARLY": "Annuel"
+    },
+    "delete": {
+      "button": "Supprimer",
+      "title": "Supprimer l'organisation {{org}} ?",
+      "message": "Son client, ses groupes et les produits qui lui sont assignés sont supprimés. Les users sont conservés, mais perdent leur accès à l'organisation. Action irréversible.",
+      "confirm": "Supprimer"
+    },
+    "members": {
+      "loadError": "Impossible de charger les membres",
+      "empty": "Aucun membre pour l'instant.",
+      "columns": {
+        "name": "Nom",
+        "email": "Email",
+        "role": "Rôle"
+      }
+    },
+    "products": {
+      "subtitle": "Ce que l'organisation a négocié pour chaque produit : son quota, les rôles achetés, ses paramètres. C'est l'API du produit qui compte l'usage.",
+      "assign": "Assigner un produit",
+      "loadError": "Impossible de charger les produits",
+      "empty": "Aucun produit assigné pour l'instant.",
+      "edit": "Modifier",
+      "remove": "Retirer",
+      "removeTitle": "Retirer {{product}} ?",
+      "removeMessage": "Les membres de l'organisation perdent ce produit.",
+      "columns": {
+        "product": "Produit",
+        "quota": "Quota",
+        "cycle": "Cycle",
+        "boughtRoles": "Rôles achetés",
+        "params": "Paramètres"
+      }
+    },
+    "assign": {
+      "title": "Assigner un produit à {{org}}",
+      "editTitle": "Assignation de {{product}}",
+      "product": "Produit",
+      "productPlaceholder": "Choisir un produit",
+      "productRequired": "Choisissez un produit",
+      "noProductLeft": "Tous les produits des catalogues sont déjà assignés",
+      "quota": "Quota",
+      "quotaInvalid": "Un nombre entier supérieur à 0",
+      "cycle": "Cycle",
+      "boughtRoles": "Rôles achetés",
+      "boughtRolesDescription": "Les rôles du produit achetés par l'organisation : ses teams peuvent les donner, jamais plus.",
+      "paramDefault": "Par défaut : {{value}}",
+      "true": "Oui",
+      "false": "Non",
+      "tokenHint": "Dans les tokens, dès qu'une team de l'organisation donne le produit :",
+      "submit": "Assigner",
+      "save": "Enregistrer",
+      "failed": "Produit non assigné"
+    }
+  },
+  "members": {
+    "title": "Membres de {{org}}"
+  }
+}

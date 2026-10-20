@@ -1,0 +1,158 @@
+{
+  "common": {
+    "comingSoon": "Coming soon.",
+    "cancel": "Cancel",
+    "failed": "The operation failed"
+  },
+  "app": {
+    "backendUnreachable": "Backend unreachable"
+  },
+  "layout": {
+    "logout": "Log out"
+  },
+  "menu": {
+    "home": "Home",
+    "realm": "Realm",
+    "organisations": "Organisations",
+    "organisation": "Organisation {{org}}",
+    "members": "Members"
+  },
+  "login": {
+    "subtitle": "Sign in to manage your organisations.",
+    "signIn": "Sign in"
+  },
+  "home": {
+    "welcome": "Welcome {{name}}",
+    "realmRoles": "Realm roles",
+    "organisations": "Organisations",
+    "none": "None"
+  },
+  "notFound": {
+    "title": "Page not found",
+    "text": "This page does not exist, or your roles do not give access to it."
+  },
+  "organisations": {
+    "title": "Organisations",
+    "subtitle": "One organisation per customer, each with its owner, members and products.",
+    "new": "New organisation",
+    "searchLabel": "Search organisations",
+    "searchPlaceholder": "Search by name",
+    "allProducts": "All products",
+    "productFilterLabel": "Filter by product",
+    "count_one": "{{count}} organisation",
+    "count_other": "{{count}} organisations",
+    "empty": "No organisation yet. Create the first one with the \"New organisation\" button.",
+    "noMatch": "No organisation matches this search.",
+    "loadError": "Could not load the organisations",
+    "columns": {
+      "name": "Name",
+      "emailDomains": "Email domains",
+      "owner": "Owner",
+      "members": "Members",
+      "products": "Products",
+      "status": "Status"
+    },
+    "noOwner": "No owner",
+    "noProducts": "None",
+    "productCount_one": "{{count}} product",
+    "productCount_other": "{{count}} products",
+    "status": {
+      "active": "Active",
+      "disabled": "Disabled"
+    },
+    "create": {
+      "title": "New organisation",
+      "name": "Name",
+      "nameDescription": "Lowercase letters, digits and hyphens. Cannot be changed later: it is the identifier.",
+      "nameInvalid": "Lowercase letters, digits and inner hyphens only",
+      "emailDomains": "Email domains",
+      "emailDomainsDescription": "Users with these domains are sent to this organisation when they log in. Press Enter or a comma after each domain.",
+      "owner": "Owner (optional)",
+      "ownerEmail": "Email",
+      "ownerFirstName": "First name",
+      "ownerLastName": "Last name",
+      "ownerDescription": "An existing user is reused, unless they already belong to another organisation.",
+      "emailInvalid": "Invalid email address",
+      "submit": "Create",
+      "failed": "Organisation not created"
+    }
+  },
+  "orgDetail": {
+    "breadcrumb": "Organisations",
+    "loadError": "Could not load the organisation {{org}}",
+    "domains": "Domains:",
+    "owners_one": "Owner:",
+    "owners_other": "Owners:",
+    "client": "Client:",
+    "none": "None",
+    "tabs": {
+      "members": "Members",
+      "products": "Products"
+    },
+    "roles": {
+      "ORG_OWNER": "org-owner",
+      "ORG_ADMIN": "org-admin",
+      "ORG_USER": "org-user"
+    },
+    "cycles": {
+      "DAILY": "Daily",
+      "MONTHLY": "Monthly",
+      "YEARLY": "Yearly"
+    },
+    "delete": {
+      "button": "Delete",
+      "title": "Delete the organisation {{org}}?",
+      "message": "Its client, its groups and the products assigned to it are deleted. The users are kept, but lose their access to the organisation. This cannot be undone.",
+      "confirm": "Delete"
+    },
+    "members": {
+      "loadError": "Could not load the members",
+      "empty": "No member yet.",
+      "columns": {
+        "name": "Name",
+        "email": "Email",
+        "role": "Role"
+      }
+    },
+    "products": {
+      "subtitle": "What the organisation negotiated for each product: its quota, the roles it bought, its parameters. The API of the product counts the usage.",
+      "assign": "Assign a product",
+      "loadError": "Could not load the products",
+      "empty": "No product assigned yet.",
+      "edit": "Edit",
+      "remove": "Remove",
+      "removeTitle": "Remove {{product}}?",
+      "removeMessage": "The members of the organisation lose this product.",
+      "columns": {
+        "product": "Product",
+        "quota": "Quota",
+        "cycle": "Cycle",
+        "boughtRoles": "Bought roles",
+        "params": "Parameters"
+      }
+    },
+    "assign": {
+      "title": "Assign a product to {{org}}",
+      "editTitle": "Assignment of {{product}}",
+      "product": "Product",
+      "productPlaceholder": "Choose a product",
+      "productRequired": "Choose a product",
+      "noProductLeft": "Every product of the catalogs is already assigned",
+      "quota": "Quota",
+      "quotaInvalid": "A whole number greater than 0",
+      "cycle": "Cycle",
+      "boughtRoles": "Bought roles",
+      "boughtRolesDescription": "The roles of the product the organisation bought: its teams can give these, never more.",
+      "paramDefault": "Default: {{value}}",
+      "true": "Yes",
+      "false": "No",
+      "tokenHint": "In the tokens, once a team of the organisation gives the product:",
+      "submit": "Assign",
+      "save": "Save",
+      "failed": "Product not assigned"
+    }
+  },
+  "members": {
+    "title": "Members of {{org}}"
+  }
+}

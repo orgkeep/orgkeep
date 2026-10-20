@@ -1,0 +1,383 @@
+import { useState } from 'react';
+import {
+  Alert,
+  Anchor,
+  Badge,
+  Breadcrumbs,
+  Button,
+  Center,
+  Code,
+  Group,
+  Loader,
+  Stack,
+  Table,
+  Tabs,
+  Text,
+  Title,
+} from '@mantine/core';
+import { useDisclosure } from '@mantine/hooks';
+import { useTranslation } from 'react-i18next';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import {
+  type OrgDetails,
+  type OrgMember,
+  type OrgProduct,
+  type OrgRole,
+  useDeleteOrganisation,
+  useOrganisation,
+  useOrgMembers,
+  useOrgProducts,
+  useUnassignProduct,
+} from '../api/organisations';
+import { type Product, productKey, useProducts } from '../api/products';
+import ConfirmModal from '../components/ConfirmModal';
+import AssignProductModal from './AssignProductModal';
+import { personName } from './personName';
+
+// The two tabs of the page. The selected one is in the URL (?tab=products) like the product filter of the list:
+// the product count of the list links straight to the products tab.
+const TABS = ['members', 'products'] as const;
+type Tab = (typeof TABS)[number];
+
+// The detail of an organisation (realm owner): its header, its members and its products.
+export default function OrganisationPage() {
+  const { t } = useTranslation();
+  // the :org part of the route /organisations/:org. Always set on this route, hence the "!"
+  const org = useParams().org!;
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab: Tab = searchParams.get('tab') === 'products' ? 'products' : 'members';
+
+  const { data: details, isPending, error } = useOrganisation(org);
+  // both lists are loaded at once: the tabs show their counts
+  const members = useOrgMembers(org);
+  const products = useOrgProducts(org);
+
+  if (isPending) {
+    return (
+      <Center py="xl">
+        <Loader />
+      </Center>
+    );
+  }
+  if (error) {
+    // e.g. 404 for an unknown organisation, typed in the URL
+    return (
+      <Alert color="red" title={t('orgDetail.loadError', { org })} maw={1100}>
+        {error.message}
+      </Alert>
+    );
+  }
+
+  function changeTab(value: string | null) {
+    // the members tab is the default: no "?tab=members" in the URL
+    setSearchParams(value === 'products' ? { tab: 'products' } : {});
+  }
+
+  return (
+    <Stack maw={1100}>
+      <Breadcrumbs>
+        <Anchor component={Link} to="/organisations">
+          {t('orgDetail.breadcrumb')}
+        </Anchor>
+        <Text ff="monospace">{org}</Text>
+      </Breadcrumbs>
+
+      <OrgHeader details={details} />
+
+      <Tabs value={tab} onChange={changeTab}>
+        <Tabs.List>
+          <Tabs.Tab value="members" rightSection={<Count value={members.data?.length} />}>
+            {t('orgDetail.tabs.members')}
+          </Tabs.Tab>
+          <Tabs.Tab value="products" rightSection={<Count value={products.data?.length} />}>
+            {t('orgDetail.tabs.products')}
+          </Tabs.Tab>
+        </Tabs.List>
+
+        <Tabs.Panel value="members" pt="md">
+          <MembersTab members={members.data} isPending={members.isPending} error={members.error} />
+        </Tabs.Panel>
+        <Tabs.Panel value="products" pt="md">
+          <ProductsTab org={org} products={products.data} isPending={products.isPending} error={products.error} />
+        </Tabs.Panel>
+      </Tabs>
+    </Stack>
+  );
+}
+
+// The number next to a tab title, once its list is loaded
+function Count({ value }: { value: number | undefined }) {
+  return value === undefined ? null : (
+    <Text size="xs" c="dimmed" fw={500}>
+      {value}
+    </Text>
+  );
+}
+
+// Name, status, domains, owners, org client, and the delete button
+function OrgHeader({ details }: { details: OrgDetails }) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const deleteOrg = useDeleteOrganisation();
+  const [confirmOpened, { open: openConfirm, close: closeConfirm }] = useDisclosure();
+
+  function closeDeleteConfirm() {
+    deleteOrg.reset();
+    closeConfirm();
+  }
+
+  function confirmDelete() {
+    // the page of a deleted org would answer 404: back to the list once the core confirmed
+    deleteOrg.mutate(details.name, { onSuccess: () => navigate('/organisations') });
+  }
+
+  return (
+    <Group justify="space-between" align="flex-start">
+      <Stack gap="xs">
+        <Group gap="sm">
+          <Title order={2} ff="monospace">
+            {details.name}
+          </Title>
+          <Badge color={details.enabled ? 'green' : 'gray'} variant="light">
+            {details.enabled ? t('organisations.status.active') : t('organisations.status.disabled')}
+          </Badge>
+        </Group>
+        <Group gap="lg">
+          <Text c="dimmed">
+            {t('orgDetail.domains')}{' '}
+            <Text span c="var(--mantine-color-text)" fw={500}>
+              {details.emailDomains.length === 0 ? t('orgDetail.none') : details.emailDomains.join(', ')}
+            </Text>
+          </Text>
+          <Text c="dimmed">
+            {t('orgDetail.owners', { count: details.owners.length })}{' '}
+            <Text span c="var(--mantine-color-text)" fw={500}>
+              {details.owners.length === 0 ? t('organisations.noOwner') : details.owners.map(personName).join(', ')}
+            </Text>
+          </Text>
+          <Text c="dimmed">
+            {t('orgDetail.client')} <Code>{details.clientId}</Code>
+          </Text>
+        </Group>
+      </Stack>
+
+      <Button color="red" variant="outline" onClick={openConfirm}>
+        {t('orgDetail.delete.button')}
+      </Button>
+
+      <ConfirmModal
+        opened={confirmOpened}
+        title={t('orgDetail.delete.title', { org: details.name })}
+        message={t('orgDetail.delete.message')}
+        confirmLabel={t('orgDetail.delete.confirm')}
+        pending={deleteOrg.isPending}
+        error={deleteOrg.error}
+        onConfirm={confirmDelete}
+        onClose={closeDeleteConfirm}
+      />
+    </Group>
+  );
+}
+
+// The colors of the role badges: owner > admin > user
+const ROLE_COLORS: Record<OrgRole, string> = {
+  ORG_OWNER: 'orange',
+  ORG_ADMIN: 'blue',
+  ORG_USER: 'gray',
+};
+
+interface MembersTabProps {
+  // undefined while loading
+  members: OrgMember[] | undefined;
+  isPending: boolean;
+  error: Error | null;
+}
+
+// Read only for now: adding and removing members will come with the members page of the org admins
+function MembersTab({ members, isPending, error }: MembersTabProps) {
+  const { t } = useTranslation();
+
+  if (isPending) {
+    return <Loader size="sm" />;
+  }
+  if (error) {
+    return (
+      <Alert color="red" title={t('orgDetail.members.loadError')}>
+        {error.message}
+      </Alert>
+    );
+  }
+  if (!members || members.length === 0) {
+    return <Text c="dimmed">{t('orgDetail.members.empty')}</Text>;
+  }
+
+  return (
+    <Table.ScrollContainer minWidth={640}>
+      <Table highlightOnHover withTableBorder>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>{t('orgDetail.members.columns.name')}</Table.Th>
+            <Table.Th>{t('orgDetail.members.columns.email')}</Table.Th>
+            <Table.Th>{t('orgDetail.members.columns.role')}</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {members.map((member) => (
+            <Table.Tr key={member.id}>
+              <Table.Td fw={500}>{personName(member)}</Table.Td>
+              <Table.Td c="dimmed">{member.email}</Table.Td>
+              <Table.Td>
+                <Badge color={ROLE_COLORS[member.role]} variant="light">
+                  {t(`orgDetail.roles.${member.role}`)}
+                </Badge>
+              </Table.Td>
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+    </Table.ScrollContainer>
+  );
+}
+
+interface ProductsTabProps {
+  org: string;
+  products: OrgProduct[] | undefined;
+  isPending: boolean;
+  error: Error | null;
+}
+
+function ProductsTab({ org, products, isPending, error }: ProductsTabProps) {
+  const { t, i18n } = useTranslation();
+  // the products of the catalogs give the display names, and the products that can be assigned
+  const { data: catalogProducts } = useProducts();
+  const unassign = useUnassignProduct(org);
+
+  // Which modal is open, and for which assignment. A single state for the assign modal:
+  // null = closed, 'new' = "Assign a product", an assignment = "Edit" of this assignment
+  const [assignTarget, setAssignTarget] = useState<OrgProduct | 'new' | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<OrgProduct | null>(null);
+
+  function displayName(assignment: OrgProduct): string {
+    const product = catalogProducts?.find((p: Product) => p.catalog === assignment.catalog && p.name === assignment.product);
+    return product?.displayName ?? assignment.product;
+  }
+
+  function closeRemoveConfirm() {
+    unassign.reset();
+    setRemoveTarget(null);
+  }
+
+  function confirmRemove() {
+    if (removeTarget) {
+      unassign.mutate({ catalog: removeTarget.catalog, product: removeTarget.product }, { onSuccess: closeRemoveConfirm });
+    }
+  }
+
+  if (isPending) {
+    return <Loader size="sm" />;
+  }
+  if (error) {
+    return (
+      <Alert color="red" title={t('orgDetail.products.loadError')}>
+        {error.message}
+      </Alert>
+    );
+  }
+
+  const assigned = products ?? [];
+  // the language of the page decides the thousand separator: 50,000 in English, 50 000 in French
+  const numberFormat = new Intl.NumberFormat(i18n.language);
+
+  return (
+    <Stack>
+      <Group justify="space-between">
+        <Text c="dimmed">{t('orgDetail.products.subtitle')}</Text>
+        <Button onClick={() => setAssignTarget('new')}>{t('orgDetail.products.assign')}</Button>
+      </Group>
+
+      {assigned.length === 0 ? (
+        <Text c="dimmed">{t('orgDetail.products.empty')}</Text>
+      ) : (
+        <Table.ScrollContainer minWidth={900}>
+          <Table highlightOnHover withTableBorder>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>{t('orgDetail.products.columns.product')}</Table.Th>
+                <Table.Th ta="right">{t('orgDetail.products.columns.quota')}</Table.Th>
+                <Table.Th>{t('orgDetail.products.columns.cycle')}</Table.Th>
+                <Table.Th>{t('orgDetail.products.columns.boughtRoles')}</Table.Th>
+                <Table.Th>{t('orgDetail.products.columns.params')}</Table.Th>
+                <Table.Th />
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {assigned.map((product) => (
+                <Table.Tr key={productKey(product.catalog, product.product)}>
+                  <Table.Td>
+                    <Text fw={500}>{displayName(product)}</Text>
+                    <Text size="xs" c="dimmed" ff="monospace">
+                      {productKey(product.catalog, product.product)}
+                    </Text>
+                  </Table.Td>
+                  <Table.Td ta="right" fw={600}>
+                    {product.quota === null ? '-' : numberFormat.format(product.quota)}
+                  </Table.Td>
+                  <Table.Td>{product.cycle === null ? '-' : t(`orgDetail.cycles.${product.cycle}`)}</Table.Td>
+                  <Table.Td>
+                    {product.boughtRoles.length === 0
+                      ? '-'
+                      : product.boughtRoles.map((role) => (
+                          <Badge key={role} variant="light" mr={4} tt="none">
+                            {role}
+                          </Badge>
+                        ))}
+                  </Table.Td>
+                  <Table.Td c="dimmed" ff="monospace" fz="sm">
+                    {Object.keys(product.params).length === 0
+                      ? '-'
+                      : Object.entries(product.params)
+                          .map(([name, value]) => `${name}=${value}`)
+                          .join(', ')}
+                  </Table.Td>
+                  <Table.Td>
+                    <Group gap="xs" justify="flex-end" wrap="nowrap">
+                      <Button variant="subtle" size="xs" onClick={() => setAssignTarget(product)}>
+                        {t('orgDetail.products.edit')}
+                      </Button>
+                      <Button variant="subtle" size="xs" color="red" onClick={() => setRemoveTarget(product)}>
+                        {t('orgDetail.products.remove')}
+                      </Button>
+                    </Group>
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
+      )}
+
+      {/* key: a new key creates a new component, so the form starts from the values of the chosen assignment
+          (useForm only reads its initial values once) */}
+      <AssignProductModal
+        key={assignTarget === 'new' || assignTarget === null ? 'new' : productKey(assignTarget.catalog, assignTarget.product)}
+        org={org}
+        opened={assignTarget !== null}
+        onClose={() => setAssignTarget(null)}
+        products={catalogProducts ?? []}
+        assigned={assigned}
+        current={assignTarget === 'new' ? null : assignTarget}
+      />
+
+      <ConfirmModal
+        opened={removeTarget !== null}
+        title={t('orgDetail.products.removeTitle', { product: removeTarget ? displayName(removeTarget) : '' })}
+        message={t('orgDetail.products.removeMessage')}
+        confirmLabel={t('orgDetail.products.remove')}
+        pending={unassign.isPending}
+        error={unassign.error}
+        onConfirm={confirmRemove}
+        onClose={closeRemoveConfirm}
+      />
+    </Stack>
+  );
+}

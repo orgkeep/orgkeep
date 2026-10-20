@@ -17,9 +17,15 @@ import jakarta.enterprise.context.ApplicationScoped;
 public class OrgPermissions {
     public static final String ADMINISTER_ORG = "administer-org";
 
-    /** Org admins (and owners, org-owner includes org-admin) of this org, and the realm owner. */
+    /**
+     * Org admins (and owners, org-owner includes org-admin) of this org, and the realm owner.
+     * <p>
+     * Public, not package-private: Quarkus calls it from a class it generates at build time. When the core is
+     * embedded as a jar (orgkeep-dashboard), that class and this one are not in the same class loader, and a
+     * package-private checker silently denies every request (403, nothing logged).
+     */
     @PermissionChecker(ADMINISTER_ORG)
-    boolean canAdminister(SecurityIdentity identity, String org) {
+    public boolean canAdminister(SecurityIdentity identity, String org) {
         return identity.hasRole(RealmRole.REALM_OWNER.getRoleName())
                 || identity.hasRole(OrgRoles.qualified(org, OrgRole.ORG_ADMIN));
     }

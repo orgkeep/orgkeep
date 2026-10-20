@@ -26,8 +26,12 @@ public final class OrgRoles {
         return OrgClients.clientId(orgName) + SEPARATOR + role.getRoleName();
     }
 
-    /** Qualified roles of the org clients found in a resource_access claim; other clients are ignored. */
-    static Set<String> fromResourceAccess(JsonObject resourceAccess) {
+    /**
+     * Qualified roles of the org clients found in a resource_access claim; other clients are ignored.
+     * Public for an application embedding the core whose identities do not carry the claim in their principal
+     * (orgkeep-dashboard: the principal of a browser session is the ID token).
+     */
+    public static Set<String> fromResourceAccess(JsonObject resourceAccess) {
         Set<String> roles = new HashSet<>();
         if (resourceAccess == null) {
             return roles;

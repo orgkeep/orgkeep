@@ -1,0 +1,31 @@
+####
+# JVM image of orgkeep-core, built from the fast-jar layout of target/quarkus-app.
+#
+# Through Maven (recommended):
+#   mvn package -Pdocker
+# By hand, from the orgkeep-core directory, after mvn package:
+#   docker build -f src/main/docker/Dockerfile.jvm -t orgkeep/orgkeep-core:1.0.0-SNAPSHOT .
+#
+# Runtime configuration through environment variables (each orgkeep.* property of application.properties
+# maps to ORGKEEP_*), for example:
+#   KEYCLOAK_URL, KEYCLOAK_ADMIN_USER, KEYCLOAK_ADMIN_PASSWORD,
+#   ORGKEEP_REALM_NAME, ORGKEEP_OWNER_EMAIL, ORGKEEP_OWNER_PASSWORD, ORGKEEP_DEMO_ENABLED...
+####
+# TODO pin a tag (check registry.access.redhat.com/ubi9/openjdk-25), "latest" is not reproducible
+FROM registry.access.redhat.com/ubi9/openjdk-25:latest
+
+ENV LANGUAGE='en_US:en'
+
+# Copied as separate layers, from the least to the most frequently changed:
+# a code change only rebuilds the last layers, the dependencies (lib/) stay cached
+COPY --chown=185 target/quarkus-app/lib/ /deployments/lib/
+COPY --chown=185 target/quarkus-app/*.jar /deployments/
+COPY --chown=185 target/quarkus-app/app/ /deployments/app/
+COPY --chown=185 target/quarkus-app/quarkus/ /deployments/quarkus/
+
+EXPOSE 8282
+USER 185
+ENV JAVA_OPTS_APPEND="-Dquarkus.http.host=0.0.0.0 -Djava.util.logging.manager=org.jboss.logmanager.LogManager"
+ENV JAVA_APP_JAR="/deployments/quarkus-run.jar"
+
+ENTRYPOINT [ "/opt/jboss/container/java/run/run-java.sh" ]

@@ -1,0 +1,14 @@
+### 1. get a valid token from keycloak
+# @name get_token
+POST {{keycloak_url}}/realms/{{realm}}/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+client_id={{client_id}}
+    &client_secret={{client_secret}}
+    &username={{username}}
+    &password={{password}}
+    &grant_type=password
+
+> {%
+    client.global.set("auth_token", response.body.access_token);
+%}

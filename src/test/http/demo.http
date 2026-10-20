@@ -1,0 +1,53 @@
+### Demo data: mvn quarkus:dev
+### or Docker: orgkeep-compose, docker compose -f docker-compose.yaml -f docker-compose.demo.yaml up -d
+### Accounts (realm "demo"): realm-owner / password, org-owner / password (owner of the organisation "acme")
+### Tokens: login client of the realm (clientId = realm name), password grant enabled for the demo by DemoSeeder
+
+### Token of the realm owner
+POST http://localhost:8180/realms/demo/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+client_id=demo
+    &username=realm-owner
+    &password=password
+    &grant_type=password
+
+> {%
+    client.global.set("realm_owner_token", response.body.access_token);
+%}
+
+### Token of the owner of acme
+POST http://localhost:8180/realms/demo/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+client_id=demo
+    &username=org-owner
+    &password=password
+    &grant_type=password
+
+> {%
+    client.global.set("org_owner_token", response.body.access_token);
+%}
+
+### Realm owner: list organisations
+GET http://localhost:8282/admin/organisations
+Authorization: Bearer {{realm_owner_token}}
+
+### Org owner: list the members of acme
+GET http://localhost:8282/organisations/acme/members
+Authorization: Bearer {{org_owner_token}}
+
+### Org owner: add a member to acme
+POST http://localhost:8282/organisations/acme/members
+Authorization: Bearer {{org_owner_token}}
+Content-Type: application/json
+
+{
+  "email": "bob@acme.test",
+  "firstName": "Bob",
+  "lastName": "Smith"
+}
+
+### Org owner: forbidden on the realm owner endpoints (403)
+GET http://localhost:8282/admin/organisations
+Authorization: Bearer {{org_owner_token}}

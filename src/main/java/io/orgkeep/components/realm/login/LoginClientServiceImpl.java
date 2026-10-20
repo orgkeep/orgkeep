@@ -1,0 +1,74 @@
+package io.orgkeep.components.realm.login;
+
+import io.orgkeep.api.LoginClientService;
+import io.orgkeep.api.exceptions.InvalidRequestException;
+import io.orgkeep.api.exceptions.LoginClientNotFoundException;
+import io.orgkeep.api.model.LoginClient;
+import io.orgkeep.api.model.UpdateLoginClientRequest;
+import io.orgkeep.components.catalog.CatalogSetup;
+import io.orgkeep.repository.keycloak.KeycloakClients;
+import jakarta.enterprise.context.ApplicationScoped;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.keycloak.representations.idm.ClientRepresentation;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+@Slf4j
+@ApplicationScoped
+@RequiredArgsConstructor
+public class LoginClientServiceImpl implements LoginClientService {
+    private final KeycloakClients clients;
+    private final CatalogSetup catalogSetup;
+    private final LoginClientMapper loginClientMapper;
+
+    @Override
+    public LoginClient get(String realm) {
+        String clientUuid = loginClientUuid(realm);
+        return loginClientMapper.toLoginClient(clients.get(realm, clientUuid), defaultCatalogs(realm, clientUuid));
+    }
+
+    @Override
+    public LoginClient update(String realm, UpdateLoginClientRequest request) {
+        String clientUuid = loginClientUuid(realm);
+        // checked before anything is changed
+        Map<String, String> catalogScopeIds = catalogSetup.catalogScopeIds(realm);
+        if (request.defaultCatalogs() != null) {
+            List<String> unknown = request.defaultCatalogs().stream()
+                    .filter(name -> !catalogScopeIds.containsKey(name))
+                    .toList();
+            if (!unknown.isEmpty()) {
+                throw new InvalidRequestException("Not catalogs of realm '%s': %s".formatted(realm, unknown));
+            }
+        }
+
+        // read, modify, write back: the admin API replaces the client with what it receives
+        ClientRepresentation client = clients.get(realm, clientUuid);
+        loginClientMapper.update(request, client);
+        clients.update(realm, clientUuid, client);
+        if (request.defaultCatalogs() != null) {
+            catalogSetup.setDefaultCatalogs(realm, clientUuid, catalogScopeIds, request.defaultCatalogs());
+        }
+
+        log.info("Login client of realm '{}' updated: redirect URIs {}, web origins {}, default catalogs {}",
+                realm, request.redirectUris(), request.webOrigins(), request.defaultCatalogs());
+        return get(realm);
+    }
+
+    /** The default client scopes of the client that are catalogs. */
+    private List<String> defaultCatalogs(String realm, String clientUuid) {
+        Set<String> defaultScopeIds = clients.defaultScopeIds(realm, clientUuid);
+        return catalogSetup.catalogScopeIds(realm).entrySet().stream()
+                .filter(catalog -> defaultScopeIds.contains(catalog.getValue()))
+                .map(Map.Entry::getKey)
+                .sorted()
+                .toList();
+    }
+
+    /** The login client is named after the realm (see RealmProvisioner.ensureDefaults). */
+    private String loginClientUuid(String realm) {
+        return clients.findUuid(realm, realm).orElseThrow(() -> new LoginClientNotFoundException(realm));
+    }
+}

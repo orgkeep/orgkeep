@@ -1,0 +1,8 @@
+# Started by Quarkus in dev and test mode (Compose Dev Services), stopped with the application.
+# The Keycloak of Dev Services joins the network of this project: it reaches Mailpit as mailpit:1025.
+services:
+  # Catches every email of the realm (invitations...): web UI on http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:v1.31.3
+    ports:
+      - "8025:8025"

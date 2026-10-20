@@ -1,0 +1,329 @@
+package io.orgkeep.components.catalog.product;
+
+import io.orgkeep.api.ProductService;
+import io.orgkeep.api.exceptions.InvalidRequestException;
+import io.orgkeep.api.exceptions.OperationNotAllowedException;
+import io.orgkeep.api.exceptions.ProductNotAssignedException;
+import io.orgkeep.api.exceptions.ProductNotFoundException;
+import io.orgkeep.api.exceptions.ProductRoleNotFoundException;
+import io.orgkeep.api.exceptions.RoleNameTakenException;
+import io.orgkeep.api.model.AssignProductRequest;
+import io.orgkeep.api.model.CatalogRoles;
+import io.orgkeep.api.model.CreateProductRequest;
+import io.orgkeep.api.model.OrgGroups;
+import io.orgkeep.api.model.OrgProduct;
+import io.orgkeep.api.model.ParamDefinition;
+import io.orgkeep.api.model.Product;
+import io.orgkeep.api.model.ProductRole;
+import io.orgkeep.api.model.UpdateProductRequest;
+import io.orgkeep.api.model.UpdateProductRoleRequest;
+import io.orgkeep.components.catalog.CatalogSetup;
+import io.orgkeep.repository.keycloak.KeycloakClientScopes;
+import io.orgkeep.repository.keycloak.KeycloakClients;
+import io.orgkeep.repository.keycloak.KeycloakGroups;
+import io.orgkeep.repository.keycloak.KeycloakOrgs;
+import jakarta.enterprise.context.ApplicationScoped;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.keycloak.representations.idm.GroupRepresentation;
+import org.keycloak.representations.idm.ProtocolMapperRepresentation;
+import org.keycloak.representations.idm.RoleRepresentation;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.regex.Pattern;
+
+@Slf4j
+@ApplicationScoped
+@RequiredArgsConstructor
+public class ProductServiceImpl implements ProductService {
+    /** Same rule as the names in the request records, for a role name read from the URL. */
+    private static final Pattern SLUG = Pattern.compile("[a-z0-9]([a-z0-9-]*[a-z0-9])?");
+
+    private final KeycloakClients clients;
+    private final KeycloakClientScopes scopes;
+    private final KeycloakGroups groups;
+    private final KeycloakOrgs orgs;
+    private final CatalogSetup catalogSetup;
+    private final ProductMapper productMapper;
+
+    @Override
+    public Product create(String realm, String catalog, CreateProductRequest request) {
+        ParamRules.checkSchema(request.params());
+        Set<String> roleNames = new HashSet<>();
+        request.roles().forEach(role -> {
+            if (!roleNames.add(role.name())) {
+                throw new InvalidRequestException("Role '%s' is given twice".formatted(role.name()));
+            }
+        });
+        CatalogSetup.Ids ids = catalogSetup.get(realm, catalog);
+
+        RoleRepresentation product = productMapper.toRoleRepresentation(
+                request.name(), request.displayName(), request.description(), request.params());
+        if (!clients.createRole(realm, ids.clientUuid(), product)) {
+            throw new RoleNameTakenException(catalog, request.name());
+        }
+        try {
+            List<String> created = new ArrayList<>(List.of(request.name()));
+            for (ProductRole role : request.roles()) {
+                RoleRepresentation representation = productMapper.toRoleRepresentation(request.name(), role);
+                clients.createRole(realm, ids.clientUuid(), representation);
+                created.add(representation.getName());
+            }
+            // the requesting clients have fullScopeAllowed=false: a role only reaches a token through these mappings
+            scopes.addClientRolesToScope(realm, ids.scopeId(), ids.clientUuid(), created);
+            productMapper.toMappers(catalog, request.name())
+                    .forEach(mapper -> scopes.addMapper(realm, ids.scopeId(), mapper));
+        } catch (RuntimeException e) {
+            // admin API calls are not transactional: a product without its roles or mappers must not stay behind
+            remove(realm, catalog, ids, request.name());
+            throw e;
+        }
+        log.info("Product '{}' created in catalog '{}' of realm '{}'", request.name(), catalog, realm);
+        return get(realm, catalog, request.name());
+    }
+
+    @Override
+    public List<Product> list(String realm, String catalog) {
+        CatalogSetup.Ids ids = catalogSetup.get(realm, catalog);
+        // one call for every role of the catalog (attributes included), then one per product for its orgs
+        List<RoleRepresentation> roles = clients.listRoles(realm, ids.clientUuid());
+        return roles.stream()
+                .filter(productMapper::isProduct)
+                .sorted(Comparator.comparing(RoleRepresentation::getName))
+                .map(product -> productMapper.toProduct(catalog, product, roles,
+                        assignments(realm, catalog, ids.clientUuid(), product.getName()).size()))
+                .toList();
+    }
+
+    @Override
+    public Product get(String realm, String catalog, String product) {
+        CatalogSetup.Ids ids = catalogSetup.get(realm, catalog);
+        List<RoleRepresentation> roles = clients.listRoles(realm, ids.clientUuid());
+        RoleRepresentation role = roles.stream()
+                .filter(r -> product.equals(r.getName()) && productMapper.isProduct(r))
+                .findFirst()
+                .orElseThrow(() -> new ProductNotFoundException(catalog, product));
+        return productMapper.toProduct(catalog, role, roles, assignments(realm, catalog, ids.clientUuid(), product).size());
+    }
+
+    @Override
+    public Product update(String realm, String catalog, String product, UpdateProductRequest request) {
+        ParamRules.checkSchema(request.params());
+        CatalogSetup.Ids ids = catalogSetup.get(realm, catalog);
+        getProductRole(realm, catalog, ids, product);
+
+        // the values of the orgs follow the new schema: all checked before anything changes
+        Map<String, Map<String, List<String>>> newAttributes = new LinkedHashMap<>();
+        assignments(realm, catalog, ids.clientUuid(), product).forEach((org, path) -> groups.findId(realm, path)
+                .ifPresent(groupId -> newAttributes.put(groupId,
+                        withParams(org, groups.attributes(realm, groupId), request.params()))));
+
+        // Keycloak ignores a null field on update: an empty description removes the current one
+        clients.updateRole(realm, ids.clientUuid(), product, productMapper.toRoleRepresentation(
+                product, request.displayName(), request.description() == null ? "" : request.description(),
+                request.params()));
+        newAttributes.forEach((groupId, attributes) -> groups.replaceAttributes(realm, groupId, attributes));
+        log.info("Product '{}' of catalog '{}' updated in realm '{}'", product, catalog, realm);
+        return get(realm, catalog, product);
+    }
+
+    @Override
+    public void delete(String realm, String catalog, String product) {
+        CatalogSetup.Ids ids = catalogSetup.get(realm, catalog);
+        getProductRole(realm, catalog, ids, product);
+
+        // the product role is granted to the assignment groups (and later to the teams): deleting it would silently
+        // cut the access of these orgs, they must be unassigned first
+        if (!clients.groupPathsWithRole(realm, ids.clientUuid(), product).isEmpty()) {
+            throw new OperationNotAllowedException(
+                    "Product '%s' is still assigned to organisations, unassign it first".formatted(product));
+        }
+        remove(realm, catalog, ids, product);
+        log.info("Product '{}' deleted from catalog '{}' of realm '{}'", product, catalog, realm);
+    }
+
+    @Override
+    public Product putRole(String realm, String catalog, String product, String role, UpdateProductRoleRequest request) {
+        if (!SLUG.matcher(role).matches() || role.length() > 50) {
+            throw new InvalidRequestException("Role name '%s': lowercase letters, digits and inner hyphens only".formatted(role));
+        }
+        CatalogSetup.Ids ids = catalogSetup.get(realm, catalog);
+        getProductRole(realm, catalog, ids, product);
+
+        RoleRepresentation representation = productMapper.toRoleRepresentation(product,
+                new ProductRole(role, request == null ? null : request.displayName()));
+        if (clients.findRole(realm, ids.clientUuid(), representation.getName()).isPresent()) {
+            clients.updateRole(realm, ids.clientUuid(), representation.getName(), representation);
+        } else {
+            clients.createRole(realm, ids.clientUuid(), representation);
+            scopes.addClientRolesToScope(realm, ids.scopeId(), ids.clientUuid(), List.of(representation.getName()));
+            log.info("Role '{}' added to product '{}' of catalog '{}' in realm '{}'", role, product, catalog, realm);
+        }
+        return get(realm, catalog, product);
+    }
+
+    @Override
+    public Product deleteRole(String realm, String catalog, String product, String role) {
+        CatalogSetup.Ids ids = catalogSetup.get(realm, catalog);
+        getProductRole(realm, catalog, ids, product);
+        String roleName = CatalogRoles.productRole(product, role);
+        clients.findRole(realm, ids.clientUuid(), roleName)
+                .filter(r -> productMapper.isRoleOf(r, product))
+                .orElseThrow(() -> new ProductRoleNotFoundException(catalog, product, role));
+
+        // Keycloak removes the role from the groups holding it: the teams lose it at once
+        clients.deleteRole(realm, ids.clientUuid(), roleName);
+        // the orgs that bought it no longer have it
+        assignments(realm, catalog, ids.clientUuid(), product).values().forEach(path -> groups.findId(realm, path)
+                .ifPresent(groupId -> {
+                    Map<String, List<String>> attributes = new HashMap<>(groups.attributes(realm, groupId));
+                    List<String> bought = new ArrayList<>(attributes.getOrDefault(OrgGroups.BOUGHT_ROLES_ATTRIBUTE, List.of()));
+                    if (bought.remove(role)) {
+                        attributes.put(OrgGroups.BOUGHT_ROLES_ATTRIBUTE, bought);
+                        groups.replaceAttributes(realm, groupId, attributes);
+                    }
+                }));
+        log.info("Role '{}' removed from product '{}' of catalog '{}' in realm '{}'", role, product, catalog, realm);
+        return get(realm, catalog, product);
+    }
+
+    @Override
+    public OrgProduct assign(String realm, String orgName, String catalog, String product, AssignProductRequest request) {
+        orgs.getByName(realm, orgName);
+        CatalogSetup.Ids ids = catalogSetup.get(realm, catalog);
+        RoleRepresentation productRole = getProductRole(realm, catalog, ids, product);
+
+        Set<String> productRoles = new HashSet<>();
+        clients.listRoles(realm, ids.clientUuid()).stream()
+                .filter(role -> productMapper.isRoleOf(role, product))
+                .forEach(role -> productRoles.add(role.getName().substring(product.length() + CatalogRoles.SEPARATOR.length())));
+        List<String> unknown = request.boughtRoles().stream().filter(role -> !productRoles.contains(role)).toList();
+        if (!unknown.isEmpty()) {
+            throw new InvalidRequestException("Not roles of the product '%s': %s".formatted(product, unknown));
+        }
+        Map<String, String> params = ParamRules.resolveValues(productMapper.params(productRole.getAttributes()), request.params());
+        Map<String, List<String>> attributes = productMapper.toAssignmentAttributes(request, params);
+
+        Optional<String> existingId = groups.findId(realm, OrgGroups.assignment(orgName, catalog, product));
+        String groupId;
+        if (existingId.isPresent()) {
+            // already assigned: a new negotiation replaces the values
+            groupId = existingId.get();
+            groups.replaceAttributes(realm, groupId, attributes);
+            log.info("Product '{}' of catalog '{}' renegotiated by organisation '{}' in realm '{}'", product, catalog, orgName, realm);
+        } else {
+            String catalogGroupId = groups.findId(realm, OrgGroups.catalog(orgName, catalog))
+                    .orElseGet(() -> groups.createChild(realm, catalogsGroupId(realm, orgName), catalog));
+            groupId = groups.createChild(realm, catalogGroupId, product, attributes);
+            try {
+                clients.grantToGroup(realm, ids.clientUuid(), groupId, product);
+            } catch (RuntimeException e) {
+                // admin API calls are not transactional: a group without the product role must not stay behind
+                groups.delete(realm, groupId);
+                throw e;
+            }
+            log.info("Product '{}' of catalog '{}' assigned to organisation '{}' in realm '{}'", product, catalog, orgName, realm);
+        }
+        return new OrgProduct(catalog, product, groupId, request.quota(), request.cycle(),
+                request.boughtRoles().stream().distinct().sorted().toList(), params);
+    }
+
+    @Override
+    public void unassign(String realm, String orgName, String catalog, String product) {
+        orgs.getByName(realm, orgName);
+        String groupId = groups.findId(realm, OrgGroups.assignment(orgName, catalog, product))
+                .orElseThrow(() -> new ProductNotAssignedException(orgName, catalog, product));
+
+        groups.delete(realm, groupId);
+        log.info("Product '{}' of catalog '{}' unassigned from organisation '{}' in realm '{}'", product, catalog, orgName, realm);
+    }
+
+    @Override
+    public List<OrgProduct> listAssigned(String realm, String orgName) {
+        orgs.getByName(realm, orgName);
+        // one call for the catalogs of the org, then one per catalog for its products
+        return groups.children(realm, catalogsGroupId(realm, orgName)).stream()
+                .sorted(Comparator.comparing(GroupRepresentation::getName))
+                .flatMap(catalogGroup -> groups.children(realm, catalogGroup.getId()).stream()
+                        .sorted(Comparator.comparing(GroupRepresentation::getName))
+                        .map(group -> productMapper.toOrgProduct(catalogGroup.getName(), group)))
+                .toList();
+    }
+
+    /** The role of the product, checked to be a product (not a catalog role of the same client). */
+    private RoleRepresentation getProductRole(String realm, String catalog, CatalogSetup.Ids ids, String product) {
+        return clients.findRole(realm, ids.clientUuid(), product)
+                .filter(productMapper::isProduct)
+                .orElseThrow(() -> new ProductNotFoundException(catalog, product));
+    }
+
+    /** Org name → path of its assignment group, for the orgs the product is assigned to. */
+    private Map<String, String> assignments(String realm, String catalog, String clientUuid, String product) {
+        Map<String, String> assignments = new HashMap<>();
+        for (String path : clients.groupPathsWithRole(realm, clientUuid, product)) {
+            String org = OrgGroups.orgOfAssignment(path, catalog, product);
+            if (org != null) {
+                assignments.put(org, path);
+            }
+        }
+        return assignments;
+    }
+
+    /**
+     * The attributes of an assignment group with its parameter values fitted to a new schema: a removed parameter
+     * goes, a new one gets its default.
+     *
+     * @throws InvalidRequestException naming the org if its values do not fit
+     */
+    private Map<String, List<String>> withParams(String org, Map<String, List<String>> attributes,
+                                                 List<ParamDefinition> schema) {
+        Set<String> names = new HashSet<>();
+        schema.forEach(param -> names.add(param.name()));
+        Map<String, String> kept = new HashMap<>(productMapper.paramValues(attributes));
+        kept.keySet().retainAll(names);
+
+        Map<String, String> resolved;
+        try {
+            resolved = ParamRules.resolveValues(schema, kept);
+        } catch (InvalidRequestException e) {
+            throw new InvalidRequestException("Organisation '%s': %s".formatted(org, e.getMessage()));
+        }
+        Map<String, List<String>> updated = new HashMap<>();
+        attributes.forEach((attribute, values) -> {
+            if (OrgGroups.paramOf(attribute) == null) {
+                updated.put(attribute, values);
+            }
+        });
+        resolved.forEach((name, value) -> updated.put(OrgGroups.paramAttribute(name), List.of(value)));
+        return updated;
+    }
+
+    /** Deletes what exists of the product: its roles, its mappers, its role. */
+    private void remove(String realm, String catalog, CatalogSetup.Ids ids, String product) {
+        clients.listRoles(realm, ids.clientUuid()).stream()
+                .filter(role -> productMapper.isRoleOf(role, product))
+                .forEach(role -> clients.deleteRole(realm, ids.clientUuid(), role.getName()));
+        scopes.removeMappers(realm, ids.scopeId(), productMapper.toMappers(catalog, product).stream()
+                .map(ProtocolMapperRepresentation::getName)
+                .toList());
+        if (clients.findRole(realm, ids.clientUuid(), product).isPresent()) {
+            clients.deleteRole(realm, ids.clientUuid(), product);
+        }
+    }
+
+    private String catalogsGroupId(String realm, String orgName) {
+        // an org created outside of Orgkeep has no group tree
+        return groups.findId(realm, OrgGroups.catalogs(orgName))
+                .orElseThrow(() -> new OperationNotAllowedException(
+                        "Organisation '%s' has no group %s: it was not created by Orgkeep"
+                                .formatted(orgName, OrgGroups.catalogs(orgName))));
+    }
+}

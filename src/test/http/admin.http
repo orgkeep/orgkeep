@@ -1,0 +1,11 @@
+### Create a new realm (token from auth.http, realm master)
+# Denied in the core (@DenyAll): RealmAdminResource moves to orgkeep-saas.
+POST http://localhost:8282/admin/realms
+Authorization: Bearer {{auth_token}}
+Content-Type: application/json
+
+{
+  "realmName": "demo",
+  "adminEmail": "admin@test.com",
+  "adminPassword": "password"
+}

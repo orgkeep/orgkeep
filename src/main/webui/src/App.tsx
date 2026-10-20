@@ -4,12 +4,15 @@ import { Route, Routes } from 'react-router';
 import { useCurrentUser } from './api/currentUser';
 import { administeredOrgs, isRealmOwner } from './auth/roles';
 import AppLayout from './layout/AppLayout';
+import CatalogPage from './pages/CatalogPage';
+import CatalogsPage from './pages/CatalogsPage';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import NotFoundPage from './pages/NotFoundPage';
 import OrganisationPage from './pages/OrganisationPage';
 import OrganisationsPage from './pages/OrganisationsPage';
 import OrgMembersPage from './pages/OrgMembersPage';
+import ProductPage from './pages/ProductPage';
 
 export default function App() {
   // t(key) returns the text of the current language, like a Spring MessageSource.getMessage(key)
@@ -46,6 +49,9 @@ export default function App() {
         {isRealmOwner(user) && <Route path="/organisations" element={<OrganisationsPage />} />}
         {/* :org is a path parameter, read by the page with useParams() */}
         {isRealmOwner(user) && <Route path="/organisations/:org" element={<OrganisationPage />} />}
+        {isRealmOwner(user) && <Route path="/catalogs" element={<CatalogsPage />} />}
+        {isRealmOwner(user) && <Route path="/catalogs/:catalog" element={<CatalogPage />} />}
+        {isRealmOwner(user) && <Route path="/catalogs/:catalog/products/:product" element={<ProductPage />} />}
         {administeredOrgs(user).length > 0 && <Route path="/orgs/:org/members" element={<OrgMembersPage />} />}
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

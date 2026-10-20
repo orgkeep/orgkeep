@@ -1,0 +1,246 @@
+import {
+  Alert,
+  Anchor,
+  Breadcrumbs,
+  Button,
+  Center,
+  Code,
+  Group,
+  Loader,
+  Paper,
+  Stack,
+  Table,
+  Text,
+  Title,
+} from '@mantine/core';
+import { useDisclosure } from '@mantine/hooks';
+import { useTranslation } from 'react-i18next';
+import { Link, useNavigate, useParams } from 'react-router';
+import { type Catalog, useCatalog, useCatalogProducts, useDeleteCatalog } from '../api/catalogs';
+import ConfirmModal from '../components/ConfirmModal';
+import CatalogModal from './CatalogModal';
+import ProductModal from './ProductModal';
+
+// One catalog (realm owner): its header and its products.
+export default function CatalogPage() {
+  const { t } = useTranslation();
+  // the :catalog part of the route /catalogs/:catalog. Always set on this route, hence the "!"
+  const name = useParams().catalog!;
+  const { data: catalog, isPending, error } = useCatalog(name);
+
+  if (isPending) {
+    return (
+      <Center py="xl">
+        <Loader />
+      </Center>
+    );
+  }
+  if (error) {
+    // e.g. 404 for an unknown catalog, typed in the URL
+    return (
+      <Alert color="red" title={t('catalogDetail.loadError', { catalog: name })} maw={1100}>
+        {error.message}
+      </Alert>
+    );
+  }
+
+  return (
+    <Stack maw={1100}>
+      <Breadcrumbs>
+        <Anchor component={Link} to="/catalogs">
+          {t('catalogDetail.breadcrumb')}
+        </Anchor>
+        <Text ff="monospace">{catalog.name}</Text>
+      </Breadcrumbs>
+
+      <CatalogHeader catalog={catalog} />
+      <ProductsSection catalog={catalog.name} />
+      <TokenHint catalog={catalog.name} />
+    </Stack>
+  );
+}
+
+// Display name, name, description, and the edit and delete buttons
+function CatalogHeader({ catalog }: { catalog: Catalog }) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const deleteCatalog = useDeleteCatalog();
+  const [editOpened, { open: openEdit, close: closeEdit }] = useDisclosure();
+  const [confirmOpened, { open: openConfirm, close: closeConfirm }] = useDisclosure();
+
+  function closeDeleteConfirm() {
+    deleteCatalog.reset();
+    closeConfirm();
+  }
+
+  function confirmDelete() {
+    // the page of a deleted catalog would answer 404: back to the list once the core confirmed
+    deleteCatalog.mutate(catalog.name, { onSuccess: () => navigate('/catalogs') });
+  }
+
+  return (
+    <Group justify="space-between" align="flex-start">
+      <Stack gap={4}>
+        <Group gap="sm" align="baseline">
+          <Title order={2}>{catalog.displayName ?? catalog.name}</Title>
+          <Code>{catalog.name}</Code>
+        </Group>
+        {catalog.description && <Text c="dimmed">{catalog.description}</Text>}
+      </Stack>
+
+      <Group>
+        <Button variant="default" onClick={openEdit}>
+          {t('common.edit')}
+        </Button>
+        <Button color="red" variant="outline" onClick={openConfirm}>
+          {t('common.delete')}
+        </Button>
+      </Group>
+
+      {/* key: the form reads its initial values once, a changed catalog gives a new form */}
+      <CatalogModal
+        key={`${catalog.displayName}|${catalog.description}`}
+        opened={editOpened}
+        onClose={closeEdit}
+        current={catalog}
+      />
+
+      {/* the core refuses while the catalog has products or roles: its message is shown in the modal */}
+      <ConfirmModal
+        opened={confirmOpened}
+        title={t('catalogDetail.delete.title', { catalog: catalog.name })}
+        message={
+          catalog.productCount > 0
+            ? t('catalogDetail.delete.notEmpty', { count: catalog.productCount })
+            : t('catalogDetail.delete.message')
+        }
+        confirmLabel={t('common.delete')}
+        pending={deleteCatalog.isPending}
+        error={deleteCatalog.error}
+        onConfirm={confirmDelete}
+        onClose={closeDeleteConfirm}
+      />
+    </Group>
+  );
+}
+
+function ProductsSection({ catalog }: { catalog: string }) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { data: products, isPending, error } = useCatalogProducts(catalog);
+  const [createOpened, { open: openCreate, close: closeCreate }] = useDisclosure();
+
+  return (
+    <Stack>
+      <Group justify="space-between" align="flex-end">
+        <div>
+          <Title order={3}>{t('catalogDetail.products.title')}</Title>
+          <Text c="dimmed">{t('catalogDetail.products.subtitle')}</Text>
+        </div>
+        <Button onClick={openCreate}>{t('catalogDetail.products.new')}</Button>
+      </Group>
+
+      {isPending && <Loader size="sm" />}
+
+      {error && (
+        <Alert color="red" title={t('catalogDetail.products.loadError')}>
+          {error.message}
+        </Alert>
+      )}
+
+      {products && products.length === 0 && <Text c="dimmed">{t('catalogDetail.products.empty')}</Text>}
+
+      {products && products.length > 0 && (
+        <Table.ScrollContainer minWidth={720}>
+          <Table highlightOnHover withTableBorder>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>{t('catalogDetail.products.columns.product')}</Table.Th>
+                <Table.Th>{t('catalogDetail.products.columns.description')}</Table.Th>
+                <Table.Th>{t('catalogDetail.products.columns.roles')}</Table.Th>
+                <Table.Th>{t('catalogDetail.products.columns.params')}</Table.Th>
+                <Table.Th>{t('catalogDetail.products.columns.organisations')}</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {products.map((product) => (
+                <Table.Tr key={product.name}>
+                  <Table.Td>
+                    <Anchor component={Link} to={`/catalogs/${catalog}/products/${product.name}`} fw={500}>
+                      {product.displayName ?? product.name}
+                    </Anchor>
+                    <Text size="xs" c="dimmed" ff="monospace">
+                      {product.name}
+                    </Text>
+                  </Table.Td>
+                  <Table.Td c="dimmed">{product.description}</Table.Td>
+                  {/* counts, not lists: the lists are on the page of the product. The names are in the tooltip */}
+                  <Table.Td title={product.roles.map((role) => role.name).join(', ')}>{product.roles.length}</Table.Td>
+                  <Table.Td title={product.params.map((param) => param.name).join(', ')}>{product.params.length}</Table.Td>
+                  <Table.Td>
+                    <OrgCount catalog={catalog} product={product.name} count={product.orgCount} />
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
+      )}
+
+      {/* once created, the product opens on its page */}
+      <ProductModal
+        catalog={catalog}
+        opened={createOpened}
+        onClose={closeCreate}
+        current={null}
+        onSaved={(product) => navigate(`/catalogs/${catalog}/products/${product.name}`)}
+      />
+    </Stack>
+  );
+}
+
+// The number of organisations a product is assigned to. A link to the organisations list, filtered on the product:
+// the list stays readable with many organisations, and the filter is already there.
+export function OrgCount({ catalog, product, count }: { catalog: string; product: string; count: number }) {
+  const { t } = useTranslation();
+
+  if (count === 0) {
+    return (
+      <Text c="dimmed" size="sm">
+        {t('catalogDetail.products.notAssigned')}
+      </Text>
+    );
+  }
+  // URLSearchParams escapes the values, like in api/organisations.ts
+  const query = new URLSearchParams({ catalog, product });
+  return (
+    <Anchor component={Link} to={`/organisations?${query}`} size="sm">
+      {t('catalogDetail.products.orgCount', { count })}
+    </Anchor>
+  );
+}
+
+// What the API of the realm owner receives: makes the link between this screen and the tokens
+function TokenHint({ catalog }: { catalog: string }) {
+  const { t } = useTranslation();
+  // the format of the spec ("Format du token" in ARCHITECTURE.md), with an example product
+  const token = {
+    resource_access: { [catalog]: { roles: ['billing', 'billing:read'] } },
+    [catalog]: { billing: { quotas: [{ pool: 'acme', limit: 1000, cycle: 'monthly' }] } },
+  };
+
+  return (
+    <Paper withBorder p="md">
+      <Stack gap="xs">
+        <Text fw={600}>{t('catalogDetail.token.title')}</Text>
+        <Text size="sm" c="dimmed">
+          {t('catalogDetail.token.scope')} <Code>scope={catalog}</Code>
+        </Text>
+        <Code block>{JSON.stringify(token, null, 2)}</Code>
+        <Text size="sm" c="dimmed">
+          {t('catalogDetail.token.usage')}
+        </Text>
+      </Stack>
+    </Paper>
+  );
+}

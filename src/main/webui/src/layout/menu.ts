@@ -22,7 +22,10 @@ export function buildMenu(user: CurrentUser, t: TFunction): MenuSection[] {
   if (isRealmOwner(user)) {
     sections.push({
       title: t('menu.realm'),
-      items: [{ label: t('menu.organisations'), path: '/organisations' }],
+      items: [
+        { label: t('menu.organisations'), path: '/organisations' },
+        { label: t('menu.catalogs'), path: '/catalogs' },
+      ],
     });
   }
 

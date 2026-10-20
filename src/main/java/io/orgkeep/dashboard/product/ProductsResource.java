@@ -11,7 +11,7 @@ import java.util.List;
 
 /**
  * Every product of every catalog (/api/products), read by the product filter of the organisations screen and the
- * assignment of a product to an organisation. The catalog screen will add its own endpoints.
+ * assignment of a product to an organisation. The catalogs screens have their own endpoints, see {@link CatalogsResource}.
  */
 @Path("/products")
 @RolesAllowed("realm-owner")

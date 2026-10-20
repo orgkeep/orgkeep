@@ -2,7 +2,12 @@
   "common": {
     "comingSoon": "Coming soon.",
     "cancel": "Cancel",
-    "failed": "The operation failed"
+    "failed": "The operation failed",
+    "create": "Create",
+    "save": "Save",
+    "edit": "Edit",
+    "delete": "Delete",
+    "remove": "Remove"
   },
   "app": {
     "backendUnreachable": "Backend unreachable"
@@ -14,6 +19,7 @@
     "home": "Home",
     "realm": "Realm",
     "organisations": "Organisations",
+    "catalogs": "Catalogs",
     "organisation": "Organisation {{org}}",
     "members": "Members"
   },
@@ -150,6 +156,136 @@
       "submit": "Assign",
       "save": "Save",
       "failed": "Product not assigned"
+    }
+  },
+  "catalogs": {
+    "title": "Catalogs",
+    "subtitle": "Your APIs, grouped as you sell them. Each catalog comes out as one claim in the tokens.",
+    "new": "New catalog",
+    "loadError": "Could not load the catalogs",
+    "empty": "No catalog yet. Create the first one with the \"New catalog\" button.",
+    "columns": {
+      "name": "Name",
+      "displayName": "Display name",
+      "description": "Description",
+      "products": "Products"
+    },
+    "productCount_one": "{{count}} product",
+    "productCount_other": "{{count}} products"
+  },
+  "catalogForm": {
+    "createTitle": "New catalog",
+    "editTitle": "Catalog {{catalog}}",
+    "name": "Name",
+    "nameDescription": "Lowercase letters, digits and hyphens. Cannot be changed later: it is the name of the claim and of the scope the applications ask for.",
+    "nameInvalid": "Lowercase letters, digits and inner hyphens only",
+    "displayName": "Display name",
+    "displayNameRequired": "A display name is required",
+    "description": "Description"
+  },
+  "catalogDetail": {
+    "breadcrumb": "Catalogs",
+    "loadError": "Could not load the catalog {{catalog}}",
+    "delete": {
+      "title": "Delete the catalog {{catalog}}?",
+      "message": "Its client and its scope are deleted: the applications that ask for it no longer get it in their tokens. This cannot be undone.",
+      "notEmpty_one": "The catalog still has {{count}} product: delete it first, the catalog can only be deleted once empty.",
+      "notEmpty_other": "The catalog still has {{count}} products: delete them first, the catalog can only be deleted once empty."
+    },
+    "products": {
+      "title": "Products",
+      "subtitle": "Each product is an access to one of your APIs, with the roles an organisation can buy and the parameters it negotiates.",
+      "new": "New product",
+      "loadError": "Could not load the products",
+      "empty": "No product yet in this catalog.",
+      "columns": {
+        "product": "Product",
+        "description": "Description",
+        "roles": "Roles",
+        "params": "Parameters",
+        "organisations": "Organisations"
+      },
+      "notAssigned": "Not assigned",
+      "orgCount_one": "{{count}} organisation",
+      "orgCount_other": "{{count}} organisations"
+    },
+    "token": {
+      "title": "What your APIs receive in the tokens",
+      "scope": "An application gets this catalog by default, or asks for it with",
+      "usage": "Orgkeep does not count the usage: your API compares its own counters with the limits of the token."
+    }
+  },
+  "productForm": {
+    "createTitle": "New product in {{catalog}}",
+    "editTitle": "Product {{product}}",
+    "name": "Name",
+    "nameDescription": "Lowercase letters, digits and hyphens. Cannot be changed later: it is the role name in the tokens.",
+    "nameInvalid": "Lowercase letters, digits and inner hyphens only",
+    "displayName": "Display name",
+    "displayNameRequired": "A display name is required",
+    "description": "Description",
+    "roles": {
+      "legend": "Roles (optional)",
+      "description": "The options an organisation buys, or the permissions its teams give (e.g. read, write). They can also be added later.",
+      "name": "Role name",
+      "displayName": "Display name",
+      "displayNamePlaceholder": "Display name (optional)",
+      "add": "Add a role"
+    },
+    "params": {
+      "legend": "Parameters (optional)",
+      "description": "What each organisation negotiates besides its quota and cycle, which every product has (e.g. a region).",
+      "name": "Name",
+      "type": "Type",
+      "types": {
+        "STRING": "Text",
+        "NUMBER": "Number",
+        "BOOLEAN": "Yes / no",
+        "ENUM": "List of values"
+      },
+      "values": "Allowed values",
+      "valuesDescription": "Press Enter or a comma after each value.",
+      "valuesRequired": "A list needs at least one value",
+      "required": "Required",
+      "defaultValue": "Default",
+      "noDefault": "No default",
+      "true": "Yes",
+      "false": "No",
+      "add": "Add a parameter"
+    }
+  },
+  "productDetail": {
+    "loadError": "Could not load the product {{product}}",
+    "delete": {
+      "title": "Delete {{product}}?",
+      "message": "Its roles and its parameters are deleted with it. This cannot be undone.",
+      "assigned_one": "The product is assigned to {{count}} organisation: remove it from the organisation first.",
+      "assigned_other": "The product is assigned to {{count}} organisations: remove it from these organisations first."
+    },
+    "roles": {
+      "title": "Roles",
+      "subtitle": "An organisation buys some of them, and its teams give them to their members.",
+      "add": "Add a role",
+      "addTitle": "Add a role",
+      "editTitle": "Role {{role}}",
+      "nameDescription": "Lowercase letters, digits and hyphens. In the tokens: {{product}}:<name>",
+      "empty": "No role: the product is a plain access.",
+      "removeTitle": "Remove the role {{role}}?",
+      "removeMessage": "The organisations that bought it lose it, and their members no longer get it in their tokens.",
+      "columns": {
+        "name": "Name",
+        "displayName": "Display name",
+        "inToken": "In the tokens"
+      }
+    },
+    "params": {
+      "title": "Parameters",
+      "subtitle": "Negotiated by each organisation besides its quota. Changed with the \"Edit\" button above.",
+      "empty": "No parameter besides the quota and its cycle."
+    },
+    "token": {
+      "title": "In the tokens",
+      "hint": "For a member of an organisation that bought every role, with an example quota. The parameters show their defaults."
     }
   },
   "members": {

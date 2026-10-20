@@ -2,10 +2,8 @@ import { Alert, Button, Fieldset, Group, Modal, SimpleGrid, Stack, TagsInput, Te
 import { useForm } from '@mantine/form';
 import { useTranslation } from 'react-i18next';
 import { type CreateOrgRequest, useCreateOrganisation } from '../api/organisations';
+import { isSlug } from './slug';
 
-// Same rule as CreateOrgRequest.name in orgkeep-core. Checked here too so the user sees the error
-// while typing, but the core stays the reference: its 400 would be shown anyway.
-const NAME_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 // Loose on purpose: the core does the real check (@Email)
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+$/;
 
@@ -48,7 +46,8 @@ export default function CreateOrganisationModal({ opened, onClose }: CreateOrgan
     initialValues: { name: '', emailDomains: [], ownerEmail: '', ownerFirstName: '', ownerLastName: '' },
     // each rule returns null when the value is valid, else the error message
     validate: {
-      name: (value) => (NAME_PATTERN.test(value.trim()) ? null : t('organisations.create.nameInvalid')),
+      // same rule as CreateOrgRequest.name in orgkeep-core
+      name: (value) => (isSlug(value) ? null : t('organisations.create.nameInvalid')),
       ownerEmail: (value) =>
         value.trim() === '' || EMAIL_PATTERN.test(value.trim()) ? null : t('organisations.create.emailInvalid'),
     },

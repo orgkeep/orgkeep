@@ -30,15 +30,15 @@ client_id=demo
 %}
 
 ### Realm owner: list organisations
-GET http://localhost:8282/admin/organisations
+GET http://localhost:8282/api/admin/organisations
 Authorization: Bearer {{realm_owner_token}}
 
 ### Org owner: list the members of acme
-GET http://localhost:8282/organisations/acme/members
+GET http://localhost:8282/api/organisations/acme/members
 Authorization: Bearer {{org_owner_token}}
 
 ### Org owner: add a member to acme
-POST http://localhost:8282/organisations/acme/members
+POST http://localhost:8282/api/organisations/acme/members
 Authorization: Bearer {{org_owner_token}}
 Content-Type: application/json
 
@@ -49,5 +49,5 @@ Content-Type: application/json
 }
 
 ### Org owner: forbidden on the realm owner endpoints (403)
-GET http://localhost:8282/admin/organisations
+GET http://localhost:8282/api/admin/organisations
 Authorization: Bearer {{org_owner_token}}

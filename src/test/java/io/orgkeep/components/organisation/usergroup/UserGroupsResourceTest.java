@@ -34,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @QuarkusTest
 class UserGroupsResourceTest {
     private static final String ORG = "it-groups-org";
-    private static final String BASE = "/organisations/{org}/user-groups";
+    private static final String BASE = "/api/organisations/{org}/user-groups";
     private static final String MEMBER = BASE + "/{group}/members/{userId}";
     // The caller is the org owner. Keycloak puts the effective roles in the token (org-owner includes org-admin),
     // @TestSecurity does not expand composites: both roles are listed, as the token of an owner has them
@@ -140,7 +140,7 @@ class UserGroupsResourceTest {
         given().when().put(MEMBER, ORG, "admin", memberId)
                 .then().statusCode(204);
 
-        given().when().get("/organisations/{org}/members", ORG)
+        given().when().get("/api/organisations/{org}/members", ORG)
                 .then().statusCode(200)
                 .body("find { it.id == '%s' }.role".formatted(memberId), equalTo("ORG_ADMIN"));
     }

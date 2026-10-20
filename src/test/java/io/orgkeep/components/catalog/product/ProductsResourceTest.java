@@ -38,8 +38,8 @@ import static org.hamcrest.Matchers.equalTo;
  */
 @QuarkusTest
 class ProductsResourceTest {
-    private static final String PRODUCTS = "/admin/catalogs/{catalog}/products";
-    private static final String ASSIGNMENT = "/admin/organisations/{org}/catalogs/{catalog}/products/{product}";
+    private static final String PRODUCTS = "/api/admin/catalogs/{catalog}/products";
+    private static final String ASSIGNMENT = "/api/admin/organisations/{org}/catalogs/{catalog}/products/{product}";
     private static final String CATALOG = "prod";
     private static final String ORG = "acme";
 
@@ -120,14 +120,14 @@ class ProductsResourceTest {
                 .then().statusCode(200)
                 .body("boughtRoles", contains("read"))
                 .body("params.region", equalTo("us"));
-        given().when().get("/admin/organisations/{org}/products", ORG)
+        given().when().get("/api/admin/organisations/{org}/products", ORG)
                 .then().statusCode(200)
                 .body("product", contains("billing"));
         // the assignment resources have their own, more specific paths: the organisation itself is still found
-        given().when().get("/admin/organisations/{org}", ORG)
+        given().when().get("/api/admin/organisations/{org}", ORG)
                 .then().statusCode(200)
                 .body("name", equalTo(ORG));
-        given().when().get("/admin/organisations?catalog={catalog}&product={product}", CATALOG, "billing")
+        given().when().get("/api/admin/organisations?catalog={catalog}&product={product}", CATALOG, "billing")
                 .then().statusCode(200)
                 .body("name", contains(ORG))
                 .body("[0].products", contains("prod/billing"));

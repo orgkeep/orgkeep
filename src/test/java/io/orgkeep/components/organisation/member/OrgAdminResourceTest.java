@@ -38,7 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class OrgAdminResourceTest {
     private static final String ORG = "it-members-org";
     private static final String OWNER_EMAIL = "owner@it-members-org.test";
-    private static final String BASE = "/organisations/{org}/members";
+    private static final String BASE = "/api/organisations/{org}/members";
 
     @Inject Keycloak keycloak;
     @Inject OrgService orgService;

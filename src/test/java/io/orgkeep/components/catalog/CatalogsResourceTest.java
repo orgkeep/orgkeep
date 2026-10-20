@@ -40,7 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 @QuarkusTest
 class CatalogsResourceTest {
-    private static final String BASE = "/admin/catalogs";
+    private static final String BASE = "/api/admin/catalogs";
     private static final String SANDBOX = "products-sandbox";
 
     @Inject Keycloak keycloak;

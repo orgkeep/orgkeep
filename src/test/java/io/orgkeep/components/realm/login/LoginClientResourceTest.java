@@ -39,7 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 @QuarkusTest
 class LoginClientResourceTest {
-    private static final String BASE = "/admin/login-client";
+    private static final String BASE = "/api/admin/login-client";
 
     @Inject Keycloak keycloak;
     @Inject RealmProvisioner realmProvisioner;

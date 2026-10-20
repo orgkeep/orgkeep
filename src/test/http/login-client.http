@@ -1,11 +1,11 @@
 ### Login client of the realm (realm owner): run user_auth.http first to get auth_token
 
 ### Get the login client (clientId = realm name)
-GET http://localhost:8282/admin/login-client
+GET http://localhost:8282/api/admin/login-client
 Authorization: Bearer {{auth_token}}
 
 ### Set the redirect URIs and web origins (replaces the three lists)
-PUT http://localhost:8282/admin/login-client
+PUT http://localhost:8282/api/admin/login-client
 Authorization: Bearer {{auth_token}}
 Content-Type: application/json
 
@@ -16,7 +16,7 @@ Content-Type: application/json
 }
 
 ### Set the default catalogs: in every token of the client, the others only with scope=<catalog>
-PUT http://localhost:8282/admin/login-client
+PUT http://localhost:8282/api/admin/login-client
 Authorization: Bearer {{auth_token}}
 Content-Type: application/json
 
@@ -28,7 +28,7 @@ Content-Type: application/json
 }
 
 ### Refused (400): a lone wildcard would accept any site
-PUT http://localhost:8282/admin/login-client
+PUT http://localhost:8282/api/admin/login-client
 Authorization: Bearer {{auth_token}}
 Content-Type: application/json
 

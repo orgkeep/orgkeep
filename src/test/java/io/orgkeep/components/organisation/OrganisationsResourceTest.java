@@ -34,7 +34,8 @@ import static org.hamcrest.Matchers.notNullValue;
 @QuarkusTest
 class OrganisationsResourceTest {
     private static final String ORG = "it-rest-org";
-    private static final String BASE = "/admin/organisations";
+    // quarkus.rest.path=/api: RestAssured only knows the root path of the HTTP server, the prefix is in the URL
+    private static final String BASE = "/api/admin/organisations";
 
     @Inject Keycloak keycloak;
     @InjectMock CurrentRealm currentRealm;

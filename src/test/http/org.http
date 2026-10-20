@@ -1,7 +1,7 @@
 ### Requests of the realm owner: run user_auth.http first to get auth_token
 
 ### Create an organisation
-POST http://localhost:8282/admin/organisations
+POST http://localhost:8282/api/admin/organisations
 Authorization: Bearer {{auth_token}}
 Content-Type: application/json
 
@@ -15,22 +15,22 @@ Content-Type: application/json
 }
 
 ### List organisations
-GET http://localhost:8282/admin/organisations?search=glo&max=20
+GET http://localhost:8282/api/admin/organisations?search=glo&max=20
 Authorization: Bearer {{auth_token}}
 
 ### Get an organisation
-GET http://localhost:8282/admin/organisations/globex
+GET http://localhost:8282/api/admin/organisations/globex
 Authorization: Bearer {{auth_token}}
 
 ### Organisations with a product (catalog and product, or either alone)
-GET http://localhost:8282/admin/organisations?catalog=products-sandbox&product=shop-repository
+GET http://localhost:8282/api/admin/organisations?catalog=products-sandbox&product=shop-repository
 Authorization: Bearer {{auth_token}}
 
 ### Members (allowed to the realm owner and to the org admins of globex)
 
 ### Add a member
 # @name add_member
-POST http://localhost:8282/organisations/globex/members
+POST http://localhost:8282/api/organisations/globex/members
 Authorization: Bearer {{auth_token}}
 Content-Type: application/json
 
@@ -45,17 +45,17 @@ Content-Type: application/json
 %}
 
 ### List members
-GET http://localhost:8282/organisations/globex/members
+GET http://localhost:8282/api/organisations/globex/members
 Authorization: Bearer {{auth_token}}
 
 ### Remove a member
-DELETE http://localhost:8282/organisations/globex/members/{{member_id}}
+DELETE http://localhost:8282/api/organisations/globex/members/{{member_id}}
 Authorization: Bearer {{auth_token}}
 
 ### User groups (allowed to the realm owner and to the org admins of globex)
 
 ### Create a user group
-POST http://localhost:8282/organisations/globex/user-groups
+POST http://localhost:8282/api/organisations/globex/user-groups
 Authorization: Bearer {{auth_token}}
 Content-Type: application/json
 
@@ -64,25 +64,25 @@ Content-Type: application/json
 }
 
 ### List the user groups, with their members
-GET http://localhost:8282/organisations/globex/user-groups
+GET http://localhost:8282/api/organisations/globex/user-groups
 Authorization: Bearer {{auth_token}}
 
 ### Put a member in a user group
-PUT http://localhost:8282/organisations/globex/user-groups/support/members/{{member_id}}
+PUT http://localhost:8282/api/organisations/globex/user-groups/support/members/{{member_id}}
 Authorization: Bearer {{auth_token}}
 
 ### Take a member out of a user group
-DELETE http://localhost:8282/organisations/globex/user-groups/support/members/{{member_id}}
+DELETE http://localhost:8282/api/organisations/globex/user-groups/support/members/{{member_id}}
 Authorization: Bearer {{auth_token}}
 
 ### Delete a user group
-DELETE http://localhost:8282/organisations/globex/user-groups/support
+DELETE http://localhost:8282/api/organisations/globex/user-groups/support
 Authorization: Bearer {{auth_token}}
 
 ### Catalogs (realm owner)
 
 ### Create a catalog
-POST http://localhost:8282/admin/catalogs
+POST http://localhost:8282/api/admin/catalogs
 Authorization: Bearer {{auth_token}}
 Content-Type: application/json
 
@@ -93,15 +93,15 @@ Content-Type: application/json
 }
 
 ### List the catalogs
-GET http://localhost:8282/admin/catalogs
+GET http://localhost:8282/api/admin/catalogs
 Authorization: Bearer {{auth_token}}
 
 ### Get a catalog
-GET http://localhost:8282/admin/catalogs/products-sandbox
+GET http://localhost:8282/api/admin/catalogs/products-sandbox
 Authorization: Bearer {{auth_token}}
 
 ### Rename a catalog (its name cannot change)
-PUT http://localhost:8282/admin/catalogs/products-sandbox
+PUT http://localhost:8282/api/admin/catalogs/products-sandbox
 Authorization: Bearer {{auth_token}}
 Content-Type: application/json
 
@@ -113,7 +113,7 @@ Content-Type: application/json
 ### Products of a catalog (realm owner)
 
 ### Create a product, with its roles and a parameter
-POST http://localhost:8282/admin/catalogs/products-sandbox/products
+POST http://localhost:8282/api/admin/catalogs/products-sandbox/products
 Authorization: Bearer {{auth_token}}
 Content-Type: application/json
 
@@ -125,11 +125,11 @@ Content-Type: application/json
 }
 
 ### List the products of the catalog
-GET http://localhost:8282/admin/catalogs/products-sandbox/products
+GET http://localhost:8282/api/admin/catalogs/products-sandbox/products
 Authorization: Bearer {{auth_token}}
 
 ### Add a role to the product (or rename it)
-PUT http://localhost:8282/admin/catalogs/products-sandbox/products/shop-repository/roles/export
+PUT http://localhost:8282/api/admin/catalogs/products-sandbox/products/shop-repository/roles/export
 Authorization: Bearer {{auth_token}}
 Content-Type: application/json
 
@@ -138,13 +138,13 @@ Content-Type: application/json
 }
 
 ### Remove a role of the product (the orgs that bought it lose it)
-DELETE http://localhost:8282/admin/catalogs/products-sandbox/products/shop-repository/roles/export
+DELETE http://localhost:8282/api/admin/catalogs/products-sandbox/products/shop-repository/roles/export
 Authorization: Bearer {{auth_token}}
 
 ### Catalog roles (realm owner)
 
 ### Create a catalog role the org admins may grant
-POST http://localhost:8282/admin/catalogs/products-sandbox/roles
+POST http://localhost:8282/api/admin/catalogs/products-sandbox/roles
 Authorization: Bearer {{auth_token}}
 Content-Type: application/json
 
@@ -155,7 +155,7 @@ Content-Type: application/json
 }
 
 ### Create a catalog role reserved to the realm owner
-POST http://localhost:8282/admin/catalogs/products-sandbox/roles
+POST http://localhost:8282/api/admin/catalogs/products-sandbox/roles
 Authorization: Bearer {{auth_token}}
 Content-Type: application/json
 
@@ -166,17 +166,17 @@ Content-Type: application/json
 }
 
 ### Grant it directly to a member of an org
-PUT http://localhost:8282/admin/catalogs/products-sandbox/roles/anonymous/users/{{member_id}}
+PUT http://localhost:8282/api/admin/catalogs/products-sandbox/roles/anonymous/users/{{member_id}}
 Authorization: Bearer {{auth_token}}
 
 ### Who holds it directly
-GET http://localhost:8282/admin/catalogs/products-sandbox/roles/anonymous/users
+GET http://localhost:8282/api/admin/catalogs/products-sandbox/roles/anonymous/users
 Authorization: Bearer {{auth_token}}
 
 ### Assignment to an organisation (realm owner)
 
 ### Assign a product to an organisation (again to change what it negotiated)
-PUT http://localhost:8282/admin/organisations/globex/catalogs/products-sandbox/products/shop-repository
+PUT http://localhost:8282/api/admin/organisations/globex/catalogs/products-sandbox/products/shop-repository
 Authorization: Bearer {{auth_token}}
 Content-Type: application/json
 
@@ -188,21 +188,21 @@ Content-Type: application/json
 }
 
 ### List the products of an organisation, in every catalog
-GET http://localhost:8282/admin/organisations/globex/products
+GET http://localhost:8282/api/admin/organisations/globex/products
 Authorization: Bearer {{auth_token}}
 
 ### Unassign a product
-DELETE http://localhost:8282/admin/organisations/globex/catalogs/products-sandbox/products/shop-repository
+DELETE http://localhost:8282/api/admin/organisations/globex/catalogs/products-sandbox/products/shop-repository
 Authorization: Bearer {{auth_token}}
 
 ### Delete a product (409 while assigned)
-DELETE http://localhost:8282/admin/catalogs/products-sandbox/products/shop-repository
+DELETE http://localhost:8282/api/admin/catalogs/products-sandbox/products/shop-repository
 Authorization: Bearer {{auth_token}}
 
 ### Delete a catalog (409 while it has products or roles)
-DELETE http://localhost:8282/admin/catalogs/products-sandbox
+DELETE http://localhost:8282/api/admin/catalogs/products-sandbox
 Authorization: Bearer {{auth_token}}
 
 ### Delete the organisation
-DELETE http://localhost:8282/admin/organisations/globex
+DELETE http://localhost:8282/api/admin/organisations/globex
 Authorization: Bearer {{auth_token}}

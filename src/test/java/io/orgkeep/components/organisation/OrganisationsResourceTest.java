@@ -19,6 +19,7 @@ import org.mockito.Mockito;
 import java.util.Set;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.notNullValue;
@@ -100,9 +101,26 @@ class OrganisationsResourceTest {
     @Test
     @TestSecurity(user = "owner", roles = "realm-owner")
     void createWithInvalidOwnerEmailReturns400() {
-        given().contentType(ContentType.JSON).body(new CreateOrgRequest(ORG, Set.of(), "not-an-email", null))
+        given().contentType(ContentType.JSON).body(new CreateOrgRequest(ORG, Set.of(), "not-an-email", null, "Olivia", "Owner"))
                 .when().post(BASE)
                 .then().statusCode(400);
+    }
+
+    // an owner is created with a first and last name, or Keycloak asks for them at login
+    @Test
+    @TestSecurity(user = "owner", roles = "realm-owner")
+    void createWithOwnerWithoutNamesReturns400() {
+        given().contentType(ContentType.JSON).body(new CreateOrgRequest(ORG, Set.of(), "owner@it-rest-org.test", null, "Olivia", ""))
+                .when().post(BASE)
+                .then().statusCode(400)
+                .body("violations[0].field", containsString("ownerNamed"));
+    }
+
+    // no owner, no user created: no names needed (request() has neither)
+    @Test
+    @TestSecurity(user = "owner", roles = "realm-owner")
+    void createWithoutOwnerNeedsNoNames() {
+        create();
     }
 
     @Test

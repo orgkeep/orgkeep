@@ -311,7 +311,7 @@ public class OrgServiceTest {
     }
 
     private CreateOrgRequest request(String ownerPassword) {
-        return new CreateOrgRequest(ORG, Set.of("it-demo-org.test"), OWNER_EMAIL, ownerPassword);
+        return new CreateOrgRequest(ORG, Set.of("it-demo-org.test"), OWNER_EMAIL, ownerPassword, "Olivia", "Owner");
     }
 
     private RealmResource realm() {

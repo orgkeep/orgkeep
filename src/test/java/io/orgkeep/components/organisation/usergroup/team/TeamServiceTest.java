@@ -494,7 +494,7 @@ class TeamServiceTest {
     }
 
     private String addMember(String email) {
-        return memberService.add(realmName(), ORG, new AddMemberRequest(email, null, null)).id();
+        return memberService.add(realmName(), ORG, new AddMemberRequest(email, "Test", "User")).id();
     }
 
     private String realmName() {

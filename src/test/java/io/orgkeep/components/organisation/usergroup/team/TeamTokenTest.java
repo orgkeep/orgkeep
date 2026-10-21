@@ -292,7 +292,7 @@ class TeamTokenTest {
         credential.setTemporary(false);
         user.setCredentials(List.of(credential));
         testRealm.createUser(user);
-        return memberService.add(testRealm.name(), ORG, new AddMemberRequest(user.getEmail(), null, null)).id();
+        return memberService.add(testRealm.name(), ORG, new AddMemberRequest(user.getEmail(), user.getFirstName(), user.getLastName())).id();
     }
 
     private JsonNode logIn(String username, String scope) throws Exception {

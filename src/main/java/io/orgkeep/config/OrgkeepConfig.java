@@ -33,7 +33,7 @@ public interface OrgkeepConfig {
         /** Defaults to the email. */
         Optional<String> username();
 
-        /** Optional, but without first and last name the owner cannot log in through a password grant. */
+        /** Required when the realm is created (ON_PREM): Keycloak asks for them at login otherwise. */
         Optional<String> firstName();
         Optional<String> lastName();
 

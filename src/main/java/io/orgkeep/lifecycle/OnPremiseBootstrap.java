@@ -35,9 +35,11 @@ public class OnPremiseBootstrap {
             realmService.ensureDefaults(realmName);
             log.info("Realm '{}' already exists, defaults checked", realmName);
         } else {
+            // only checked when the owner is created: Keycloak asks for them at login otherwise
+            String firstName = required(config.owner().firstName(), "orgkeep.owner.first-name", "ORGKEEP_OWNER_FIRST_NAME");
+            String lastName = required(config.owner().lastName(), "orgkeep.owner.last-name", "ORGKEEP_OWNER_LAST_NAME");
             CreateRealmRequest request = new CreateRealmRequest(realmName, ownerEmail, ownerPassword,
-                    config.owner().username().orElse(null), config.owner().temporaryPassword(),
-                    config.owner().firstName().orElse(null), config.owner().lastName().orElse(null));
+                    config.owner().username().orElse(null), config.owner().temporaryPassword(), firstName, lastName);
             realmService.create(request);
             log.info("Realm '{}' created for owner {}", realmName, ownerEmail);
         }

@@ -111,7 +111,7 @@ public class DemoSeeder {
         if (users.findIdByEmail(realm, ORG_OWNER_EMAIL).isEmpty()) {
             users.create(realm, demoUser(ORG_OWNER, ORG_OWNER_EMAIL, "Bob", "Durand"));
         }
-        orgService.create(realm, new CreateOrgRequest(ORG, Set.of("acme.test"), ORG_OWNER_EMAIL, null));
+        orgService.create(realm, new CreateOrgRequest(ORG, Set.of("acme.test"), ORG_OWNER_EMAIL, null, "Bob", "Durand"));
         assignDemoProduct(realm);
 
         log.info("Demo data created in realm '{}': organisation '{}', owner '{}' / '{}'", realm, ORG, ORG_OWNER, PASSWORD);
@@ -188,7 +188,7 @@ public class DemoSeeder {
         String userId = users.findIdByEmail(realm, user.getEmail())
                 .orElseGet(() -> users.create(realm, user));
         if (orgs.organisationsOf(realm, userId).isEmpty()) {
-            memberService.add(realm, ORG, new AddMemberRequest(user.getEmail(), null, null));
+            memberService.add(realm, ORG, new AddMemberRequest(user.getEmail(), user.getFirstName(), user.getLastName()));
         }
         userGroupService.addMember(realm, ORG, team, userId);
     }
@@ -212,7 +212,7 @@ public class DemoSeeder {
         if (!orgs.organisationsOf(realm, userId).isEmpty()) {
             return;
         }
-        memberService.add(realm, ORG, new AddMemberRequest(ORG_USER_EMAIL, null, null));
+        memberService.add(realm, ORG, new AddMemberRequest(ORG_USER_EMAIL, "Claire", "Petit"));
         log.info("Demo member '{}' / '{}' added to organisation '{}'", ORG_USER, PASSWORD, ORG);
     }
 

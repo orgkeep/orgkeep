@@ -51,7 +51,7 @@ class OrgAdminResourceTest {
         testRealm = TestRealm.create(keycloak);
         Mockito.when(currentRealm.name()).thenReturn(testRealm.name());
         orgService.create(testRealm.name(),
-                new CreateOrgRequest(ORG, Set.of("it-members-org.test"), OWNER_EMAIL, "changeme"));
+                new CreateOrgRequest(ORG, Set.of("it-members-org.test"), OWNER_EMAIL, "changeme", "Olivia", "Owner"));
     }
 
     @AfterEach
@@ -98,13 +98,13 @@ class OrgAdminResourceTest {
     @Test
     @TestSecurity(user = "alice", roles = "org-it-members-org:org-admin")
     void listGivesTheRoleOfEachMember() {
-        String adminId = given().contentType(ContentType.JSON).body(new AddMemberRequest("emma@it-members-org.test", null, null))
+        String adminId = given().contentType(ContentType.JSON).body(new AddMemberRequest("emma@it-members-org.test", "Test", "User"))
                 .when().post(BASE, ORG)
                 .then().statusCode(201)
                 .body("role", equalTo("ORG_USER"))
                 .extract().path("id");
         testRealm.joinGroup(adminId, "/" + ORG + "/user-groups/admin");
-        given().contentType(ContentType.JSON).body(new AddMemberRequest("hugo@it-members-org.test", null, null))
+        given().contentType(ContentType.JSON).body(new AddMemberRequest("hugo@it-members-org.test", "Test", "User"))
                 .when().post(BASE, ORG)
                 .then().statusCode(201);
 
@@ -133,7 +133,7 @@ class OrgAdminResourceTest {
     @Test
     @TestSecurity(user = "alice", roles = "org-it-members-org:org-admin")
     void addExistingMemberReturns409() {
-        given().contentType(ContentType.JSON).body(new AddMemberRequest(OWNER_EMAIL, null, null))
+        given().contentType(ContentType.JSON).body(new AddMemberRequest(OWNER_EMAIL, "Test", "User"))
                 .when().post(BASE, ORG)
                 .then().statusCode(409);
     }
@@ -143,7 +143,7 @@ class OrgAdminResourceTest {
     @TestSecurity(user = "owner", roles = "realm-owner")
     void addMemberOfAnotherOrgReturns409() {
         orgService.create(testRealm.name(), new CreateOrgRequest("other-org", Set.of(), null, null));
-        given().contentType(ContentType.JSON).body(new AddMemberRequest(OWNER_EMAIL, null, null))
+        given().contentType(ContentType.JSON).body(new AddMemberRequest(OWNER_EMAIL, "Test", "User"))
                 .when().post(BASE, "other-org")
                 .then().statusCode(409)
                 .body("message", containsString(ORG));
@@ -152,7 +152,16 @@ class OrgAdminResourceTest {
     @Test
     @TestSecurity(user = "alice", roles = "org-it-members-org:org-admin")
     void addWithInvalidEmailReturns400() {
-        given().contentType(ContentType.JSON).body(new AddMemberRequest("not-an-email", null, null))
+        given().contentType(ContentType.JSON).body(new AddMemberRequest("not-an-email", "Test", "User"))
+                .when().post(BASE, ORG)
+                .then().statusCode(400);
+    }
+
+    // Keycloak asks for a first and last name at login otherwise, and a password grant fails
+    @Test
+    @TestSecurity(user = "alice", roles = "org-it-members-org:org-admin")
+    void addWithoutNamesReturns400() {
+        given().contentType(ContentType.JSON).body(new AddMemberRequest("bob@it-members-org.test", " ", null))
                 .when().post(BASE, ORG)
                 .then().statusCode(400);
     }
@@ -160,7 +169,7 @@ class OrgAdminResourceTest {
     @Test
     @TestSecurity(user = "alice", roles = "org-it-members-org:org-admin")
     void removeCleansMembershipAndGroups() {
-        String userId = given().contentType(ContentType.JSON).body(new AddMemberRequest("bob@it-members-org.test", null, null))
+        String userId = given().contentType(ContentType.JSON).body(new AddMemberRequest("bob@it-members-org.test", "Test", "User"))
                 .when().post(BASE, ORG)
                 .then().statusCode(201)
                 .extract().path("id");

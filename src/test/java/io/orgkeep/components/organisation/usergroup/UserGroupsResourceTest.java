@@ -54,7 +54,7 @@ class UserGroupsResourceTest {
         testRealm = TestRealm.create(keycloak);
         Mockito.when(currentRealm.name()).thenReturn(testRealm.name());
         orgService.create(testRealm.name(), new CreateOrgRequest(ORG, Set.of(), null, null));
-        memberId = memberService.add(testRealm.name(), ORG, new AddMemberRequest("bob@it-groups-org.test", null, null)).id();
+        memberId = memberService.add(testRealm.name(), ORG, new AddMemberRequest("bob@it-groups-org.test", "Bob", "Smith")).id();
     }
 
     @AfterEach

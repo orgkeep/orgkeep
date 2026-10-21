@@ -75,16 +75,6 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-oidc</artifactId>
         </dependency>
-        <!-- calls to the core API (see core/CoreClient), the counterpart of a Spring @FeignClient -->
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-rest-client-jackson</artifactId>
-        </dependency>
-        <!-- @AccessToken on a REST client: sends the access token of the logged in user as a bearer token -->
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-rest-client-oidc-token-propagation</artifactId>
-        </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
@@ -95,18 +85,6 @@
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-junit</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <!-- @InjectMock: replaces the core REST client by a Mockito mock in the tests -->
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-junit-mockito</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <!-- @TestSecurity: runs a test as a given user with given roles, without Keycloak -->
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-test-security</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

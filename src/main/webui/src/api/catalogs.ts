@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deleteRequest, getJson, postJson, putJson } from './http';
 import type { ParamDefinition, Product, ProductRole } from './products';
 
-// Mirror the records of io.orgkeep.dashboard.product on the Java side.
+// The catalogs endpoints of the API of the core (CatalogsResource and ProductsResource in orgkeep-core),
+// called directly by the front. Mirror the records of io.orgkeep.api.model.
 // Written by hand for now: to be replaced by types generated from /q/openapi.
 
 export interface Catalog {
@@ -44,9 +45,11 @@ export interface UpdateProductRequest {
 // Every query of this file starts with this key: invalidating it refreshes all of them at once.
 const CATALOGS_KEY = 'catalogs';
 
+export const CATALOGS_URL = '/api/admin/catalogs';
+
 // encodeURIComponent: the names come from the URL, they must not be able to change the path of the call
-function catalogUrl(catalog: string): string {
-  return `/api/catalogs/${encodeURIComponent(catalog)}`;
+export function catalogUrl(catalog: string): string {
+  return `${CATALOGS_URL}/${encodeURIComponent(catalog)}`;
 }
 
 function productUrl(catalog: string, product: string): string {
@@ -65,7 +68,7 @@ function refreshCatalogs(queryClient: ReturnType<typeof useQueryClient>) {
 export function useCatalogs() {
   return useQuery({
     queryKey: [CATALOGS_KEY, 'list'],
-    queryFn: () => getJson<Catalog[]>('/api/catalogs'),
+    queryFn: () => getJson<Catalog[]>(CATALOGS_URL),
   });
 }
 
@@ -79,7 +82,7 @@ export function useCatalog(catalog: string) {
 export function useCreateCatalog() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (request: CreateCatalogRequest) => postJson<Catalog>('/api/catalogs', request),
+    mutationFn: (request: CreateCatalogRequest) => postJson<Catalog>(CATALOGS_URL, request),
     onSuccess: () => refreshCatalogs(queryClient),
   });
 }

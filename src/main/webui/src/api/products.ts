@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
+import { type Catalog, CATALOGS_URL, catalogUrl } from './catalogs';
 import { getJson } from './http';
 
-// Mirror the records of io.orgkeep.dashboard.product on the Java side.
+// Mirror the records of io.orgkeep.api.model in orgkeep-core.
 // Written by hand for now: to be replaced by types generated from /q/openapi.
 
 // A role of a product an org can buy, e.g. "scan". In the tokens: "<product>:scan"
@@ -47,11 +48,22 @@ export function splitProductKey(key: string): { catalog: string; name: string } 
   return { catalog, name };
 }
 
+// The core lists the products of one catalog, the screens want them all: one call for the catalogs, then one per
+// catalog, all at once (a realm has a handful). Promise.all waits for all of them, like CompletableFuture.allOf.
+async function fetchAllProducts(): Promise<Product[]> {
+  const catalogs = await getJson<Catalog[]>(CATALOGS_URL);
+  const perCatalog = await Promise.all(
+    catalogs.map((catalog) => getJson<Product[]>(`${catalogUrl(catalog.name)}/products`)),
+  );
+  // the catalogs come sorted by name, the products of each one too
+  return perCatalog.flat();
+}
+
 // Every product of every catalog, sorted by catalog then product
 export function useProducts() {
   return useQuery({
     queryKey: ['products'],
-    queryFn: () => getJson<Product[]>('/api/products'),
+    queryFn: fetchAllProducts,
   });
 }
 

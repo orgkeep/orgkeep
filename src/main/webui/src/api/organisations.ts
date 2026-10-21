@@ -1,8 +1,10 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deleteRequest, getJson, postJson, putJson } from './http';
 
-// Mirror the records of io.orgkeep.dashboard.organisation on the Java side.
-// Written by hand for now: to be replaced by types generated from /q/openapi.
+// The organisations endpoints of the API of the core (OrganisationsResource, OrgProductsResource,
+// OrgCatalogsResource and OrgAdminResource in orgkeep-core), called directly by the front.
+// Mirror the records of io.orgkeep.api.model, with the fields the screens use: the core may send more, they are
+// ignored. Written by hand for now: to be replaced by types generated from /q/openapi.
 export interface OrgOwner {
   id: string;
   username: string;
@@ -44,6 +46,9 @@ export interface CreateOrgResponse {
 // Every query of this file starts with this key: invalidating it refreshes all of them at once.
 const ORGANISATIONS_KEY = 'organisations';
 
+// The organisations as the realm owner manages them
+const ORGANISATIONS_URL = '/api/admin/organisations';
+
 // Every filter is optional: '' means no filter
 export interface OrganisationFilters {
   search: string;
@@ -65,7 +70,8 @@ function fetchOrganisations({ search, catalog, product }: OrganisationFilters): 
     params.set('product', product);
   }
   const query = params.size > 0 ? `?${params}` : '';
-  return getJson(`/api/organisations${query}`);
+  // no paging yet: the core answers its first page, 100 organisations at most
+  return getJson(`${ORGANISATIONS_URL}${query}`);
 }
 
 export function useOrganisations(filters: OrganisationFilters) {
@@ -83,7 +89,7 @@ export function useOrganisations(filters: OrganisationFilters) {
 export function useCreateOrganisation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (request: CreateOrgRequest) => postJson<CreateOrgResponse>('/api/organisations', request),
+    mutationFn: (request: CreateOrgRequest) => postJson<CreateOrgResponse>(ORGANISATIONS_URL, request),
     // the cached lists no longer match the server: mark them stale, TanStack Query fetches them again
     onSuccess: () => queryClient.invalidateQueries({ queryKey: [ORGANISATIONS_KEY] }),
   });
@@ -140,7 +146,7 @@ export interface AssignProductRequest {
 
 // encodeURIComponent: the name comes from the URL, it must not be able to change the path of the call
 function orgUrl(org: string): string {
-  return `/api/organisations/${encodeURIComponent(org)}`;
+  return `${ORGANISATIONS_URL}/${encodeURIComponent(org)}`;
 }
 
 // The keys start with ORGANISATIONS_KEY: a change on an organisation refreshes the list too
@@ -155,7 +161,8 @@ export function useOrganisation(org: string) {
 export function useOrgMembers(org: string) {
   return useQuery({
     queryKey: [ORGANISATIONS_KEY, 'detail', org, 'members'],
-    queryFn: () => getJson<OrgMember[]>(`${orgUrl(org)}/members`),
+    // the path of the org admins (/api/organisations/{org}/members): the core opens it to the realm owner too
+    queryFn: () => getJson<OrgMember[]>(`/api/organisations/${encodeURIComponent(org)}/members`),
   });
 }
 

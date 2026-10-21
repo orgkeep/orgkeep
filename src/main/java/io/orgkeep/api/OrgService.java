@@ -29,6 +29,14 @@ public interface OrgService {
     /** @throws io.orgkeep.api.exceptions.OrgNotFoundException if no organisation has this name */
     OrgDetails get(String realm, String orgName);
 
+    /**
+     * Keycloak lets the members of a disabled organisation log in: disabling it also disables its enabled members
+     * (and ends their sessions), enabling it enables again only the members it disabled. Idempotent.
+     *
+     * @throws io.orgkeep.api.exceptions.OrgNotFoundException if no organisation has this name
+     */
+    OrgDetails setEnabled(String realm, String orgName, boolean enabled);
+
     /** @throws io.orgkeep.api.exceptions.OrgNotFoundException if no organisation has this name */
     void delete(String realm, String orgName);
 }

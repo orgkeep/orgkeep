@@ -1,6 +1,7 @@
 package io.orgkeep.components.organisation;
 
 import io.orgkeep.api.model.CreateOrgRequest;
+import io.orgkeep.api.model.UpdateOrgStatusRequest;
 import io.orgkeep.fixtures.TestRealm;
 import io.orgkeep.web.CurrentRealm;
 import io.quarkus.test.InjectMock;
@@ -157,6 +158,38 @@ class OrganisationsResourceTest {
         given().when().get(BASE + "/{org}", "unknown-org")
                 .then().statusCode(404)
                 .body("message", notNullValue());
+    }
+
+    @Test
+    @TestSecurity(user = "owner", roles = "realm-owner")
+    void setEnabledReturnsTheOrg() {
+        create();
+
+        given().contentType(ContentType.JSON).body(new UpdateOrgStatusRequest(false))
+                .when().put(BASE + "/{org}/enabled", ORG)
+                .then().statusCode(200)
+                .body("name", equalTo(ORG))
+                .body("enabled", equalTo(false));
+        given().when().get(BASE + "/{org}", ORG)
+                .then().statusCode(200)
+                .body("enabled", equalTo(false));
+    }
+
+    @Test
+    @TestSecurity(user = "owner", roles = "realm-owner")
+    void setEnabledOnUnknownReturns404() {
+        given().contentType(ContentType.JSON).body(new UpdateOrgStatusRequest(false))
+                .when().put(BASE + "/{org}/enabled", "unknown-org")
+                .then().statusCode(404);
+    }
+
+    // an org admin cannot re-enable their own org: the realm owner decides
+    @Test
+    @TestSecurity(user = "alice", roles = "org-" + ORG + ":org-admin")
+    void setEnabledByAnOrgAdminReturns403() {
+        given().contentType(ContentType.JSON).body(new UpdateOrgStatusRequest(true))
+                .when().put(BASE + "/{org}/enabled", ORG)
+                .then().statusCode(403);
     }
 
     @Test

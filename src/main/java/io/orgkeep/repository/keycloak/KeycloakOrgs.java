@@ -66,6 +66,13 @@ public class KeycloakOrgs {
         return findByName(realm, name).orElseThrow(() -> new OrgNotFoundException(realm, name));
     }
 
+    /** Replaces the organisation with this full representation (read with {@link #getByName}). */
+    public void update(String realm, OrganizationRepresentation org) {
+        try(Response response = organisation(realm, org.getId()).update(org)){
+            KeycloakErrors.requireSuccess(response, "Updating organisation " + org.getId());
+        }
+    }
+
     public void delete(String realm, String orgId) {
         try(Response response = organisation(realm, orgId).delete()){
             KeycloakErrors.requireSuccess(response, "Deleting organisation " + orgId);

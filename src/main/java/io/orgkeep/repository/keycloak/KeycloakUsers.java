@@ -46,6 +46,21 @@ public class KeycloakUsers {
     }
 
     /**
+     * Read then written whole: the admin API replaces what it receives, and with the user profile of Keycloak 24+
+     * a partial representation could clear the first and last name.
+     */
+    public void setEnabled(String realm, String userId, boolean enabled) {
+        UserRepresentation user = get(realm, userId);
+        user.setEnabled(enabled);
+        keycloak.realm(realm).users().get(userId).update(user);
+    }
+
+    /** Ends all the sessions of the user: their refresh tokens stop working. */
+    public void logout(String realm, String userId) {
+        keycloak.realm(realm).users().get(userId).logout();
+    }
+
+    /**
      * Keycloak emails the user a link to perform the required actions (e.g. UPDATE_PASSWORD), through the SMTP server
      * of the realm. No client given: Keycloak uses its "account" client and ends on its own "account updated" page.
      * Following the link also marks the email as verified.

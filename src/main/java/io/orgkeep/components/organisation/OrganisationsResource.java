@@ -5,6 +5,7 @@ import io.orgkeep.api.model.CreateOrgRequest;
 import io.orgkeep.api.model.CreateOrgResponse;
 import io.orgkeep.api.model.OrgDetails;
 import io.orgkeep.api.model.OrgSummary;
+import io.orgkeep.api.model.UpdateOrgStatusRequest;
 import io.orgkeep.web.CurrentRealm;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.validation.Valid;
@@ -15,6 +16,7 @@ import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
+import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.QueryParam;
@@ -71,6 +73,18 @@ public class OrganisationsResource {
     @APIResponse(responseCode = "404", description = "Unknown organisation")
     public OrgDetails get(@PathParam("org") String org){
         return orgService.get(currentRealm.name(), org);
+    }
+
+    @PUT
+    @Path("/{org}/enabled")
+    @Operation(summary = "Enable or disable an organisation",
+            description = "Disabling also disables its enabled members and ends their sessions: they can no longer "
+                    + "log in (an access token already issued lives until it expires). Enabling enables again only "
+                    + "the members it disabled. Members cannot be added while it is disabled. Idempotent.")
+    @APIResponseSchema(value = OrgDetails.class, responseCode = "200", responseDescription = "The organisation")
+    @APIResponse(responseCode = "404", description = "Unknown organisation")
+    public OrgDetails setEnabled(@PathParam("org") String org, @Valid @NotNull UpdateOrgStatusRequest request){
+        return orgService.setEnabled(currentRealm.name(), org, request.enabled());
     }
 
     // void return type: Quarkus REST answers 204 No Content

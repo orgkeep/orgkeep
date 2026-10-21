@@ -24,12 +24,16 @@ import io.vertx.core.eventbus.EventBus;
 import jakarta.enterprise.context.ApplicationScoped;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.keycloak.representations.idm.MemberRepresentation;
 import org.keycloak.representations.idm.OrganizationRepresentation;
 import org.keycloak.representations.idm.RoleRepresentation;
 
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -183,6 +187,67 @@ public class OrgServiceImpl implements OrgService {
                 .map(user -> memberMapper.toOrgMember(user, OrgRole.ORG_OWNER))
                 .sorted(Comparator.comparing(OrgMember::username))
                 .toList();
+    }
+
+    /**
+     * The members disabled with the organisation are listed in this attribute of the Keycloak organisation (user ids,
+     * one per value), to enable again only them. Not on the users: the user profile of Keycloak 24+ drops the user
+     * attributes it does not declare.
+     */
+    static final String DISABLED_MEMBERS_ATTRIBUTE = "disabled-members";
+
+    @Override
+    public OrgDetails setEnabled(String realm, String orgName, boolean enabled) {
+        OrganizationRepresentation org = orgs.getByName(realm, orgName);
+        if (org.isEnabled() == enabled) {
+            return get(realm, orgName);
+        }
+
+        if (enabled) {
+            enableMembers(realm, org);
+        } else {
+            disableMembers(realm, org);
+        }
+        org.setEnabled(enabled);
+        orgs.update(realm, org);
+
+        log.info("Organisation '{}' {} in realm '{}'", orgName, enabled ? "enabled" : "disabled", realm);
+        return get(realm, orgName);
+    }
+
+    /**
+     * Keycloak 26 lets the members of a disabled organisation log in, with their roles: they are disabled one by one.
+     * A member already disabled (for another reason) is left out, and stays disabled when the org is enabled again.
+     */
+    private void disableMembers(String realm, OrganizationRepresentation org) {
+        List<String> disabled = new ArrayList<>();
+        for (MemberRepresentation member : orgs.members(realm, org.getId())) {
+            if (Boolean.TRUE.equals(member.isEnabled())) {
+                users.setEnabled(realm, member.getId(), false);
+                // the refresh tokens stop working; an access token already issued lives until it expires
+                users.logout(realm, member.getId());
+                disabled.add(member.getId());
+            }
+        }
+        attributes(org).put(DISABLED_MEMBERS_ATTRIBUTE, disabled);
+    }
+
+    private void enableMembers(String realm, OrganizationRepresentation org) {
+        List<String> disabled = attributes(org).getOrDefault(DISABLED_MEMBERS_ATTRIBUTE, List.of());
+        for (String userId : disabled) {
+            // a user deleted in the meantime is skipped
+            if (users.find(realm, userId).isPresent()) {
+                users.setEnabled(realm, userId, true);
+            }
+        }
+        attributes(org).remove(DISABLED_MEMBERS_ATTRIBUTE);
+    }
+
+    private static Map<String, List<String>> attributes(OrganizationRepresentation org) {
+        if (org.getAttributes() == null) {
+            org.setAttributes(new HashMap<>());
+        }
+        return org.getAttributes();
     }
 
     @Override

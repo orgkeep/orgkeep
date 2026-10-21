@@ -64,6 +64,10 @@ public class OrgMemberServiceImpl implements OrgMemberService {
     @Override
     public OrgMember add(String realm, String orgName, AddMemberRequest request) {
         OrganizationRepresentation org = orgs.getByName(realm, orgName);
+        // checked before the user is created: the members of a disabled org are disabled (see OrgService.setEnabled)
+        if (!org.isEnabled()) {
+            throw new OperationNotAllowedException("The organisation '%s' is disabled".formatted(orgName));
+        }
 
         String userId = users.findIdByEmail(realm, request.email())
                 .orElseGet(() -> createUser(realm, orgName, request));

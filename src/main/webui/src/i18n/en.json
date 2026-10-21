@@ -7,7 +7,10 @@
     "save": "Save",
     "edit": "Edit",
     "delete": "Delete",
-    "remove": "Remove"
+    "remove": "Remove",
+    "required": "Required",
+    "copy": "Copy",
+    "copied": "Copied"
   },
   "app": {
     "backendUnreachable": "Backend unreachable"
@@ -78,7 +81,7 @@
       "ownerEmail": "Email",
       "ownerFirstName": "First name",
       "ownerLastName": "Last name",
-      "ownerDescription": "An existing user is reused, unless they already belong to another organisation.",
+      "ownerDescription": "First and last name are required with an email. An existing user is reused (with their own names), unless they already belong to another organisation.",
       "emailInvalid": "Invalid email address",
       "submit": "Create",
       "failed": "Organisation not created"

@@ -7,7 +7,10 @@
     "save": "Enregistrer",
     "edit": "Modifier",
     "delete": "Supprimer",
-    "remove": "Retirer"
+    "remove": "Retirer",
+    "required": "Obligatoire",
+    "copy": "Copier",
+    "copied": "Copié"
   },
   "app": {
     "backendUnreachable": "Backend injoignable"
@@ -78,7 +81,7 @@
       "ownerEmail": "Email",
       "ownerFirstName": "Prénom",
       "ownerLastName": "Nom",
-      "ownerDescription": "Un user existant est réutilisé, sauf s'il appartient déjà à une autre organisation.",
+      "ownerDescription": "Prénom et nom sont obligatoires avec un email. Un user existant est réutilisé (avec ses propres prénom et nom), sauf s'il appartient déjà à une autre organisation.",
       "emailInvalid": "Adresse email invalide",
       "submit": "Créer",
       "failed": "Organisation non créée"

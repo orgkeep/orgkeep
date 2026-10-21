@@ -30,7 +30,7 @@ export interface OrgSummary {
 export interface CreateOrgRequest {
   name: string;
   emailDomains: string[];
-  // all three optional: null when the organisation is created without an owner
+  // null when the organisation is created without an owner. With an owner, the names are required
   ownerEmail: string | null;
   ownerFirstName: string | null;
   ownerLastName: string | null;
@@ -180,9 +180,9 @@ export function useOrgMembers(org: string) {
 
 export interface AddMemberRequest {
   email: string;
-  // optional: the member can fill them in at the first login
-  firstName: string | null;
-  lastName: string | null;
+  // required: Keycloak asks for them at login otherwise. An existing user keeps their own
+  firstName: string;
+  lastName: string;
 }
 
 function membersUrl(org: string): string {

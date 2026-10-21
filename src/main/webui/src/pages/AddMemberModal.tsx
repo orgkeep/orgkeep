@@ -15,11 +15,6 @@ interface FormValues {
   lastName: string;
 }
 
-// '' -> null: the names are optional in the core
-function emptyToNull(value: string): string | null {
-  return value.trim() === '' ? null : value.trim();
-}
-
 // Adds a member to the org by email. The core reuses the user if it exists, otherwise creates it and sends the
 // invitation email of Keycloak (choose a password).
 export default function AddMemberModal({ org, opened, onClose }: AddMemberModalProps) {
@@ -31,6 +26,9 @@ export default function AddMemberModal({ org, opened, onClose }: AddMemberModalP
     validate: {
       // a light check, the core validates the email again (@Email)
       email: (value) => (/^\S+@\S+$/.test(value.trim()) ? null : t('members.form.emailInvalid')),
+      // required by the core: Keycloak asks for them at login otherwise
+      firstName: (value) => (value.trim() === '' ? t('common.required') : null),
+      lastName: (value) => (value.trim() === '' ? t('common.required') : null),
     },
   });
 
@@ -42,7 +40,7 @@ export default function AddMemberModal({ org, opened, onClose }: AddMemberModalP
 
   const submit = form.onSubmit((values) => {
     addMember.mutate(
-      { email: values.email.trim(), firstName: emptyToNull(values.firstName), lastName: emptyToNull(values.lastName) },
+      { email: values.email.trim(), firstName: values.firstName.trim(), lastName: values.lastName.trim() },
       { onSuccess: close },
     );
   });
@@ -53,8 +51,8 @@ export default function AddMemberModal({ org, opened, onClose }: AddMemberModalP
         <Stack>
           <TextInput label={t('members.form.email')} withAsterisk {...form.getInputProps('email')} />
           <Group grow>
-            <TextInput label={t('members.form.firstName')} {...form.getInputProps('firstName')} />
-            <TextInput label={t('members.form.lastName')} {...form.getInputProps('lastName')} />
+            <TextInput label={t('members.form.firstName')} withAsterisk {...form.getInputProps('firstName')} />
+            <TextInput label={t('members.form.lastName')} withAsterisk {...form.getInputProps('lastName')} />
           </Group>
           <Text size="sm" c="dimmed">
             {t('members.form.invitation')}

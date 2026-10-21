@@ -26,6 +26,12 @@ function emptyToNull(value: string): string | null {
   return value.trim() === '' ? null : value.trim();
 }
 
+// An owner is created only with an email: the core then requires the first and last name (Keycloak asks for them
+// at login otherwise)
+function hasOwner(values: FormValues): boolean {
+  return values.ownerEmail.trim() !== '';
+}
+
 function toRequest(values: FormValues): CreateOrgRequest {
   return {
     name: values.name.trim(),
@@ -44,12 +50,15 @@ export default function CreateOrganisationModal({ opened, onClose }: CreateOrgan
   // a bit like a form-backing bean with Bean Validation annotations in Spring MVC
   const form = useForm<FormValues>({
     initialValues: { name: '', emailDomains: [], ownerEmail: '', ownerFirstName: '', ownerLastName: '' },
-    // each rule returns null when the value is valid, else the error message
+    // each rule returns null when the value is valid, else the error message.
+    // The second argument is all the values of the form: the names are required only with an owner email
     validate: {
       // same rule as CreateOrgRequest.name in orgkeep-core
       name: (value) => (isSlug(value) ? null : t('organisations.create.nameInvalid')),
       ownerEmail: (value) =>
         value.trim() === '' || EMAIL_PATTERN.test(value.trim()) ? null : t('organisations.create.emailInvalid'),
+      ownerFirstName: (value, values) => (hasOwner(values) && value.trim() === '' ? t('common.required') : null),
+      ownerLastName: (value, values) => (hasOwner(values) && value.trim() === '' ? t('common.required') : null),
     },
   });
 
@@ -98,8 +107,17 @@ export default function CreateOrganisationModal({ opened, onClose }: CreateOrgan
                 {...form.getInputProps('ownerEmail')}
               />
               <SimpleGrid cols={{ base: 1, xs: 2 }}>
-                <TextInput label={t('organisations.create.ownerFirstName')} {...form.getInputProps('ownerFirstName')} />
-                <TextInput label={t('organisations.create.ownerLastName')} {...form.getInputProps('ownerLastName')} />
+                {/* the asterisk follows the email: the names are required only with an owner */}
+                <TextInput
+                  label={t('organisations.create.ownerFirstName')}
+                  withAsterisk={hasOwner(form.values)}
+                  {...form.getInputProps('ownerFirstName')}
+                />
+                <TextInput
+                  label={t('organisations.create.ownerLastName')}
+                  withAsterisk={hasOwner(form.values)}
+                  {...form.getInputProps('ownerLastName')}
+                />
               </SimpleGrid>
               <Text size="xs" c="dimmed">
                 {t('organisations.create.ownerDescription')}

@@ -46,13 +46,21 @@ public interface ProductService {
      */
     void delete(String realm, String catalog, String product);
 
-    /** Creates the feature of the product, or updates its display name. */
+    /**
+     * Creates the feature of the product, or updates its display name. Whether it is metered is set at creation.
+     *
+     * @throws io.orgkeep.api.exceptions.OperationNotAllowedException for another metered value on an existing feature,
+     *                                                               or a first metered feature on an assigned product
+     *                                                               (its kind would change)
+     */
     Product putFeature(String realm, String catalog, String product, String feature, UpdateFeatureRequest request);
 
     /**
      * Deletes the feature of the product: the orgs that bought it lose it.
      *
      * @throws io.orgkeep.api.exceptions.FeatureNotFoundException if the product has no such feature
+     * @throws io.orgkeep.api.exceptions.OperationNotAllowedException for a metered feature bought by an org, or the last
+     *                                                               metered feature of an assigned product
      */
     Product deleteFeature(String realm, String catalog, String product, String feature);
 

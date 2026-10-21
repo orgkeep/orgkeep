@@ -78,7 +78,19 @@ public interface ProductMapper {
                 .sorted(Comparator.comparing(Feature::name))
                 .toList();
         return new Product(catalog, product.getName(), firstValue(product.getAttributes(), CatalogRoles.DISPLAY_NAME),
-                blankToNull(product.getDescription()), features, params(product.getAttributes()), orgCount);
+                blankToNull(product.getDescription()), features, features.stream().anyMatch(Feature::metered),
+                params(product.getAttributes()), orgCount);
+    }
+
+    /**
+     * True if the product has at least one metered feature: its kind, never stored.
+     *
+     * @param roles every role of the catalog client, full representations
+     */
+    default boolean isMetered(List<RoleRepresentation> roles, String product) {
+        return roles.stream()
+                .filter(role -> isFeatureOf(role, product))
+                .anyMatch(role -> toFeature(product, role).metered());
     }
 
     /** The feature of a client role of the product ("shop-repository:scan" gives "scan"). */

@@ -30,6 +30,7 @@ import java.util.Set;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 
 /**
@@ -140,6 +141,29 @@ class ProductsResourceTest {
                 .then().statusCode(404);
         given().when().delete(PRODUCTS + "/{product}", CATALOG, "billing")
                 .then().statusCode(204);
+    }
+
+    // "metered" read from the JSON body; a first metered feature on an assigned product answers 409
+    @Test
+    @TestSecurity(user = "owner", roles = "realm-owner")
+    void meteredFeatures() {
+        createBilling();
+        given().contentType(ContentType.JSON).body("{\"metered\": true}")
+                .when().put(PRODUCTS + "/{product}/features/{feature}", CATALOG, "billing", "scan")
+                .then().statusCode(200)
+                .body("metered", equalTo(true))
+                .body("features.find { it.name == 'scan' }.metered", equalTo(true));
+        given().when().delete(PRODUCTS + "/{product}/features/{feature}", CATALOG, "billing", "scan")
+                .then().statusCode(200)
+                .body("metered", equalTo(false));
+
+        given().contentType(ContentType.JSON).body(new AssignProductRequest(10L, QuotaCycle.DAILY))
+                .when().put(ASSIGNMENT, ORG, CATALOG, "billing")
+                .then().statusCode(200);
+        given().contentType(ContentType.JSON).body("{\"metered\": true}")
+                .when().put(PRODUCTS + "/{product}/features/{feature}", CATALOG, "billing", "scan")
+                .then().statusCode(409)
+                .body("message", containsString("billing"));
     }
 
     @Test

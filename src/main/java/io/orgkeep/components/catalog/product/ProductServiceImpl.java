@@ -166,15 +166,32 @@ public class ProductServiceImpl implements ProductService {
         getProductRole(realm, catalog, ids, product);
 
         String displayName = request == null ? null : request.displayName();
-        Optional<RoleRepresentation> existing = clients.findRole(realm, ids.clientUuid(), CatalogRoles.feature(product, feature));
+        String roleName = CatalogRoles.feature(product, feature);
+        List<RoleRepresentation> roles = clients.listRoles(realm, ids.clientUuid());
+        Optional<RoleRepresentation> existing = roles.stream()
+                .filter(role -> roleName.equals(role.getName()))
+                .findFirst();
         if (existing.isPresent()) {
-            // metered is set at creation and kept: only the display name changes
+            // metered is set at creation and kept: only the display name changes. Turning a bought feature into a
+            // metered one would leave the orgs without a quota for it
             boolean metered = productMapper.toFeature(product, existing.get()).metered();
+            if (request != null && request.metered() != null && request.metered() != metered) {
+                throw new OperationNotAllowedException(
+                        "Feature '%s' of the product '%s' is %s: this is set when a feature is created, delete and recreate it"
+                                .formatted(feature, product, metered ? "metered" : "not metered"));
+            }
             RoleRepresentation representation = productMapper.toRoleRepresentation(product,
                     new Feature(feature, displayName, metered));
             clients.updateRole(realm, ids.clientUuid(), representation.getName(), representation);
         } else {
             boolean metered = request != null && Boolean.TRUE.equals(request.metered());
+            // the first metered feature changes the kind of the product: each org would go from a quota of product
+            // to quotas per feature. Free while nobody has it, or if the product is already metered
+            if (metered && !productMapper.isMetered(roles, product) && isAssigned(realm, catalog, ids, product)) {
+                throw new OperationNotAllowedException(
+                        "Product '%s' is assigned to organisations and has no metered feature: a first one would change its quotas. Create a new product instead"
+                                .formatted(product));
+            }
             RoleRepresentation representation = productMapper.toRoleRepresentation(product,
                     new Feature(feature, displayName, metered));
             clients.createRole(realm, ids.clientUuid(), representation);
@@ -189,14 +206,20 @@ public class ProductServiceImpl implements ProductService {
         CatalogSetup.Ids ids = catalogSetup.get(realm, catalog);
         getProductRole(realm, catalog, ids, product);
         String roleName = CatalogRoles.feature(product, feature);
-        clients.findRole(realm, ids.clientUuid(), roleName)
-                .filter(r -> productMapper.isFeatureOf(r, product))
+        List<RoleRepresentation> roles = clients.listRoles(realm, ids.clientUuid());
+        RoleRepresentation role = roles.stream()
+                .filter(r -> roleName.equals(r.getName()) && productMapper.isFeatureOf(r, product))
+                .findFirst()
                 .orElseThrow(() -> new FeatureNotFoundException(catalog, product, feature));
+        Map<String, String> assignments = assignments(realm, catalog, ids.clientUuid(), product);
+        if (productMapper.toFeature(product, role).metered() && !assignments.isEmpty()) {
+            checkMeteredFeatureCanGo(realm, product, feature, roles, assignments);
+        }
 
         // Keycloak removes the role from the groups holding it: the teams lose it at once
         clients.deleteRole(realm, ids.clientUuid(), roleName);
         // the orgs that bought it no longer have it, and their teams that listed it forget it
-        assignments(realm, catalog, ids.clientUuid(), product).forEach((org, path) -> {
+        assignments.forEach((org, path) -> {
             groups.findId(realm, path).ifPresent(groupId -> {
                 Map<String, List<String>> attributes = new HashMap<>(groups.attributes(realm, groupId));
                 List<String> bought = new ArrayList<>(attributes.getOrDefault(OrgGroups.BOUGHT_FEATURES_ATTRIBUTE, List.of()));
@@ -289,6 +312,44 @@ public class ProductServiceImpl implements ProductService {
         return clients.findRole(realm, ids.clientUuid(), product)
                 .filter(productMapper::isProduct)
                 .orElseThrow(() -> new ProductNotFoundException(catalog, product));
+    }
+
+    /**
+     * A metered feature of an assigned product only goes if no org bought it (it carries a negotiated quota, removing it
+     * would silently cut a capacity), and if it is not the last one (the kind of the product would change).
+     *
+     * @param roles       every role of the catalog client
+     * @param assignments the orgs the product is assigned to, not empty
+     */
+    private void checkMeteredFeatureCanGo(String realm, String product, String feature, List<RoleRepresentation> roles,
+                                          Map<String, String> assignments) {
+        List<String> buyers = assignments.entrySet().stream()
+                .filter(assignment -> groups.findId(realm, assignment.getValue())
+                        .map(groupId -> groups.attributes(realm, groupId)
+                                .getOrDefault(OrgGroups.BOUGHT_FEATURES_ATTRIBUTE, List.of())
+                                .contains(feature))
+                        .orElse(false))
+                .map(Map.Entry::getKey)
+                .sorted()
+                .toList();
+        if (!buyers.isEmpty()) {
+            throw new OperationNotAllowedException(
+                    "Metered feature '%s' of the product '%s' is bought by organisations, with a quota: %s"
+                            .formatted(feature, product, buyers));
+        }
+        String roleName = CatalogRoles.feature(product, feature);
+        boolean last = roles.stream()
+                .filter(role -> productMapper.isFeatureOf(role, product) && !roleName.equals(role.getName()))
+                .noneMatch(role -> productMapper.toFeature(product, role).metered());
+        if (last) {
+            throw new OperationNotAllowedException(
+                    "Feature '%s' is the last metered feature of the product '%s', which is assigned to organisations: without it, its quotas would change. Create a new product instead"
+                            .formatted(feature, product));
+        }
+    }
+
+    private boolean isAssigned(String realm, String catalog, CatalogSetup.Ids ids, String product) {
+        return !assignments(realm, catalog, ids.clientUuid(), product).isEmpty();
     }
 
     /** Org name → path of its assignment group, for the orgs the product is assigned to. */

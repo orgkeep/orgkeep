@@ -92,10 +92,12 @@ public class ProductsResource {
     @PUT
     @Path("/{product}/features/{feature}")
     @Operation(summary = "Add or update a feature of the product",
-            description = "In the tokens: \"<product>:<feature>\" in resource_access.<catalog>.roles, for the users of the organisations that bought it.")
+            description = "In the tokens: \"<product>:<feature>\" in resource_access.<catalog>.roles, for the users of the organisations that bought it. "
+                    + "\"metered\" (the org buys it with a quota) is only read when the feature is created.")
     @APIResponseSchema(value = Product.class, responseCode = "200", responseDescription = "The product, with its features")
     @APIResponse(responseCode = "400", description = "Invalid feature name")
     @APIResponse(responseCode = "404", description = "Unknown catalog or product")
+    @APIResponse(responseCode = "409", description = "Another \"metered\" for an existing feature, or a first metered feature on a product assigned to organisations")
     public Product putFeature(@PathParam("catalog") String catalog, @PathParam("product") String product,
                               @PathParam("feature") String feature, @Valid UpdateFeatureRequest request){
         return productService.putFeature(currentRealm.name(), catalog, product, feature, request);
@@ -106,6 +108,7 @@ public class ProductsResource {
     @Operation(summary = "Remove a feature of the product", description = "The organisations that bought it lose it.")
     @APIResponseSchema(value = Product.class, responseCode = "200", responseDescription = "The product, with its features")
     @APIResponse(responseCode = "404", description = "Unknown catalog, product or feature")
+    @APIResponse(responseCode = "409", description = "A metered feature bought by an organisation, or the last metered feature of an assigned product")
     public Product deleteFeature(@PathParam("catalog") String catalog, @PathParam("product") String product,
                                  @PathParam("feature") String feature){
         return productService.deleteFeature(currentRealm.name(), catalog, product, feature);

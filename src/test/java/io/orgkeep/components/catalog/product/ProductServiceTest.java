@@ -45,6 +45,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -57,6 +58,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ProductServiceTest {
     private static final String CATALOG = "prod";
     private static final String PRODUCT = "shop-repository";
+    private static final String BILLING = "billing";
     private static final String ORG = "acme";
     private static final ParamDefinition REGION = new ParamDefinition("region", ParamType.ENUM, true, "eu", List.of("eu", "us"));
 
@@ -87,7 +89,7 @@ class ProductServiceTest {
         Product product = createProduct();
 
         assertEquals(new Product(CATALOG, PRODUCT, "Shop repository", "Repositories",
-                List.of(new Feature("flow", null), new Feature("scan", "Scan engine")), List.of(REGION), 0), product);
+                List.of(new Feature("flow", null), new Feature("scan", "Scan engine")), false, List.of(REGION), 0), product);
         Set<String> roles = catalogRoles().stream().map(RoleRepresentation::getName).collect(Collectors.toSet());
         assertEquals(Set.of(PRODUCT, PRODUCT + ":scan", PRODUCT + ":flow"), roles);
         assertEquals(Set.of(PRODUCT, PRODUCT + ":scan", PRODUCT + ":flow"), rolesInScope());
@@ -225,6 +227,94 @@ class ProductServiceTest {
                 () -> productService.putFeature(realmName(), CATALOG, PRODUCT, "Not_A_Slug", new UpdateFeatureRequest(null)));
     }
 
+    // the kind of a product is derived from its features: one metered feature makes it metered.
+    // Free on a product nobody has, as is removing its last metered feature
+    @Test
+    void aMeteredFeatureMakesTheProductMetered() {
+        createProduct();
+
+        Product product = productService.putFeature(realmName(), CATALOG, PRODUCT, "engine", new UpdateFeatureRequest(null, true));
+        assertTrue(product.metered());
+
+        product = productService.deleteFeature(realmName(), CATALOG, PRODUCT, "engine");
+        assertFalse(product.metered());
+    }
+
+    // metered is set at creation: the same value is accepted (a rename), another one is refused
+    @Test
+    void meteredNeverChangesOnAnExistingFeature() {
+        createMeteredProduct();
+
+        productService.putFeature(realmName(), CATALOG, BILLING, "scan", new UpdateFeatureRequest("Scan", true));
+        productService.putFeature(realmName(), CATALOG, BILLING, "stats", new UpdateFeatureRequest("Stats", false));
+
+        assertThrowsExactly(OperationNotAllowedException.class, () -> productService.putFeature(realmName(), CATALOG,
+                BILLING, "scan", new UpdateFeatureRequest(null, false)));
+        assertThrowsExactly(OperationNotAllowedException.class, () -> productService.putFeature(realmName(), CATALOG,
+                BILLING, "stats", new UpdateFeatureRequest(null, true)));
+        assertEquals(List.of(new Feature("flow", "Flow engine", true), new Feature("scan", "Scan", true),
+                new Feature("stats", "Stats", false)), productService.get(realmName(), CATALOG, BILLING).features());
+    }
+
+    // an assigned simple product keeps its kind: a first metered feature would change the quotas of its orgs.
+    // A feature without quota is still free
+    @Test
+    void theFirstMeteredFeatureOfAnAssignedProductIsRefused() {
+        createProduct();
+        productService.assign(realmName(), ORG, CATALOG, PRODUCT, new AssignProductRequest(10L, QuotaCycle.DAILY));
+
+        assertThrowsExactly(OperationNotAllowedException.class, () -> productService.putFeature(realmName(), CATALOG,
+                PRODUCT, "engine", new UpdateFeatureRequest(null, true)));
+
+        Product product = productService.putFeature(realmName(), CATALOG, PRODUCT, "export", new UpdateFeatureRequest(null));
+        assertFalse(product.metered());
+        assertFalse(catalogRoles().stream().anyMatch(role -> role.getName().equals(PRODUCT + ":engine")));
+    }
+
+    // an assigned metered product can get more metered features: no org has bought them yet
+    @Test
+    void aNewMeteredFeatureOnAnAssignedMeteredProductIsFree() {
+        createMeteredProduct();
+        productService.assign(realmName(), ORG, CATALOG, BILLING,
+                new AssignProductRequest(10L, QuotaCycle.DAILY, List.of("scan"), Map.of()));
+
+        Product product = productService.putFeature(realmName(), CATALOG, BILLING, "search", new UpdateFeatureRequest(null, true));
+
+        assertTrue(product.features().contains(new Feature("search", null, true)));
+    }
+
+    // a metered feature an org bought carries a negotiated quota: refused, the orgs that bought it named.
+    // One nobody bought goes, as long as another metered feature remains
+    @Test
+    void aBoughtMeteredFeatureCannotBeDeleted() {
+        createMeteredProduct();
+        productService.assign(realmName(), ORG, CATALOG, BILLING,
+                new AssignProductRequest(10L, QuotaCycle.DAILY, List.of("scan"), Map.of()));
+
+        OperationNotAllowedException e = assertThrowsExactly(OperationNotAllowedException.class,
+                () -> productService.deleteFeature(realmName(), CATALOG, BILLING, "scan"));
+        assertTrue(e.getMessage().contains(ORG), e.getMessage());
+
+        Product product = productService.deleteFeature(realmName(), CATALOG, BILLING, "flow");
+        assertEquals(List.of("scan", "stats"), product.features().stream().map(Feature::name).toList());
+    }
+
+    // the last metered feature of an assigned product: refused even if nobody bought it (the kind would change).
+    // A feature without quota goes as before, and leaves the purchases of the orgs
+    @Test
+    void theLastMeteredFeatureOfAnAssignedProductIsRefused() {
+        productService.create(realmName(), CATALOG, new CreateProductRequest(BILLING, "Billing", null,
+                List.of(new Feature("stats", null), new Feature("scan", null, true)), List.of()));
+        productService.assign(realmName(), ORG, CATALOG, BILLING,
+                new AssignProductRequest(10L, QuotaCycle.DAILY, List.of("stats"), Map.of()));
+
+        assertThrowsExactly(OperationNotAllowedException.class,
+                () -> productService.deleteFeature(realmName(), CATALOG, BILLING, "scan"));
+
+        productService.deleteFeature(realmName(), CATALOG, BILLING, "stats");
+        assertEquals(List.of(), productService.listAssigned(realmName(), ORG).get(0).boughtFeatures());
+    }
+
     // the values of the orgs follow the schema: a removed parameter goes, a new one gets its default
     @Test
     void updateFitsTheValuesOfTheOrgsToTheNewSchema() {
@@ -260,6 +350,13 @@ class ProductServiceTest {
     private Product createProduct() {
         return productService.create(realmName(), CATALOG, new CreateProductRequest(PRODUCT, "Shop repository", "Repositories",
                 List.of(new Feature("scan", "Scan engine"), new Feature("flow", null)), List.of(REGION)));
+    }
+
+    /** A metered product: a permission (stats) and two engines bought with a quota each (scan, flow). */
+    private Product createMeteredProduct() {
+        return productService.create(realmName(), CATALOG, new CreateProductRequest(BILLING, "Billing", null,
+                List.of(new Feature("stats", null), new Feature("scan", "Scan engine", true),
+                        new Feature("flow", "Flow engine", true)), List.of()));
     }
 
     private String realmName() {

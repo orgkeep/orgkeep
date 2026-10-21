@@ -223,7 +223,7 @@ export function OrgCount({ catalog, product, count }: { catalog: string; product
 // What the API of the realm owner receives: makes the link between this screen and the tokens
 function TokenHint({ catalog }: { catalog: string }) {
   const { t } = useTranslation();
-  // the format of the spec ("Format du token" in ARCHITECTURE.md), with an example product
+  // the token format of the core (rights in resource_access, quotas and parameters in the claim of the catalog), with an example product
   const token = {
     resource_access: { [catalog]: { roles: ['billing', 'billing:read'] } },
     [catalog]: { billing: { quotas: [{ pool: 'acme', limit: 1000, cycle: 'monthly' }] } },

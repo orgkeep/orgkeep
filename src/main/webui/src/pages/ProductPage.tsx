@@ -292,7 +292,7 @@ function TokenHint({ product }: { product: Product }) {
   if (product.params.length > 0) {
     claim.params = params;
   }
-  // the part of the token about this product, in the format of the spec ("Format du token" in ARCHITECTURE.md)
+  // the part of the token about this product, in the token format of the core (rights in resource_access, quotas and parameters in the claim of the catalog)
   const token = {
     resource_access: { [product.catalog]: { roles } },
     [product.catalog]: { [product.name]: claim },

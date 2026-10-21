@@ -38,6 +38,18 @@ public class KeycloakGroups {
         }
     }
 
+    /** The group at this path, full representation: attributes included. */
+    public Optional<GroupRepresentation> find(String realm, String path) {
+        try {
+            return Optional.of(keycloak.realm(realm).getGroupByPath(path));
+        } catch (WebApplicationException e) {
+            if (!KeycloakErrors.isNotFound(e)) {
+                throw e;
+            }
+            return Optional.empty();
+        }
+    }
+
     /** @return the id of the new top level group */
     public String createTopLevel(String realm, String name) {
         return createdId(keycloak.realm(realm).groups().add(group(name)));
@@ -119,6 +131,24 @@ public class KeycloakGroups {
             first += PAGE_SIZE;
         } while (page.size() == PAGE_SIZE);
         return ids;
+    }
+
+    /**
+     * The client roles granted directly to the group, for every client in one call: clientId → role names.
+     */
+    public Map<String, Set<String>> clientRoles(String realm, String groupId) {
+        var clientMappings = keycloak.realm(realm).groups().group(groupId).roles().getAll().getClientMappings();
+        Map<String, Set<String>> roles = new HashMap<>();
+        if (clientMappings != null) {
+            clientMappings.forEach((clientId, mappings) -> {
+                Set<String> names = new HashSet<>();
+                if (mappings.getMappings() != null) {
+                    mappings.getMappings().forEach(role -> names.add(role.getName()));
+                }
+                roles.put(clientId, names);
+            });
+        }
+        return roles;
     }
 
     public void join(String realm, String userId, String groupId) {

@@ -18,6 +18,8 @@ import io.orgkeep.api.model.ProductRole;
 import io.orgkeep.api.model.UpdateProductRequest;
 import io.orgkeep.api.model.UpdateProductRoleRequest;
 import io.orgkeep.components.catalog.CatalogSetup;
+import io.orgkeep.components.organisation.usergroup.team.TeamAlignment;
+import io.orgkeep.components.organisation.usergroup.team.TeamClaims;
 import io.orgkeep.repository.keycloak.KeycloakClientScopes;
 import io.orgkeep.repository.keycloak.KeycloakClients;
 import io.orgkeep.repository.keycloak.KeycloakGroups;
@@ -52,6 +54,7 @@ public class ProductServiceImpl implements ProductService {
     private final KeycloakGroups groups;
     private final KeycloakOrgs orgs;
     private final CatalogSetup catalogSetup;
+    private final TeamAlignment teamAlignment;
     private final ProductMapper productMapper;
 
     @Override
@@ -122,7 +125,9 @@ public class ProductServiceImpl implements ProductService {
 
         // the values of the orgs follow the new schema: all checked before anything changes
         Map<String, Map<String, List<String>>> newAttributes = new LinkedHashMap<>();
-        assignments(realm, catalog, ids.clientUuid(), product).forEach((org, path) -> groups.findId(realm, path)
+        Map<String, String> assignments = assignments(realm, catalog, ids.clientUuid(), product);
+        Set<String> assignedOrgs = assignments.keySet();
+        assignments.forEach((org, path) -> groups.findId(realm, path)
                 .ifPresent(groupId -> newAttributes.put(groupId,
                         withParams(org, groups.attributes(realm, groupId), request.params()))));
 
@@ -131,6 +136,8 @@ public class ProductServiceImpl implements ProductService {
                 product, request.displayName(), request.description() == null ? "" : request.description(),
                 request.params()));
         newAttributes.forEach((groupId, attributes) -> groups.replaceAttributes(realm, groupId, attributes));
+        // the teams carry a copy of the parameter values of their org
+        assignedOrgs.forEach(org -> teamAlignment.align(realm, org, catalog, product));
         log.info("Product '{}' of catalog '{}' updated in realm '{}'", product, catalog, realm);
         return get(realm, catalog, product);
     }
@@ -181,16 +188,18 @@ public class ProductServiceImpl implements ProductService {
 
         // Keycloak removes the role from the groups holding it: the teams lose it at once
         clients.deleteRole(realm, ids.clientUuid(), roleName);
-        // the orgs that bought it no longer have it
-        assignments(realm, catalog, ids.clientUuid(), product).values().forEach(path -> groups.findId(realm, path)
-                .ifPresent(groupId -> {
-                    Map<String, List<String>> attributes = new HashMap<>(groups.attributes(realm, groupId));
-                    List<String> bought = new ArrayList<>(attributes.getOrDefault(OrgGroups.BOUGHT_ROLES_ATTRIBUTE, List.of()));
-                    if (bought.remove(role)) {
-                        attributes.put(OrgGroups.BOUGHT_ROLES_ATTRIBUTE, bought);
-                        groups.replaceAttributes(realm, groupId, attributes);
-                    }
-                }));
+        // the orgs that bought it no longer have it, and their teams that listed it forget it
+        assignments(realm, catalog, ids.clientUuid(), product).forEach((org, path) -> {
+            groups.findId(realm, path).ifPresent(groupId -> {
+                Map<String, List<String>> attributes = new HashMap<>(groups.attributes(realm, groupId));
+                List<String> bought = new ArrayList<>(attributes.getOrDefault(OrgGroups.BOUGHT_ROLES_ATTRIBUTE, List.of()));
+                if (bought.remove(role)) {
+                    attributes.put(OrgGroups.BOUGHT_ROLES_ATTRIBUTE, bought);
+                    groups.replaceAttributes(realm, groupId, attributes);
+                }
+            });
+            teamAlignment.forgetProductRole(realm, org, catalog, product, role);
+        });
         log.info("Role '{}' removed from product '{}' of catalog '{}' in realm '{}'", role, product, catalog, realm);
         return get(realm, catalog, product);
     }
@@ -209,7 +218,10 @@ public class ProductServiceImpl implements ProductService {
         if (!unknown.isEmpty()) {
             throw new InvalidRequestException("Not roles of the product '%s': %s".formatted(product, unknown));
         }
-        Map<String, String> params = ParamRules.resolveValues(productMapper.params(productRole.getAttributes()), request.params());
+        List<ParamDefinition> schema = productMapper.params(productRole.getAttributes());
+        Map<String, String> params = ParamRules.resolveValues(schema, request.params());
+        // the values are copied on the teams as one JSON value, which must fit in a group attribute
+        TeamClaims.checkParamsFit(schema, params);
         Map<String, List<String>> attributes = productMapper.toAssignmentAttributes(request, params);
 
         Optional<String> existingId = groups.findId(realm, OrgGroups.assignment(orgName, catalog, product));
@@ -232,6 +244,8 @@ public class ProductServiceImpl implements ProductService {
             }
             log.info("Product '{}' of catalog '{}' assigned to organisation '{}' in realm '{}'", product, catalog, orgName, realm);
         }
+        // the teams giving the product follow what the org negotiated: quota, bought roles, parameters
+        teamAlignment.align(realm, orgName, catalog, product);
         return new OrgProduct(catalog, product, groupId, request.quota(), request.cycle(),
                 request.boughtRoles().stream().distinct().sorted().toList(), params);
     }
@@ -243,6 +257,11 @@ public class ProductServiceImpl implements ProductService {
                 .orElseThrow(() -> new ProductNotAssignedException(orgName, catalog, product));
 
         groups.delete(realm, groupId);
+        // the teams no longer give it, and without any product in the catalog, no catalog role of it either
+        teamAlignment.revoke(realm, orgName, catalog, product);
+        if (!teamAlignment.hasAssignment(realm, orgName, catalog)) {
+            teamAlignment.revokeCatalogRoles(realm, orgName, catalog);
+        }
         log.info("Product '{}' of catalog '{}' unassigned from organisation '{}' in realm '{}'", product, catalog, orgName, realm);
     }
 
@@ -293,6 +312,7 @@ public class ProductServiceImpl implements ProductService {
         Map<String, String> resolved;
         try {
             resolved = ParamRules.resolveValues(schema, kept);
+            TeamClaims.checkParamsFit(schema, resolved);
         } catch (InvalidRequestException e) {
             throw new InvalidRequestException("Organisation '%s': %s".formatted(org, e.getMessage()));
         }

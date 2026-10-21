@@ -14,7 +14,14 @@ import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.GroupRepresentation;
 import org.keycloak.representations.idm.RoleRepresentation;
 
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -99,6 +106,29 @@ class DemoSeederTest {
         assertFalse(contains(orgRoles, "org-admin"), orgRoles.toString());
     }
 
+    // the simple case: billing given by the team users, in the default catalog products (a default scope of the
+    // login client): every member has it without asking for a scope
+    @Test
+    void orgUserGetsBillingThroughTheTeamUsers() throws Exception {
+        JsonNode claims = logIn(DemoSeeder.ORG_USER);
+
+        assertTrue(contains(claims.at("/resource_access/products/roles"), DemoSeeder.PRODUCT), claims.toString());
+        assertEquals("acme", claims.at("/products/billing/quotas/0/pool").asText(), claims.toString());
+    }
+
+    // the example token of ARCHITECTURE.md: Paul, team ops, scopes prod and sandbox
+    @Test
+    void paulGetsTheExampleTokenOfTheSpec() throws Exception {
+        JsonNode claims = logIn(DemoSeeder.PAUL, "openid prod sandbox");
+
+        assertEquals(Set.of("scanner", "shop-repository", "shop-repository:scan"),
+                strings(claims.at("/resource_access/prod/roles")));
+        assertEquals(Set.of("scanner", "shop-repository", "shop-repository:scan", "shop-repository:flow"),
+                strings(claims.at("/resource_access/sandbox/roles")));
+        assertEquals(Set.of("acme", "acme/ops"), pools(claims.at("/prod/shop-repository/quotas")));
+        assertEquals(Set.of("acme"), pools(claims.at("/sandbox/shop-repository/quotas")));
+    }
+
     @Test
     void dashboardClientIsReadyForTheDashboardInDev() {
         ClientRepresentation client = keycloak.realm(REALM).clients()
@@ -122,6 +152,44 @@ class DemoSeederTest {
             byte[] payload = Base64.getUrlDecoder().decode(token.split("\\.")[1]);
             return new ObjectMapper().readTree(payload);
         }
+    }
+
+    /**
+     * Same, with the scope parameter: the catalogs prod and sandbox are optional scopes of the login client.
+     * A plain HTTP call, the admin client does not ask for a scope.
+     */
+    private JsonNode logIn(String username, String scope) throws Exception {
+        String form = Map.of(
+                        "grant_type", "password",
+                        "client_id", REALM,
+                        "username", username,
+                        "password", DemoSeeder.PASSWORD,
+                        "scope", scope)
+                .entrySet().stream()
+                .map(e -> e.getKey() + "=" + URLEncoder.encode(e.getValue(), StandardCharsets.UTF_8))
+                .collect(Collectors.joining("&"));
+        HttpRequest request = HttpRequest.newBuilder(
+                        URI.create(keycloakUrl + "/realms/" + REALM + "/protocol/openid-connect/token"))
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .POST(HttpRequest.BodyPublishers.ofString(form))
+                .build();
+        HttpResponse<String> response;
+        try (HttpClient http = HttpClient.newHttpClient()) {
+            response = http.send(request, HttpResponse.BodyHandlers.ofString());
+        }
+        assertEquals(200, response.statusCode(), response.body());
+        String token = new ObjectMapper().readTree(response.body()).path("access_token").asText();
+        return new ObjectMapper().readTree(Base64.getUrlDecoder().decode(token.split("\\.")[1]));
+    }
+
+    private static Set<String> strings(JsonNode array) {
+        Set<String> values = new HashSet<>();
+        array.forEach(element -> values.add(element.asText()));
+        return values;
+    }
+
+    private static Set<String> pools(JsonNode quotas) {
+        return quotas.findValues("pool").stream().map(JsonNode::asText).collect(Collectors.toSet());
     }
 
     private static boolean contains(JsonNode array, String value) {

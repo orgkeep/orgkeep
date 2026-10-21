@@ -1,5 +1,7 @@
 package io.orgkeep.api.model;
 
+import java.util.regex.Pattern;
+
 /**
  * Group tree of an organisation:
  * <pre>
@@ -26,6 +28,7 @@ public final class OrgGroups {
     /** Multivalued attribute of an assignment group: the roles of the product the org bought, without the prefix. */
     public static final String BOUGHT_ROLES_ATTRIBUTE = "bought-roles";
     private static final String PARAM_PREFIX = "param.";
+    private static final Pattern USER_GROUP_NAME = Pattern.compile("[a-z0-9]([a-z0-9-]*[a-z0-9])?");
 
     private OrgGroups() {
     }
@@ -81,6 +84,21 @@ public final class OrgGroups {
 
     public static String userGroup(String orgName, String groupName) {
         return userGroups(orgName) + "/" + groupName;
+    }
+
+    /**
+     * Same rule as CreateUserGroupRequest.name, for a name read from the URL: it is not validated by Bean Validation,
+     * and a "/" in it would point to another group of the tree.
+     */
+    public static boolean isUserGroupName(String name) {
+        return USER_GROUP_NAME.matcher(name).matches();
+    }
+
+    /** True for the path of a user group of any org, e.g. "/acme/user-groups/ops". */
+    public static boolean isUserGroup(String path) {
+        // "/acme/user-groups/ops" splits into ["", "acme", "user-groups", "ops"]
+        String[] segments = path.split("/");
+        return segments.length == 4 && segments[0].isEmpty() && USER_GROUPS.equals(segments[2]);
     }
 
     /** The user groups created with the organisation: they hold the org roles and cannot be deleted. */

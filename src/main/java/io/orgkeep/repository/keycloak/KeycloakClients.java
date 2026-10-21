@@ -198,6 +198,32 @@ public class KeycloakClients {
         keycloak.realm(realm).groups().group(groupId).roles().clientLevel(clientUuid).add(List.of(role(realm, clientUuid, roleName)));
     }
 
+    /** @param roles representations read from Keycloak: the id of each role is needed */
+    public void grantToGroup(String realm, String clientUuid, String groupId, Collection<RoleRepresentation> roles) {
+        if (!roles.isEmpty()) {
+            keycloak.realm(realm).groups().group(groupId).roles().clientLevel(clientUuid).add(List.copyOf(roles));
+        }
+    }
+
+    /** Roles of this client granted directly to the group, brief representations. */
+    public List<RoleRepresentation> rolesOfGroup(String realm, String clientUuid, String groupId) {
+        return keycloak.realm(realm).groups().group(groupId).roles().clientLevel(clientUuid).listAll();
+    }
+
+    /** @param roles representations read from Keycloak, e.g. by {@link #rolesOfGroup} */
+    public void revokeFromGroup(String realm, String clientUuid, String groupId, Collection<RoleRepresentation> roles) {
+        if (!roles.isEmpty()) {
+            keycloak.realm(realm).groups().group(groupId).roles().clientLevel(clientUuid).remove(List.copyOf(roles));
+        }
+    }
+
+    /** Revokes the role granted directly to the group, if granted. */
+    public void revokeFromGroup(String realm, String clientUuid, String groupId, String roleName) {
+        revokeFromGroup(realm, clientUuid, groupId, rolesOfGroup(realm, clientUuid, groupId).stream()
+                .filter(role -> roleName.equals(role.getName()))
+                .toList());
+    }
+
     /** Names of the roles of this client granted directly to the user (not through a group or a composite). */
     public Set<String> directRolesOf(String realm, String clientUuid, String userId) {
         return keycloak.realm(realm).users().get(userId).roles().clientLevel(clientUuid).listAll().stream()
@@ -243,15 +269,25 @@ public class KeycloakClients {
      * pages are read until a short one.
      */
     public List<String> groupPathsWithRole(String realm, String clientUuid, String roleName) {
-        List<String> paths = new ArrayList<>();
+        return listGroupsWithRole(realm, clientUuid, roleName).stream()
+                .map(GroupRepresentation::getPath)
+                .toList();
+    }
+
+    /**
+     * All the groups holding the role directly, brief representations (id, name, path). Keycloak answers 100 groups
+     * at most per call: pages are read until a short one.
+     */
+    public List<GroupRepresentation> listGroupsWithRole(String realm, String clientUuid, String roleName) {
+        List<GroupRepresentation> groups = new ArrayList<>();
         int first = 0;
         Set<GroupRepresentation> page;
         do {
             page = roles(realm, clientUuid).get(roleName).getRoleGroupMembers(first, PAGE_SIZE);
-            page.forEach(group -> paths.add(group.getPath()));
+            groups.addAll(page);
             first += PAGE_SIZE;
         } while (page.size() == PAGE_SIZE);
-        return paths;
+        return groups;
     }
 
     public Set<String> groupsWithRole(String realm, String clientUuid, String roleName) {

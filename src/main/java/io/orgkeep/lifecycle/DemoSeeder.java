@@ -1,14 +1,23 @@
 package io.orgkeep.lifecycle;
 
+import io.orgkeep.api.CatalogRoleService;
 import io.orgkeep.api.CatalogService;
 import io.orgkeep.api.OrgMemberService;
 import io.orgkeep.api.OrgService;
 import io.orgkeep.api.ProductService;
+import io.orgkeep.api.TeamService;
+import io.orgkeep.api.UserGroupService;
 import io.orgkeep.api.model.AddMemberRequest;
 import io.orgkeep.api.model.AssignProductRequest;
 import io.orgkeep.api.model.Catalogs;
+import io.orgkeep.api.model.CreateCatalogRequest;
+import io.orgkeep.api.model.CreateCatalogRoleRequest;
 import io.orgkeep.api.model.CreateOrgRequest;
 import io.orgkeep.api.model.CreateProductRequest;
+import io.orgkeep.api.model.CreateUserGroupRequest;
+import io.orgkeep.api.model.GrantProductRequest;
+import io.orgkeep.api.model.OrgGroups;
+import io.orgkeep.api.model.ProductRole;
 import io.orgkeep.api.model.QuotaCycle;
 import io.orgkeep.config.OrgkeepConfig;
 import io.orgkeep.repository.keycloak.KeycloakClients;
@@ -30,7 +39,8 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Seeds an organisation, its owner and a member for manual testing (Bruno, Postman), when orgkeep.demo.enabled is true:
+ * Seeds an organisation, its owner, members, and the two examples of catalogs, products and teams of ARCHITECTURE.md
+ * for manual testing (Bruno, Postman, the dashboard), when orgkeep.demo.enabled is true:
  * always in dev mode, ORGKEEP_DEMO_ENABLED=true in the Docker image.
  * The realm and its owner are created beforehand by OnPremiseBootstrap.
  * Idempotent: does nothing if the organisation already exists.
@@ -46,6 +56,14 @@ public class DemoSeeder {
     static final String ORG_USER_EMAIL = "org-user@acme.test";
     static final String PASSWORD = "password";
     static final String PRODUCT = "billing";
+    static final String PROD = "prod";
+    static final String SANDBOX = "sandbox";
+    static final String SHOP_REPOSITORY = "shop-repository";
+    static final String LEGAL_REPOSITORY = "legal-repository";
+    static final String ANALYSTS = "analysts";
+    static final String OPS = "ops";
+    static final String PAUL = "paul";
+    static final String PAUL_EMAIL = "paul@acme.test";
     // must match quarkus.oidc.client-id and the dev secret in the application.properties of orgkeep-dashboard
     static final String DASHBOARD_CLIENT_ID = "orgkeep-dashboard";
     static final String DASHBOARD_SECRET = "dashboard-dev-secret";
@@ -56,6 +74,9 @@ public class DemoSeeder {
     private final OrgMemberService memberService;
     private final CatalogService catalogService;
     private final ProductService productService;
+    private final CatalogRoleService catalogRoleService;
+    private final UserGroupService userGroupService;
+    private final TeamService teamService;
     private final KeycloakOrgs orgs;
     private final KeycloakUsers users;
     private final KeycloakClients clients;
@@ -74,6 +95,7 @@ public class DemoSeeder {
 
         ensureOrg(realm);
         ensureOrgUser(realm);
+        ensureEnvironments(realm);
     }
 
     private void ensureOrg(String realm) {
@@ -93,8 +115,9 @@ public class DemoSeeder {
     }
 
     /**
-     * The simplest case: a product without roles nor parameters, in the default catalog, assigned to the org.
-     * Skipped if the realm owner deleted the default catalog.
+     * The simple case of ARCHITECTURE.md: a product without roles nor parameters, in the default catalog, assigned to
+     * the org and given to every member by the predefined team users. Skipped if the realm owner deleted the default
+     * catalog.
      */
     private void assignDemoProduct(String realm) {
         if (catalogService.list(realm).stream().noneMatch(catalog -> Catalogs.DEFAULT.equals(catalog.name()))) {
@@ -104,6 +127,58 @@ public class DemoSeeder {
             productService.create(realm, Catalogs.DEFAULT, new CreateProductRequest(PRODUCT, "Billing API", "Invoices"));
         }
         productService.assign(realm, ORG, Catalogs.DEFAULT, PRODUCT, new AssignProductRequest(1000L, QuotaCycle.MONTHLY));
+        teamService.grantProduct(realm, ORG, OrgGroups.USERS, Catalogs.DEFAULT, PRODUCT, GrantProductRequest.allRoles());
+    }
+
+    /**
+     * The case with several environments of ARCHITECTURE.md: catalogs prod and sandbox, products with roles bought by
+     * the org, catalog roles, and two teams, one with a quota of its own. Paul is in the team ops.
+     * Checked on its own, not with the org: a realm seeded before this example existed gets it too.
+     */
+    private void ensureEnvironments(String realm) {
+        if (catalogService.list(realm).stream().anyMatch(catalog -> PROD.equals(catalog.name()))) {
+            return;
+        }
+        List<ProductRole> engines = List.of(new ProductRole("scan", "Scan engine"), new ProductRole("flow", "Flow engine"));
+        for (String catalog : List.of(PROD, SANDBOX)) {
+            catalogService.create(realm, new CreateCatalogRequest(catalog, PROD.equals(catalog) ? "Production" : "Sandbox", null));
+            productService.create(realm, catalog, new CreateProductRequest(SHOP_REPOSITORY, "Shop repository",
+                    "Repositories of the shops", engines, List.of()));
+            productService.create(realm, catalog, new CreateProductRequest(LEGAL_REPOSITORY, "Legal repository",
+                    "Legal documents", engines, List.of()));
+            catalogRoleService.create(realm, catalog, new CreateCatalogRoleRequest("scanner", "Scanner", null, true));
+            catalogRoleService.create(realm, catalog, new CreateCatalogRoleRequest("stats", "Statistics", null, true));
+            catalogRoleService.create(realm, catalog, new CreateCatalogRoleRequest("anonymous", "Test account",
+                    "Excluded from the statistics", false));
+        }
+
+        // what acme negotiated
+        productService.assign(realm, ORG, PROD, SHOP_REPOSITORY,
+                new AssignProductRequest(1000L, QuotaCycle.MONTHLY, List.of("scan"), Map.of()));
+        productService.assign(realm, ORG, PROD, LEGAL_REPOSITORY,
+                new AssignProductRequest(500L, QuotaCycle.MONTHLY, List.of("scan", "flow"), Map.of()));
+        productService.assign(realm, ORG, SANDBOX, SHOP_REPOSITORY,
+                new AssignProductRequest(100L, QuotaCycle.DAILY, List.of("scan", "flow"), Map.of()));
+
+        // analysts: both products of prod and the statistics; ops: shop-repository everywhere, with its own quota in prod
+        userGroupService.create(realm, ORG, new CreateUserGroupRequest(ANALYSTS));
+        teamService.grantProduct(realm, ORG, ANALYSTS, PROD, SHOP_REPOSITORY, GrantProductRequest.allRoles());
+        teamService.grantProduct(realm, ORG, ANALYSTS, PROD, LEGAL_REPOSITORY, GrantProductRequest.allRoles());
+        teamService.grantCatalogRole(realm, ORG, ANALYSTS, PROD, "stats");
+        userGroupService.create(realm, ORG, new CreateUserGroupRequest(OPS));
+        teamService.grantProduct(realm, ORG, OPS, PROD, SHOP_REPOSITORY, new GrantProductRequest(null, 300L, null));
+        teamService.grantProduct(realm, ORG, OPS, SANDBOX, SHOP_REPOSITORY, GrantProductRequest.allRoles());
+        teamService.grantCatalogRole(realm, ORG, OPS, PROD, "scanner");
+        teamService.grantCatalogRole(realm, ORG, OPS, SANDBOX, "scanner");
+
+        String paulId = users.findIdByEmail(realm, PAUL_EMAIL)
+                .orElseGet(() -> users.create(realm, demoUser(PAUL, PAUL_EMAIL, "Paul", "Lefebvre")));
+        if (orgs.organisationsOf(realm, paulId).isEmpty()) {
+            memberService.add(realm, ORG, new AddMemberRequest(PAUL_EMAIL, null, null));
+        }
+        userGroupService.addMember(realm, ORG, OPS, paulId);
+        log.info("Demo catalogs '{}' and '{}' created in realm '{}', member '{}' / '{}' in the team '{}'",
+                PROD, SANDBOX, realm, PAUL, PASSWORD, OPS);
     }
 
     /**

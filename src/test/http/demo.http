@@ -29,6 +29,36 @@ client_id=demo
     client.global.set("org_owner_token", response.body.access_token);
 %}
 
+### Token of org-user (Claire): the default catalog "products" is a default scope of the login client,
+### resource_access.products has billing, given by the team users
+POST http://localhost:8280/realms/demo/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+client_id=demo
+    &username=org-user
+    &password=password
+    &grant_type=password
+
+### Token of paul, team ops, catalog prod only: resource_access.prod, pools acme and acme/ops in the claim "prod"
+POST http://localhost:8280/realms/demo/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+client_id=demo
+    &username=paul
+    &password=password
+    &grant_type=password
+    &scope=openid prod
+
+### Token of paul, catalog sandbox only: the API of prod refuses it (prod is not in aud)
+POST http://localhost:8280/realms/demo/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+client_id=demo
+    &username=paul
+    &password=password
+    &grant_type=password
+    &scope=openid sandbox
+
 ### Realm owner: list organisations
 GET http://localhost:8282/api/admin/organisations
 Authorization: Bearer {{realm_owner_token}}
@@ -47,6 +77,28 @@ Content-Type: application/json
   "firstName": "Bob",
   "lastName": "Smith"
 }
+
+### Org owner: the teams of acme, with what they give
+GET http://localhost:8282/api/organisations/acme/user-groups
+Authorization: Bearer {{org_owner_token}}
+
+### Org owner: the products of acme, to configure the teams
+GET http://localhost:8282/api/organisations/acme/products
+Authorization: Bearer {{org_owner_token}}
+
+### Org owner: the team analysts gives legal-repository in prod, scan only, with a quota of team (cycle of the org)
+PUT http://localhost:8282/api/organisations/acme/user-groups/analysts/products/prod/legal-repository
+Authorization: Bearer {{org_owner_token}}
+Content-Type: application/json
+
+{
+  "roles": ["scan"],
+  "quota": 200
+}
+
+### Org owner: the catalog roles of prod the teams can give
+GET http://localhost:8282/api/organisations/acme/catalogs/prod/roles
+Authorization: Bearer {{org_owner_token}}
 
 ### Org owner: forbidden on the realm owner endpoints (403)
 GET http://localhost:8282/api/admin/organisations

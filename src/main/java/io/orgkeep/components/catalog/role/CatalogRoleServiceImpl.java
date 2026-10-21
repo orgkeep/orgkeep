@@ -10,6 +10,7 @@ import io.orgkeep.api.model.CreateCatalogRoleRequest;
 import io.orgkeep.api.model.RoleHolder;
 import io.orgkeep.api.model.UpdateCatalogRoleRequest;
 import io.orgkeep.components.catalog.CatalogSetup;
+import io.orgkeep.components.organisation.usergroup.team.TeamAlignment;
 import io.orgkeep.repository.keycloak.KeycloakClientScopes;
 import io.orgkeep.repository.keycloak.KeycloakClients;
 import io.orgkeep.repository.keycloak.KeycloakOrgs;
@@ -31,6 +32,7 @@ public class CatalogRoleServiceImpl implements CatalogRoleService {
     private final KeycloakUsers users;
     private final KeycloakOrgs orgs;
     private final CatalogSetup catalogSetup;
+    private final TeamAlignment teamAlignment;
     private final CatalogRoleMapper catalogRoleMapper;
 
     @Override
@@ -71,10 +73,14 @@ public class CatalogRoleServiceImpl implements CatalogRoleService {
     @Override
     public CatalogRole update(String realm, String catalog, String role, UpdateCatalogRoleRequest request) {
         CatalogSetup.Ids ids = catalogSetup.get(realm, catalog);
-        getRole(realm, catalog, ids, role);
+        boolean wasGrantable = catalogRoleMapper.toCatalogRole(catalog, getRole(realm, catalog, ids, role)).orgGrantable();
         RoleRepresentation updated = catalogRoleMapper.toRoleRepresentation(
                 role, request.displayName(), request.description(), request.orgGrantable());
         clients.updateRole(realm, ids.clientUuid(), role, updated);
+        if (wasGrantable && !request.orgGrantable()) {
+            // now reserved to the realm owner: the teams no longer give it, the users holding it directly keep it
+            teamAlignment.revokeCatalogRoleFromTeams(realm, catalog, role);
+        }
         log.info("Catalog role '{}' of catalog '{}' updated in realm '{}'", role, catalog, realm);
         return catalogRoleMapper.toCatalogRole(catalog, updated);
     }

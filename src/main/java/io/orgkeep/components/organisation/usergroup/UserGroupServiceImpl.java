@@ -8,6 +8,9 @@ import io.orgkeep.api.exceptions.UserGroupNotFoundException;
 import io.orgkeep.api.model.CreateUserGroupRequest;
 import io.orgkeep.api.model.OrgGroups;
 import io.orgkeep.api.model.UserGroup;
+import io.orgkeep.components.catalog.CatalogSetup;
+import io.orgkeep.components.organisation.usergroup.team.TeamMapper;
+import io.orgkeep.components.organisation.usergroup.team.TeamQuotas;
 import io.orgkeep.repository.keycloak.KeycloakGroups;
 import io.orgkeep.repository.keycloak.KeycloakOrgs;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -18,28 +21,34 @@ import org.keycloak.representations.idm.OrganizationRepresentation;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
-import java.util.regex.Pattern;
 
 @Slf4j
 @ApplicationScoped
 @RequiredArgsConstructor
 public class UserGroupServiceImpl implements UserGroupService {
-    // same rule as CreateUserGroupRequest.name: a name read from the URL is not validated by Bean Validation,
-    // and a "/" in it would point to another group of the tree
-    private static final Pattern GROUP_NAME = Pattern.compile("[a-z0-9]([a-z0-9-]*[a-z0-9])?");
-
     private final KeycloakOrgs orgs;
     private final KeycloakGroups groups;
+    private final CatalogSetup catalogSetup;
+    private final TeamQuotas teamQuotas;
     private final UserGroupMapper userGroupMapper;
+    private final TeamMapper teamMapper;
 
-    /** One call for the groups, then one per group for its members. */
+    /** One call for the groups, then two per group: its members and its role mappings. */
     @Override
     public List<UserGroup> list(String realm, String orgName) {
         orgs.getByName(realm, orgName);
+        Set<String> catalogs = catalogSetup.catalogScopeIds(realm).keySet();
         return groups.children(realm, userGroupsId(realm, orgName)).stream()
                 .sorted(Comparator.comparing(GroupRepresentation::getName))
-                .map(group -> userGroupMapper.toUserGroup(group, groups.memberIds(realm, group.getId())))
+                .map(group -> {
+                    Map<String, List<String>> attributes = group.getAttributes() == null ? Map.of() : group.getAttributes();
+                    Map<String, Set<String>> clientRoles = groups.clientRoles(realm, group.getId());
+                    return userGroupMapper.toUserGroup(group, groups.memberIds(realm, group.getId()),
+                            teamMapper.toTeamProducts(attributes, clientRoles),
+                            teamMapper.toTeamCatalogRoles(attributes, clientRoles, catalogs));
+                })
                 .toList();
     }
 
@@ -53,7 +62,7 @@ public class UserGroupServiceImpl implements UserGroupService {
         String groupId = groups.createChild(realm, userGroupsId(realm, orgName), request.name());
         log.info("User group '{}' created in organisation '{}' of realm '{}'", request.name(), orgName, realm);
         // a new group grants nothing and has no member
-        return new UserGroup(groupId, request.name(), false, Set.of());
+        return new UserGroup(groupId, request.name(), false, Set.of(), List.of(), List.of());
     }
 
     @Override
@@ -75,6 +84,7 @@ public class UserGroupServiceImpl implements UserGroupService {
         if (!orgs.isMember(realm, org.getId(), userId)) {
             throw new MemberNotFoundException(orgName, userId);
         }
+        teamQuotas.checkJoin(realm, orgName, groupId, userId);
 
         // joining a group the user is already in changes nothing in Keycloak
         groups.join(realm, userId, groupId);
@@ -104,7 +114,7 @@ public class UserGroupServiceImpl implements UserGroupService {
 
     /** The org must exist, checked by the caller: an unknown org answers "unknown org", not "unknown group". */
     private String groupId(String realm, String orgName, String groupName) {
-        if (!GROUP_NAME.matcher(groupName).matches()) {
+        if (!OrgGroups.isUserGroupName(groupName)) {
             throw new UserGroupNotFoundException(orgName, groupName);
         }
         return groups.findId(realm, OrgGroups.userGroup(orgName, groupName))

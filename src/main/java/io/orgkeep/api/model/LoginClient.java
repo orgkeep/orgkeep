@@ -6,6 +6,10 @@ import java.util.List;
  * The login client of the realm: the client through which the users of every organisation log in
  * to the applications of the realm owner. Its clientId is the realm name.
  *
+ * @param issuer                 the "iss" of the tokens, for the applications of the realm owner. Their OpenID
+ *                               discovery document is at issuer + /.well-known/openid-configuration
+ * @param consoleUrl             the Keycloak admin console of the realm, where the realm owner logs in with their own
+ *                               account. Null outside of ON_PREM mode
  * @param redirectUris           where Keycloak may send the user back after login
  * @param postLogoutRedirectUris where Keycloak may send the user back after logout
  * @param webOrigins             origins allowed to call Keycloak from a browser (CORS), "+" = the origins of the redirect URIs
@@ -14,6 +18,8 @@ import java.util.List;
  */
 public record LoginClient(
     String clientId,
+    String issuer,
+    String consoleUrl,
     List<String> redirectUris,
     List<String> postLogoutRedirectUris,
     List<String> webOrigins,

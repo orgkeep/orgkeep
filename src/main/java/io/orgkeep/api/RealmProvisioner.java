@@ -24,6 +24,13 @@ public interface RealmProvisioner {
      */
     void ensureDefaults(String name);
 
+    /**
+     * Makes the realm role realm-owner a composite of the client role realm-management/realm-admin: the realm owners
+     * can then manage their realm in the Keycloak admin console, confined to it. For ON_PREM, where the realm owner
+     * runs their own Keycloak; not in SAAS. Idempotent.
+     */
+    void grantConsoleAccess(String name);
+
     void delete(String name);
     boolean exists(String name);
 }

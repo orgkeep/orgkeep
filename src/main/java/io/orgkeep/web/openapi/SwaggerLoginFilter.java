@@ -31,6 +31,8 @@ public class SwaggerLoginFilter implements OASFilter {
         String schemeName = config.getOptionalValue("quarkus.smallrye-openapi.security-scheme-name", String.class)
                 .orElse("SecurityScheme");
         String authServerUrl = config.getOptionalValue("orgkeep.swagger-ui.auth-server-url", String.class)
+                .or(() -> config.getOptionalValue("orgkeep.keycloak-public-url", String.class)
+                        .map(publicUrl -> publicUrl + "/realms/" + config.getValue("orgkeep.realm-name", String.class)))
                 .orElseGet(() -> config.getValue("quarkus.oidc.auth-server-url", String.class));
         String tokenUrl = authServerUrl + "/protocol/openid-connect/token";
 

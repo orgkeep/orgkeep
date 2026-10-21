@@ -23,12 +23,13 @@ public interface LoginClientMapper {
     String POST_LOGOUT_REDIRECT_URIS = "post.logout.redirect.uris";
     String SEPARATOR = "##";
 
-    // two sources: the client fills every property but defaultCatalogs, read from its client scopes
+    // several sources: the client fills the properties read from Keycloak, the parameters the other ones
+    // (MapStruct matches a parameter to the property of the same name)
     @Mapping(target = "clientId", source = "client.clientId")
     @Mapping(target = "redirectUris", source = "client.redirectUris")
     @Mapping(target = "webOrigins", source = "client.webOrigins")
     @Mapping(target = "postLogoutRedirectUris", source = "client.attributes", qualifiedByName = "postLogoutRedirectUris")
-    LoginClient toLoginClient(ClientRepresentation client, List<String> defaultCatalogs);
+    LoginClient toLoginClient(ClientRepresentation client, String issuer, String consoleUrl, List<String> defaultCatalogs);
 
     /**
      * Applies the request onto the client read from Keycloak: every other setting of the client is kept,

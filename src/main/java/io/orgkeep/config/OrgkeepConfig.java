@@ -13,6 +13,12 @@ public interface OrgkeepConfig {
 
     Optional<String> realmName();
 
+    /**
+     * Keycloak as the browsers see it (e.g. https://login.example.com), shown to the realm owner: issuer of the
+     * tokens, admin console. Defaults to the base of quarkus.oidc.auth-server-url, an internal URL in Docker.
+     */
+    Optional<String> keycloakPublicUrl();
+
     Owner owner();
 
     Demo demo();
@@ -85,8 +91,9 @@ public interface OrgkeepConfig {
         boolean login();
 
         /**
-         * Realm URL as seen by the browser, for the token URL of the login. Defaults to quarkus.oidc.auth-server-url,
-         * which is fine in dev but is an internal URL in Docker (http://keycloak:8080/...).
+         * Realm URL as seen by the browser, for the token URL of the login. Defaults to the realm under
+         * orgkeep.keycloak-public-url, else to quarkus.oidc.auth-server-url, which is fine in dev but is an internal
+         * URL in Docker (http://keycloak:8080/...).
          */
         Optional<String> authServerUrl();
     }

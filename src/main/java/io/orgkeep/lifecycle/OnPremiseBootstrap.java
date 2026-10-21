@@ -43,6 +43,8 @@ public class OnPremiseBootstrap {
             realmService.create(request);
             log.info("Realm '{}' created for owner {}", realmName, ownerEmail);
         }
+        // at each startup: also repairs a realm created by an older version
+        realmService.grantConsoleAccess(realmName);
 
         // the configuration wins at each startup, a change made in the Keycloak console is overwritten
         config.smtp().ifPresent(smtp -> realmService.configureSmtp(realmName, toSmtpSettings(smtp)));

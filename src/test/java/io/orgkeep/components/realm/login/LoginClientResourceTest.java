@@ -12,6 +12,7 @@ import io.quarkus.test.security.TestSecurity;
 import io.restassured.http.ContentType;
 import io.restassured.response.Response;
 import jakarta.inject.Inject;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -46,6 +47,9 @@ class LoginClientResourceTest {
     @Inject CatalogService catalogService;
     @InjectMock CurrentRealm currentRealm;
 
+    @ConfigProperty(name = "quarkus.keycloak.admin-client.server-url")
+    String keycloakUrl;
+
     private TestRealm testRealm;
 
     @BeforeEach
@@ -74,6 +78,9 @@ class LoginClientResourceTest {
         given().when().get(BASE)
                 .then().statusCode(200)
                 .body("clientId", equalTo(testRealm.name()))
+                // no orgkeep.keycloak-public-url in test: the Keycloak of Dev Services, under the realm of the call
+                .body("issuer", equalTo(keycloakUrl + "/realms/" + testRealm.name()))
+                .body("consoleUrl", equalTo(keycloakUrl + "/admin/" + testRealm.name() + "/console/"))
                 .body("redirectUris", empty())
                 .body("postLogoutRedirectUris", empty());
     }

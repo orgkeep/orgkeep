@@ -12,6 +12,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class LoginClientMapperTest {
+    private static final String ISSUER = "https://login.example.com/realms/demo";
+    private static final String CONSOLE = "https://login.example.com/admin/demo/console/";
+
     LoginClientMapper mapper = new LoginClientMapperImpl();
 
     @Test
@@ -41,9 +44,9 @@ public class LoginClientMapperTest {
         client.setWebOrigins(List.of("+"));
         client.setAttributes(Map.of("post.logout.redirect.uris", "https://app.example.com/##https://app.example.com/bye"));
 
-        assertEquals(new LoginClient("demo", List.of("https://app.example.com/*"),
+        assertEquals(new LoginClient("demo", ISSUER, CONSOLE, List.of("https://app.example.com/*"),
                         List.of("https://app.example.com/", "https://app.example.com/bye"), List.of("+"), List.of("products")),
-                mapper.toLoginClient(client, List.of("products")));
+                mapper.toLoginClient(client, ISSUER, CONSOLE, List.of("products")));
     }
 
     // a client never configured has no attribute at all
@@ -52,6 +55,6 @@ public class LoginClientMapperTest {
         ClientRepresentation client = new ClientRepresentation();
         client.setClientId("demo");
 
-        assertEquals(List.of(), mapper.toLoginClient(client, List.of()).postLogoutRedirectUris());
+        assertEquals(List.of(), mapper.toLoginClient(client, ISSUER, null, List.of()).postLogoutRedirectUris());
     }
 }

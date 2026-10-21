@@ -5,8 +5,11 @@ import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 import lombok.RequiredArgsConstructor;
 import org.keycloak.admin.client.Keycloak;
+import org.keycloak.admin.client.resource.RealmResource;
 import org.keycloak.representations.idm.RealmRepresentation;
+import org.keycloak.representations.idm.RoleRepresentation;
 
+import java.util.List;
 import java.util.Map;
 
 @ApplicationScoped
@@ -47,6 +50,20 @@ public class KeycloakRealms {
     /** The composite realm role every user of the realm gets ("default-roles-{realm}"). */
     public String defaultRoleName(String realm) {
         return keycloak.realm(realm).toRepresentation().getDefaultRole().getName();
+    }
+
+    /**
+     * Adds the role clientRole of the client clientId to the composites of the realm role realmRole.
+     * Idempotent: Keycloak ignores a composite already there.
+     */
+    public void addClientRoleToComposite(String realm, String realmRole, String clientId, String clientRole) {
+        RealmResource realmResource = keycloak.realm(realm);
+        String clientUuid = realmResource.clients().findByClientId(clientId).stream()
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("No client '%s' in realm '%s'".formatted(clientId, realm)))
+                .getId();
+        RoleRepresentation role = realmResource.clients().get(clientUuid).roles().get(clientRole).toRepresentation();
+        realmResource.roles().get(realmRole).addComposites(List.of(role));
     }
 
     public void setSmtpServer(String realm, Map<String, String> smtpServer) {

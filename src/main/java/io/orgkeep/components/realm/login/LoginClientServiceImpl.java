@@ -6,6 +6,8 @@ import io.orgkeep.api.exceptions.LoginClientNotFoundException;
 import io.orgkeep.api.model.LoginClient;
 import io.orgkeep.api.model.UpdateLoginClientRequest;
 import io.orgkeep.components.catalog.CatalogSetup;
+import io.orgkeep.config.KeycloakUrls;
+import io.orgkeep.config.OrgkeepConfig;
 import io.orgkeep.repository.keycloak.KeycloakClients;
 import jakarta.enterprise.context.ApplicationScoped;
 import lombok.RequiredArgsConstructor;
@@ -23,11 +25,16 @@ public class LoginClientServiceImpl implements LoginClientService {
     private final KeycloakClients clients;
     private final CatalogSetup catalogSetup;
     private final LoginClientMapper loginClientMapper;
+    private final KeycloakUrls keycloakUrls;
+    private final OrgkeepConfig config;
 
     @Override
     public LoginClient get(String realm) {
         String clientUuid = loginClientUuid(realm);
-        return loginClientMapper.toLoginClient(clients.get(realm, clientUuid), defaultCatalogs(realm, clientUuid));
+        // the console is open to the realm owner in ON_PREM only (realm-owner includes realm-management/realm-admin)
+        String consoleUrl = config.mode() == OrgkeepConfig.Mode.ON_PREM ? keycloakUrls.console(realm) : null;
+        return loginClientMapper.toLoginClient(clients.get(realm, clientUuid), keycloakUrls.issuer(realm), consoleUrl,
+                defaultCatalogs(realm, clientUuid));
     }
 
     @Override

@@ -95,6 +95,23 @@ class RealmProvisionerTest {
         assertTrue(assigned.containsAll(expected));
     }
 
+    // ON_PREM: the realm owner manages their realm in the Keycloak console, which checks the realm-management roles
+    @Test
+    void grantConsoleAccessMakesRealmOwnerIncludeRealmAdmin() {
+        service.create(new CreateRealmRequest(realmName, "owner@acme.test", "s3cret"));
+
+        service.grantConsoleAccess(realmName);
+        // idempotent: run at each startup
+        service.grantConsoleAccess(realmName);
+
+        String realmManagement = keycloak.realm(realmName).clients().findByClientId("realm-management").get(0).getId();
+        Set<String> composites = keycloak.realm(realmName).roles().get(RealmRole.REALM_OWNER.getRoleName())
+                .getClientRoleComposites(realmManagement).stream()
+                .map(RoleRepresentation::getName)
+                .collect(Collectors.toSet());
+        assertEquals(Set.of("realm-admin"), composites);
+    }
+
     // white label: the users of the orgs log in through a client named after the realm, which carries the quota claims
     @Test
     void createsLoginClientWithProductsScope() {

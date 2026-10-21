@@ -32,6 +32,11 @@ import java.util.Optional;
 @ApplicationScoped
 @RequiredArgsConstructor
 public class RealmProvisionerImpl implements RealmProvisioner {
+    /** Client created by Keycloak in every realm, holding the roles of the admin console and API. */
+    private static final String REALM_MANAGEMENT = "realm-management";
+    /** Composite of all the roles of realm-management: full administration of the realm, and of this realm only. */
+    private static final String REALM_ADMIN = "realm-admin";
+
     private final KeycloakRealms realms;
     private final KeycloakUsers users;
     private final KeycloakClients clients;
@@ -114,6 +119,14 @@ public class RealmProvisionerImpl implements RealmProvisioner {
             clients.update(realm, loginClientUuid, client);
             log.info("Login client of realm '{}' restricted to the roles of its scope (fullScopeAllowed=false)", realm);
         }
+    }
+
+    @Override
+    public void grantConsoleAccess(String name) {
+        // a realm role named realm-admin would not do: the console checks the roles of the realm-management client
+        realms.addClientRoleToComposite(name, RealmRole.REALM_OWNER.getRoleName(), REALM_MANAGEMENT, REALM_ADMIN);
+        log.info("Role '{}' of realm '{}' includes {}/{}: Keycloak console access",
+                RealmRole.REALM_OWNER.getRoleName(), name, REALM_MANAGEMENT, REALM_ADMIN);
     }
 
     @Override

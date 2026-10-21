@@ -32,6 +32,7 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.nullValue;
 
 /**
  * Products and their assignment through the REST API: security, validation and status codes.
@@ -164,6 +165,38 @@ class ProductsResourceTest {
                 .when().put(PRODUCTS + "/{product}/features/{feature}", CATALOG, "billing", "scan")
                 .then().statusCode(409)
                 .body("message", containsString("billing"));
+    }
+
+    // the JSON of an assignment of a metered product: featureQuotas keyed by feature, no quota of product
+    @Test
+    @TestSecurity(user = "owner", roles = "realm-owner")
+    void assignAMeteredProduct() {
+        given().contentType(ContentType.JSON)
+                .body("{\"name\": \"repo\", \"displayName\": \"Repository\", "
+                        + "\"features\": [{\"name\": \"read\"}, {\"name\": \"scan\", \"metered\": true}]}")
+                .when().post(PRODUCTS, CATALOG)
+                .then().statusCode(201)
+                .body("metered", equalTo(true));
+
+        given().contentType(ContentType.JSON)
+                .body("{\"boughtFeatures\": [\"read\", \"scan\"], "
+                        + "\"featureQuotas\": {\"scan\": {\"quota\": 200, \"cycle\": \"DAILY\"}}}")
+                .when().put(ASSIGNMENT, ORG, CATALOG, "repo")
+                .then().statusCode(200)
+                .body("quota", nullValue())
+                .body("featureQuotas.scan.quota", equalTo(200))
+                .body("featureQuotas.scan.cycle", equalTo("DAILY"));
+
+        // Bean Validation on the quotas of the features; then the rules of the service
+        given().contentType(ContentType.JSON)
+                .body("{\"boughtFeatures\": [\"scan\"], \"featureQuotas\": {\"scan\": {\"quota\": 0, \"cycle\": \"DAILY\"}}}")
+                .when().put(ASSIGNMENT, ORG, CATALOG, "repo")
+                .then().statusCode(400);
+        given().contentType(ContentType.JSON)
+                .body("{\"boughtFeatures\": [\"scan\"]}")
+                .when().put(ASSIGNMENT, ORG, CATALOG, "repo")
+                .then().statusCode(400)
+                .body("message", containsString("scan"));
     }
 
     @Test

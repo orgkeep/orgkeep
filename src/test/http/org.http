@@ -187,6 +187,27 @@ Content-Type: application/json
   "params": {"region": "us"}
 }
 
+### Create a metered product: a quota per metered feature, no quota of product
+POST http://localhost:8282/api/admin/catalogs/products-sandbox/products
+Authorization: Bearer {{auth_token}}
+Content-Type: application/json
+
+{
+  "name": "billing",
+  "displayName": "Billing repository",
+  "features": [{"name": "read"}, {"name": "stats"}, {"name": "scan", "metered": true}, {"name": "flow", "metered": true}]
+}
+
+### Assign the metered product: one quota per metered feature bought, no more, no less
+PUT http://localhost:8282/api/admin/organisations/globex/catalogs/products-sandbox/products/billing
+Authorization: Bearer {{auth_token}}
+Content-Type: application/json
+
+{
+  "boughtFeatures": ["read", "stats", "scan", "flow"],
+  "featureQuotas": {"scan": {"quota": 200, "cycle": "DAILY"}, "flow": {"quota": 100, "cycle": "DAILY"}}
+}
+
 ### List the products of an organisation, in every catalog
 GET http://localhost:8282/api/admin/organisations/globex/products
 Authorization: Bearer {{auth_token}}

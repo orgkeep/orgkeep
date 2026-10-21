@@ -31,10 +31,12 @@ public class OrgCatalogsResource {
     // PUT rather than POST: assigning again replaces what the org negotiated
     @PUT
     @Operation(summary = "Assign a product",
-            description = "Assigns the product to the organisation with its quota, cycle, bought roles and parameters, "
-                    + "or replaces them if the product is already assigned.")
+            description = "Assigns the product to the organisation with the features it bought, its quotas and parameters, "
+                    + "or replaces them if the product is already assigned. A simple product takes a quota and its cycle; "
+                    + "a product with metered features takes no quota of product but one quota per metered feature bought "
+                    + "(featureQuotas), and at least one feature bought.")
     @APIResponseSchema(value = OrgProduct.class, responseCode = "200", responseDescription = "Product assigned")
-    @APIResponse(responseCode = "400", description = "Invalid request, unknown bought role, or parameters that do not fit the schema")
+    @APIResponse(responseCode = "400", description = "Invalid request, unknown bought feature, quotas that do not fit the kind of the product, or parameters that do not fit the schema")
     @APIResponse(responseCode = "404", description = "Unknown organisation, catalog or product")
     public OrgProduct assign(@PathParam("org") String org, @PathParam("catalog") String catalog,
                              @PathParam("product") String product, @Valid @NotNull AssignProductRequest request){

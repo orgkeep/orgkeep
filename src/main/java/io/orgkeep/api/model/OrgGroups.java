@@ -22,9 +22,11 @@ public final class OrgGroups {
     public static final String ADMIN = "admin";
     public static final String USERS = "users";
 
-    /** Attributes of an assignment group: the quota of the org and its cycle (see {@link QuotaCycle}). */
+    /** Attributes of an assignment group of a simple product: the quota of the org and its cycle (see {@link QuotaCycle}). */
     public static final String QUOTA_ATTRIBUTE = "quota";
     public static final String QUOTA_CYCLE_ATTRIBUTE = "quota-cycle";
+    private static final String FEATURE_QUOTA_PREFIX = QUOTA_ATTRIBUTE + ".";
+    private static final String FEATURE_QUOTA_CYCLE_PREFIX = QUOTA_CYCLE_ATTRIBUTE + ".";
     /** Multivalued attribute of an assignment group: the features of the product the org bought, without the prefix. */
     public static final String BOUGHT_FEATURES_ATTRIBUTE = "bought-features";
     private static final String PARAM_PREFIX = "param.";
@@ -62,6 +64,21 @@ public final class OrgGroups {
             return null;
         }
         return segments[1];
+    }
+
+    /** Attribute of an assignment group of a metered product: the quota of the org for a metered feature, e.g. "quota.scan". */
+    public static String featureQuotaAttribute(String feature) {
+        return FEATURE_QUOTA_PREFIX + feature;
+    }
+
+    /** Its cycle, e.g. "quota-cycle.scan". */
+    public static String featureQuotaCycleAttribute(String feature) {
+        return FEATURE_QUOTA_CYCLE_PREFIX + feature;
+    }
+
+    /** The feature of a {@link #featureQuotaAttribute} ("quota.scan" gives "scan"), null for another attribute. */
+    public static String featureOfQuota(String attribute) {
+        return attribute.startsWith(FEATURE_QUOTA_PREFIX) ? attribute.substring(FEATURE_QUOTA_PREFIX.length()) : null;
     }
 
     /** Attribute of an assignment group holding the value of a parameter of the product, e.g. "param.region". */

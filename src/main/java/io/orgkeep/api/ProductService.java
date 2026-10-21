@@ -66,10 +66,13 @@ public interface ProductService {
 
     /**
      * Assigns the product to the org with what it negotiated. Idempotent: assigning it again replaces these values.
+     * A simple product takes a quota of product; a metered product a quota per metered feature bought, and at least
+     * one feature bought.
      *
      * @throws io.orgkeep.api.exceptions.OrgNotFoundException if no organisation has this name
      * @throws io.orgkeep.api.exceptions.InvalidRequestException if a bought feature is not a feature of the product,
-     *                                                             or the parameters do not fit its schema
+     *                                                             the quotas do not fit its kind, or the parameters do
+     *                                                             not fit its schema
      */
     OrgProduct assign(String realm, String orgName, String catalog, String product, AssignProductRequest request);
 

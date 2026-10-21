@@ -3,6 +3,7 @@ package io.orgkeep.components.catalog.product;
 import io.orgkeep.api.model.AssignProductRequest;
 import io.orgkeep.api.model.CatalogRoles;
 import io.orgkeep.api.model.Feature;
+import io.orgkeep.api.model.FeatureQuota;
 import io.orgkeep.api.model.OrgGroups;
 import io.orgkeep.api.model.OrgProduct;
 import io.orgkeep.api.model.ParamDefinition;
@@ -175,8 +176,15 @@ public interface ProductMapper {
      */
     default Map<String, List<String>> toAssignmentAttributes(AssignProductRequest request, Map<String, String> params) {
         Map<String, List<String>> attributes = new HashMap<>();
-        attributes.put(OrgGroups.QUOTA_ATTRIBUTE, List.of(request.quota().toString()));
-        attributes.put(OrgGroups.QUOTA_CYCLE_ATTRIBUTE, List.of(request.cycle().getValue()));
+        // checked by the service: a simple product has a quota, a metered one a quota per metered feature bought
+        if (request.quota() != null && request.cycle() != null) {
+            attributes.put(OrgGroups.QUOTA_ATTRIBUTE, List.of(request.quota().toString()));
+            attributes.put(OrgGroups.QUOTA_CYCLE_ATTRIBUTE, List.of(request.cycle().getValue()));
+        }
+        request.featureQuotas().forEach((feature, quota) -> {
+            attributes.put(OrgGroups.featureQuotaAttribute(feature), List.of(quota.quota().toString()));
+            attributes.put(OrgGroups.featureQuotaCycleAttribute(feature), List.of(quota.cycle().getValue()));
+        });
         if (!request.boughtFeatures().isEmpty()) {
             attributes.put(OrgGroups.BOUGHT_FEATURES_ATTRIBUTE, request.boughtFeatures().stream().distinct().sorted().toList());
         }
@@ -187,12 +195,32 @@ public interface ProductMapper {
     /** The group name is the product, the name of its parent the catalog. */
     default OrgProduct toOrgProduct(String catalog, GroupRepresentation group) {
         Map<String, List<String>> attributes = group.getAttributes() == null ? Map.of() : group.getAttributes();
-        String cycle = firstValue(attributes, OrgGroups.QUOTA_CYCLE_ATTRIBUTE);
         return new OrgProduct(catalog, group.getName(), group.getId(),
                 parseQuota(firstValue(attributes, OrgGroups.QUOTA_ATTRIBUTE)),
-                cycle == null ? null : QuotaCycle.fromValue(cycle).orElse(null),
+                parseCycle(firstValue(attributes, OrgGroups.QUOTA_CYCLE_ATTRIBUTE)),
                 attributes.getOrDefault(OrgGroups.BOUGHT_FEATURES_ATTRIBUTE, List.of()).stream().sorted().toList(),
+                featureQuotas(attributes),
                 paramValues(attributes));
+    }
+
+    /**
+     * The quotas of the metered features stored on an assignment group, sorted by feature. A quota whose value or cycle
+     * is missing or unreadable (changed outside of Orgkeep) is left out: the feature then has no pool.
+     */
+    default Map<String, FeatureQuota> featureQuotas(Map<String, List<String>> attributes) {
+        Map<String, FeatureQuota> quotas = new TreeMap<>();
+        attributes.keySet().forEach(attribute -> {
+            String feature = OrgGroups.featureOfQuota(attribute);
+            if (feature == null) {
+                return;
+            }
+            Long quota = parseQuota(firstValue(attributes, attribute));
+            QuotaCycle cycle = parseCycle(firstValue(attributes, OrgGroups.featureQuotaCycleAttribute(feature)));
+            if (quota != null && cycle != null) {
+                quotas.put(feature, new FeatureQuota(quota, cycle));
+            }
+        });
+        return quotas;
     }
 
     /** The values of the parameters stored on an assignment group, sorted by name. */
@@ -213,6 +241,10 @@ public interface ProductMapper {
         } catch (NumberFormatException e) {
             return null;
         }
+    }
+
+    private static QuotaCycle parseCycle(String cycle) {
+        return cycle == null ? null : QuotaCycle.fromValue(cycle).orElse(null);
     }
 
     private static String blankToNull(String value) {

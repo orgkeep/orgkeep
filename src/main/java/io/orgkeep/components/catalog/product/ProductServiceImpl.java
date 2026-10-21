@@ -32,6 +32,7 @@ import org.keycloak.representations.idm.ProtocolMapperRepresentation;
 import org.keycloak.representations.idm.RoleRepresentation;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -40,6 +41,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.regex.Pattern;
 
 @Slf4j
@@ -240,14 +243,16 @@ public class ProductServiceImpl implements ProductService {
         CatalogSetup.Ids ids = catalogSetup.get(realm, catalog);
         RoleRepresentation productRole = getProductRole(realm, catalog, ids, product);
 
-        Set<String> features = new HashSet<>();
+        Map<String, Feature> features = new HashMap<>();
         clients.listRoles(realm, ids.clientUuid()).stream()
                 .filter(role -> productMapper.isFeatureOf(role, product))
-                .forEach(role -> features.add(productMapper.toFeature(product, role).name()));
-        List<String> unknown = request.boughtFeatures().stream().filter(feature -> !features.contains(feature)).toList();
+                .map(role -> productMapper.toFeature(product, role))
+                .forEach(feature -> features.put(feature.name(), feature));
+        List<String> unknown = request.boughtFeatures().stream().filter(feature -> !features.containsKey(feature)).toList();
         if (!unknown.isEmpty()) {
             throw new InvalidRequestException("Not features of the product '%s': %s".formatted(product, unknown));
         }
+        checkQuotas(product, features.values(), request);
         List<ParamDefinition> schema = productMapper.params(productRole.getAttributes());
         Map<String, String> params = ParamRules.resolveValues(schema, request.params());
         // the values are copied on the teams as one JSON value, which must fit in a group attribute
@@ -277,7 +282,55 @@ public class ProductServiceImpl implements ProductService {
         // the teams giving the product follow what the org negotiated: quota, bought features, parameters
         teamAlignment.align(realm, orgName, catalog, product);
         return new OrgProduct(catalog, product, groupId, request.quota(), request.cycle(),
-                request.boughtFeatures().stream().distinct().sorted().toList(), params);
+                request.boughtFeatures().stream().distinct().sorted().toList(), new TreeMap<>(request.featureQuotas()), params);
+    }
+
+    /**
+     * The quotas an assignment needs, after the kind of the product: a quota of product for a simple product, a quota
+     * per metered feature bought for a metered one, and nothing else.
+     *
+     * @param features the features of the product
+     * @throws InvalidRequestException naming what is missing or in excess
+     */
+    private static void checkQuotas(String product, Collection<Feature> features, AssignProductRequest request) {
+        boolean metered = features.stream().anyMatch(Feature::metered);
+        if (!metered) {
+            if (request.quota() == null || request.cycle() == null) {
+                throw new InvalidRequestException("Product '%s' needs a quota and its cycle".formatted(product));
+            }
+            if (!request.featureQuotas().isEmpty()) {
+                throw new InvalidRequestException(
+                        "Product '%s' has no metered feature: no quota per feature, only a quota of product".formatted(product));
+            }
+            return;
+        }
+        if (request.quota() != null || request.cycle() != null) {
+            throw new InvalidRequestException(
+                    "Product '%s' has metered features: no quota of product, a quota per metered feature bought".formatted(product));
+        }
+        // without an access role in the tokens, a product without any feature would give nothing
+        if (request.boughtFeatures().isEmpty()) {
+            throw new InvalidRequestException("Product '%s' has metered features: at least one feature must be bought".formatted(product));
+        }
+        Set<String> boughtMetered = new TreeSet<>();
+        features.stream()
+                .filter(feature -> feature.metered() && request.boughtFeatures().contains(feature.name()))
+                .forEach(feature -> boughtMetered.add(feature.name()));
+        List<String> missing = boughtMetered.stream()
+                .filter(feature -> !request.featureQuotas().containsKey(feature))
+                .toList();
+        if (!missing.isEmpty()) {
+            throw new InvalidRequestException(
+                    "Metered features of the product '%s' bought without a quota: %s".formatted(product, missing));
+        }
+        List<String> extra = request.featureQuotas().keySet().stream()
+                .filter(feature -> !boughtMetered.contains(feature))
+                .sorted()
+                .toList();
+        if (!extra.isEmpty()) {
+            throw new InvalidRequestException(
+                    "Quotas for features of the product '%s' that are not metered features bought: %s".formatted(product, extra));
+        }
     }
 
     @Override

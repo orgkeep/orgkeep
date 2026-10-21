@@ -235,6 +235,16 @@ export function useDeleteOrganisation() {
   });
 }
 
+// Disabling also disables the members of the org (they can no longer log in), enabling enables them again
+export function useSetOrgEnabled(org: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (enabled: boolean) => putJson<OrgDetails>(`${orgUrl(org)}/enabled`, { enabled }),
+    // the org (list and detail) and its members, whose status changed
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: [ORGANISATIONS_KEY] }),
+  });
+}
+
 // The URL of the assignment of a product of a catalog to the organisation
 function assignmentUrl(org: string, catalog: string, product: string): string {
   return `${orgUrl(org)}/catalogs/${encodeURIComponent(catalog)}/products/${encodeURIComponent(product)}`;

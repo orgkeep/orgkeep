@@ -115,6 +115,20 @@
       "message": "Its client, its groups and the products assigned to it are deleted. The users are kept, but lose their access to the organisation. This cannot be undone.",
       "confirm": "Delete"
     },
+    "status": {
+      "disable": {
+        "button": "Disable",
+        "title": "Disable the organisation {{org}}?",
+        "message": "Its members are disabled too: they can no longer log in, and their sessions are closed (a token already issued stays valid until it expires, 5 minutes by default). No member can be added while it is disabled. Enabling it again enables the same members.",
+        "confirm": "Disable"
+      },
+      "enable": {
+        "button": "Enable",
+        "title": "Enable the organisation {{org}}?",
+        "message": "The members disabled with the organisation can log in again. A member disabled for another reason stays disabled.",
+        "confirm": "Enable"
+      }
+    },
     "members": {
       "loadError": "Could not load the members",
       "empty": "No member yet.",

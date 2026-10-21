@@ -115,6 +115,20 @@
       "message": "Son client, ses groupes et les produits qui lui sont assignés sont supprimés. Les users sont conservés, mais perdent leur accès à l'organisation. Action irréversible.",
       "confirm": "Supprimer"
     },
+    "status": {
+      "disable": {
+        "button": "Désactiver",
+        "title": "Désactiver l'organisation {{org}} ?",
+        "message": "Ses membres sont désactivés aussi : ils ne peuvent plus se connecter, et leurs sessions sont fermées (un token déjà émis reste valide jusqu'à son expiration, 5 minutes par défaut). Aucun membre ne peut être ajouté tant qu'elle est désactivée. La réactiver réactive les mêmes membres.",
+        "confirm": "Désactiver"
+      },
+      "enable": {
+        "button": "Activer",
+        "title": "Activer l'organisation {{org}} ?",
+        "message": "Les membres désactivés avec l'organisation peuvent se connecter à nouveau. Un membre désactivé pour une autre raison le reste.",
+        "confirm": "Activer"
+      }
+    },
     "members": {
       "loadError": "Impossible de charger les membres",
       "empty": "Aucun membre pour l'instant.",

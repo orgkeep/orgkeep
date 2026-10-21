@@ -8,6 +8,8 @@ interface ConfirmModalProps {
   // what will happen, shown in the body of the modal
   message: ReactNode;
   confirmLabel: string;
+  // red by default: most confirmations are for a destructive action
+  confirmColor?: string;
   // the call runs while the modal stays open: a spinner on the button, and its error below
   pending: boolean;
   error: Error | null;
@@ -22,6 +24,7 @@ export default function ConfirmModal({
   title,
   message,
   confirmLabel,
+  confirmColor = 'red',
   pending,
   error,
   onConfirm,
@@ -42,7 +45,7 @@ export default function ConfirmModal({
           <Button variant="default" onClick={onClose}>
             {t('common.cancel')}
           </Button>
-          <Button color="red" loading={pending} onClick={onConfirm}>
+          <Button color={confirmColor} loading={pending} onClick={onConfirm}>
             {confirmLabel}
           </Button>
         </Group>

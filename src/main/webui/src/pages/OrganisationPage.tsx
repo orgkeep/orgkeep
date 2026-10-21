@@ -26,6 +26,7 @@ import {
   useOrganisation,
   useOrgMembers,
   useOrgProducts,
+  useSetOrgEnabled,
   useUnassignProduct,
 } from '../api/organisations';
 import { type Product, productKey, useProducts } from '../api/products';
@@ -161,9 +162,12 @@ function OrgHeader({ details }: { details: OrgDetails }) {
         </Group>
       </Stack>
 
-      <Button color="red" variant="outline" onClick={openConfirm}>
-        {t('orgDetail.delete.button')}
-      </Button>
+      <Group gap="sm">
+        <StatusButton details={details} />
+        <Button color="red" variant="outline" onClick={openConfirm}>
+          {t('orgDetail.delete.button')}
+        </Button>
+      </Group>
 
       <ConfirmModal
         opened={confirmOpened}
@@ -176,6 +180,39 @@ function OrgHeader({ details }: { details: OrgDetails }) {
         onClose={closeDeleteConfirm}
       />
     </Group>
+  );
+}
+
+// Disable (members can no longer log in) or enable again, both behind a confirmation
+function StatusButton({ details }: { details: OrgDetails }) {
+  const { t } = useTranslation();
+  const setEnabled = useSetOrgEnabled(details.name);
+  const [opened, { open, close }] = useDisclosure();
+  // the action the button offers: the opposite of the current status
+  const action = details.enabled ? 'disable' : 'enable';
+
+  function closeModal() {
+    setEnabled.reset();
+    close();
+  }
+
+  return (
+    <>
+      <Button color={details.enabled ? 'orange' : 'green'} variant="outline" onClick={open}>
+        {t(`orgDetail.status.${action}.button`)}
+      </Button>
+      <ConfirmModal
+        opened={opened}
+        title={t(`orgDetail.status.${action}.title`, { org: details.name })}
+        message={t(`orgDetail.status.${action}.message`)}
+        confirmLabel={t(`orgDetail.status.${action}.confirm`)}
+        confirmColor={details.enabled ? 'orange' : 'green'}
+        pending={setEnabled.isPending}
+        error={setEnabled.error}
+        onConfirm={() => setEnabled.mutate(!details.enabled, { onSuccess: closeModal })}
+        onClose={closeModal}
+      />
+    </>
   );
 }
 

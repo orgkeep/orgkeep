@@ -123,23 +123,35 @@ export interface OrgMember {
 // Values of the QuotaCycle enum of the core
 export type QuotaCycle = 'DAILY' | 'MONTHLY' | 'YEARLY';
 
+// The quota of the org for a metered feature it bought (FeatureQuota in the core)
+export interface FeatureQuota {
+  quota: number;
+  cycle: QuotaCycle;
+}
+
 export interface OrgProduct {
-  // the display name and the roles are in the catalogs (api/products.ts)
+  // the display name and the features are in the catalogs (api/products.ts)
   catalog: string;
   product: string;
-  // null only if the group was changed outside of Orgkeep
+  // simple product: the quota of the org. null for a metered product (or a group changed outside of Orgkeep)
   quota: number | null;
   cycle: QuotaCycle | null;
-  // roles of the product the org bought, sorted
-  boughtRoles: string[];
+  // features of the product the org bought, sorted
+  boughtFeatures: string[];
+  // metered product: the quota of the org for each metered feature bought, by feature name. Empty otherwise
+  featureQuotas: Record<string, FeatureQuota>;
   // values of the parameters, defaults applied by the core
   params: Record<string, string>;
 }
 
+// The quotas depend on the kind of the product, checked by the core (400):
+// - simple product: quota and cycle, featureQuotas empty;
+// - metered product: quota and cycle null, one entry of featureQuotas per metered feature bought.
 export interface AssignProductRequest {
-  quota: number;
-  cycle: QuotaCycle;
-  boughtRoles: string[];
+  quota: number | null;
+  cycle: QuotaCycle | null;
+  boughtFeatures: string[];
+  featureQuotas: Record<string, FeatureQuota>;
   // a parameter left out gets its default in the core
   params: Record<string, string>;
 }

@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deleteRequest, getJson, postJson, putJson, putRequest } from './http';
 import type { QuotaCycle } from './organisations';
-import type { ProductRole } from './products';
 
 // The teams of an organisation, managed by its org admins (UserGroupsResource, TeamProductsResource,
 // TeamCatalogRolesResource, AvailableProductsResource and AvailableCatalogsResource in orgkeep-core).
@@ -12,11 +11,11 @@ import type { ProductRole } from './products';
 export interface TeamProduct {
   catalog: string;
   product: string;
-  // the roles asked for by the org admin. null: every role the org bought, also those it buys later
-  roles: string[] | null;
-  // what the members really get: the roles asked for that the org bought
-  effectiveRoles: string[];
-  // null: no quota of team, the members only use the pool of the org
+  // the features asked for by the org admin. null: every feature the org bought, also those it buys later
+  features: string[] | null;
+  // what the members really get: the features asked for that the org bought
+  effectiveFeatures: string[];
+  // null: no quota of team, the members only use the pool of the org (always null for a metered product)
   quota: number | null;
   cycle: QuotaCycle | null;
 }
@@ -36,17 +35,29 @@ export interface UserGroup {
   catalogRoles: TeamCatalogRole[];
 }
 
+// A feature the org bought, as the org admin sees it
+export interface AvailableFeature {
+  name: string;
+  displayName: string | null;
+  metered: boolean;
+  // metered feature: the quota of the org for it, and its cycle. null otherwise
+  quota: number | null;
+  cycle: QuotaCycle | null;
+}
+
 // A product of the org, as the org admin sees it: the org admin cannot read the catalogs of the realm owner,
 // the display names come with it
 export interface AvailableProduct {
   catalog: string;
   product: string;
   displayName: string | null;
-  // the pool of the org, and its cycle: the default cycle of a quota of team
+  // true: no quota of product, a quota per metered feature, and no quota of team
+  metered: boolean;
+  // simple product: the pool of the org, and its cycle (the default cycle of a quota of team). null if metered
   quota: number | null;
   cycle: QuotaCycle | null;
   // the most a team can give
-  boughtRoles: ProductRole[];
+  boughtFeatures: AvailableFeature[];
 }
 
 // A catalog role the org admins can give through their teams (CatalogRole in the core)
@@ -58,9 +69,9 @@ export interface GrantableRole {
 }
 
 export interface GrantProductRequest {
-  // null: every role the org bought. [] : the product without any role
-  roles: string[] | null;
-  // null: no quota of team
+  // null: every feature the org bought. [] : the product without any feature (refused for a metered product)
+  features: string[] | null;
+  // null: no quota of team (always null for a metered product)
   quota: number | null;
   // null: the cycle of the org
   cycle: QuotaCycle | null;

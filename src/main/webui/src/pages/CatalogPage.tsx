@@ -1,6 +1,7 @@
 import {
   Alert,
   Anchor,
+  Badge,
   Breadcrumbs,
   Button,
   Center,
@@ -157,7 +158,8 @@ function ProductsSection({ catalog }: { catalog: string }) {
               <Table.Tr>
                 <Table.Th>{t('catalogDetail.products.columns.product')}</Table.Th>
                 <Table.Th>{t('catalogDetail.products.columns.description')}</Table.Th>
-                <Table.Th>{t('catalogDetail.products.columns.roles')}</Table.Th>
+                <Table.Th>{t('catalogDetail.products.columns.kind')}</Table.Th>
+                <Table.Th>{t('catalogDetail.products.columns.features')}</Table.Th>
                 <Table.Th>{t('catalogDetail.products.columns.params')}</Table.Th>
                 <Table.Th>{t('catalogDetail.products.columns.organisations')}</Table.Th>
               </Table.Tr>
@@ -175,7 +177,12 @@ function ProductsSection({ catalog }: { catalog: string }) {
                   </Table.Td>
                   <Table.Td c="dimmed">{product.description}</Table.Td>
                   {/* counts, not lists: the lists are on the page of the product. The names are in the tooltip */}
-                  <Table.Td title={product.roles.map((role) => role.name).join(', ')}>{product.roles.length}</Table.Td>
+                  <Table.Td>
+                    <ProductKindBadge metered={product.metered} />
+                  </Table.Td>
+                  <Table.Td title={product.features.map((feature) => feature.name).join(', ')}>
+                    {product.features.length}
+                  </Table.Td>
                   <Table.Td title={product.params.map((param) => param.name).join(', ')}>{product.params.length}</Table.Td>
                   <Table.Td>
                     <OrgCount catalog={catalog} product={product.name} count={product.orgCount} />
@@ -220,13 +227,30 @@ export function OrgCount({ catalog, product, count }: { catalog: string; product
   );
 }
 
+// The kind of a product, derived by the core from its features: simple (a quota of product) or metered (a quota per
+// metered feature). Shared with the page of a product
+export function ProductKindBadge({ metered }: { metered: boolean }) {
+  const { t } = useTranslation();
+  return (
+    // tt="none": the default upper case makes the label too wide for a table column
+    <Badge variant="light" color={metered ? 'grape' : 'gray'} tt="none" style={{ flexShrink: 0 }}>
+      {metered ? t('productDetail.kind.metered') : t('productDetail.kind.simple')}
+    </Badge>
+  );
+}
+
 // What the API of the realm owner receives: makes the link between this screen and the tokens
 function TokenHint({ catalog }: { catalog: string }) {
   const { t } = useTranslation();
-  // the token format of the core (rights in resource_access, quotas and parameters in the claim of the catalog), with an example product
+  // the token format of the core (rights in resource_access, quotas and parameters in the claim of the catalog),
+  // with an example of each kind: billing is simple (access role, a quota of product), shop is metered (no access
+  // role, a quota per metered feature)
   const token = {
-    resource_access: { [catalog]: { roles: ['billing', 'billing:read'] } },
-    [catalog]: { billing: { quotas: [{ pool: 'acme', limit: 1000, cycle: 'monthly' }] } },
+    resource_access: { [catalog]: { roles: ['billing', 'billing:read', 'shop:write', 'shop:scan'] } },
+    [catalog]: {
+      billing: { quotas: [{ pool: 'acme', limit: 1000, cycle: 'monthly' }] },
+      shop: { quotas: [{ feature: 'scan', pool: 'acme', limit: 200, cycle: 'daily' }] },
+    },
   };
 
   return (
@@ -237,6 +261,9 @@ function TokenHint({ catalog }: { catalog: string }) {
           {t('catalogDetail.token.scope')} <Code>scope={catalog}</Code>
         </Text>
         <Code block>{JSON.stringify(token, null, 2)}</Code>
+        <Text size="sm" c="dimmed">
+          {t('catalogDetail.token.kinds')}
+        </Text>
         <Text size="sm" c="dimmed">
           {t('catalogDetail.token.usage')}
         </Text>

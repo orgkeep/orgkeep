@@ -5,10 +5,13 @@ import { getJson } from './http';
 // Mirror the records of io.orgkeep.api.model in orgkeep-core.
 // Written by hand for now: to be replaced by types generated from /q/openapi.
 
-// A role of a product an org can buy, e.g. "scan". In the tokens: "<product>:scan"
-export interface ProductRole {
+// A feature of a product: a permission ("read", "stats") or, if metered, a capacity an org buys with its own quota
+// ("scan"). In the tokens: "<product>:scan"
+export interface Feature {
   name: string;
   displayName: string | null;
+  // set when the feature is created, never changed afterwards
+  metered: boolean;
 }
 
 // Values of the ParamType enum of the core
@@ -32,7 +35,10 @@ export interface Product {
   name: string;
   displayName: string | null;
   description: string | null;
-  roles: ProductRole[];
+  features: Feature[];
+  // derived by the core: true if at least one feature is metered. Then no access role nor quota of product in the
+  // tokens, a quota per metered feature bought
+  metered: boolean;
   params: ParamDefinition[];
   orgCount: number;
 }

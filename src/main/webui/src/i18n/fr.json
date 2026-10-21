@@ -122,7 +122,7 @@
       }
     },
     "products": {
-      "subtitle": "Ce que l'organisation a négocié pour chaque produit : son quota, les rôles achetés, ses paramètres. C'est l'API du produit qui compte l'usage.",
+      "subtitle": "Ce que l'organisation a négocié pour chaque produit : les features achetées, ses quotas, ses paramètres. C'est l'API du produit qui compte l'usage.",
       "assign": "Assigner un produit",
       "loadError": "Impossible de charger les produits",
       "empty": "Aucun produit assigné pour l'instant.",
@@ -130,11 +130,11 @@
       "remove": "Retirer",
       "removeTitle": "Retirer {{product}} ?",
       "removeMessage": "Les membres de l'organisation perdent ce produit.",
+      "quotaValue": "{{quota}} / {{cycle}}",
       "columns": {
         "product": "Produit",
         "quota": "Quota",
-        "cycle": "Cycle",
-        "boughtRoles": "Rôles achetés",
+        "boughtFeatures": "Features achetées",
         "params": "Paramètres"
       }
     },
@@ -148,8 +148,12 @@
       "quota": "Quota",
       "quotaInvalid": "Un nombre entier supérieur à 0",
       "cycle": "Cycle",
-      "boughtRoles": "Rôles achetés",
-      "boughtRolesDescription": "Les rôles du produit achetés par l'organisation : ses teams peuvent les donner, jamais plus.",
+      "boughtFeatures": "Features achetées",
+      "boughtFeaturesDescription": "Les features du produit achetées par l'organisation : ses teams peuvent les donner, jamais plus.",
+      "boughtFeaturesRequired": "Choisissez au moins une feature : un produit mesuré ne donne rien d'autre",
+      "meteredHint": "Un produit à features mesurées n'a pas de quota propre : l'organisation reçoit un quota pour chaque feature mesurée qu'elle achète.",
+      "meteredOption": "{{feature}} (mesurée)",
+      "featureQuota": "Quota de {{feature}}",
       "paramDefault": "Par défaut : {{value}}",
       "true": "Oui",
       "false": "Non",
@@ -195,14 +199,15 @@
     },
     "products": {
       "title": "Produits",
-      "subtitle": "Chaque produit est un accès à une de vos APIs, avec les rôles qu'une organisation peut acheter et les paramètres qu'elle négocie.",
+      "subtitle": "Chaque produit est un accès à une de vos APIs, avec les features qu'une organisation peut acheter et les paramètres qu'elle négocie.",
       "new": "Nouveau produit",
       "loadError": "Impossible de charger les produits",
       "empty": "Aucun produit dans ce catalogue pour l'instant.",
       "columns": {
         "product": "Produit",
         "description": "Description",
-        "roles": "Rôles",
+        "kind": "Quotas",
+        "features": "Features",
         "params": "Paramètres",
         "organisations": "Organisations"
       },
@@ -213,6 +218,7 @@
     "token": {
       "title": "Ce que reçoivent vos APIs dans les tokens",
       "scope": "Une application reçoit ce catalogue par défaut, ou le demande avec",
+      "kinds": "Ici billing est un produit simple (un rôle d'accès, un quota), shop un produit à features mesurées (pas de rôle d'accès, un quota par feature mesurée, chaque entrée dit sa feature).",
       "usage": "Orgkeep ne compte pas l'usage : votre API compare ses propres compteurs aux limites du token."
     }
   },
@@ -225,13 +231,15 @@
     "displayName": "Nom affiché",
     "displayNameRequired": "Le nom affiché est obligatoire",
     "description": "Description",
-    "roles": {
-      "legend": "Rôles (optionnel)",
-      "description": "Les options qu'une organisation achète, ou les permissions que donnent ses teams (ex. read, write). On peut aussi les ajouter plus tard.",
-      "name": "Nom du rôle",
+    "features": {
+      "legend": "Features (optionnel)",
+      "description": "Les permissions qu'une organisation achète et que donnent ses teams (ex. read, write), ou les capacités qu'elle achète avec un quota chacune (mesurées, ex. un moteur). On peut aussi les ajouter plus tard.",
+      "name": "Nom de la feature",
       "displayName": "Nom affiché",
       "displayNamePlaceholder": "Nom affiché (optionnel)",
-      "add": "Ajouter un rôle"
+      "metered": "Mesurée",
+      "meteredHint": "Une feature mesurée s'achète avec son propre quota. Une seule suffit : le produit n'a alors plus de quota propre, seulement un quota par feature mesurée. Ne peut plus changer ensuite.",
+      "add": "Ajouter une feature"
     },
     "params": {
       "legend": "Paramètres (optionnel)",
@@ -259,19 +267,26 @@
     "loadError": "Impossible de charger le produit {{product}}",
     "delete": {
       "title": "Supprimer {{product}} ?",
-      "message": "Ses rôles et ses paramètres sont supprimés avec lui. Cette action est irréversible.",
+      "message": "Ses features et ses paramètres sont supprimés avec lui. Cette action est irréversible.",
       "assigned_one": "Le produit est assigné à {{count}} organisation : retirez-le d'abord de cette organisation.",
       "assigned_other": "Le produit est assigné à {{count}} organisations : retirez-le d'abord de ces organisations."
     },
-    "roles": {
-      "title": "Rôles",
-      "subtitle": "Une organisation en achète une partie, et ses teams les donnent à leurs membres.",
-      "add": "Ajouter un rôle",
-      "addTitle": "Ajouter un rôle",
-      "editTitle": "Rôle {{role}}",
+    "kind": {
+      "simple": "Quota par produit",
+      "metered": "Quota par feature",
+      "simpleHint": "Un quota par organisation pour tout le produit, et un rôle d'accès dans les tokens.",
+      "meteredHint": "Ni quota de produit ni rôle d'accès : un quota par feature mesurée qu'une organisation achète. Cela reste ainsi tant que le produit est assigné à des organisations."
+    },
+    "features": {
+      "title": "Features",
+      "subtitle": "Une organisation en achète une partie, et ses teams les donnent à leurs membres. Une feature mesurée s'achète avec son propre quota.",
+      "add": "Ajouter une feature",
+      "addTitle": "Ajouter une feature",
+      "editTitle": "Feature {{feature}}",
       "nameDescription": "Minuscules, chiffres et tirets. Dans les tokens : {{product}}:<nom>",
-      "empty": "Aucun rôle : le produit est un simple accès.",
-      "removeTitle": "Retirer le rôle {{role}} ?",
+      "meteredFixed": "Choisi à la création de la feature : supprimez-la puis ajoutez-la de nouveau pour le changer.",
+      "empty": "Aucune feature : le produit est un simple accès.",
+      "removeTitle": "Retirer la feature {{feature}} ?",
       "removeMessage": "Les organisations qui l'ont acheté le perdent, et leurs membres ne le reçoivent plus dans leurs tokens.",
       "columns": {
         "name": "Nom",
@@ -286,7 +301,8 @@
     },
     "token": {
       "title": "Dans les tokens",
-      "hint": "Pour un membre d'une organisation qui a acheté tous les rôles, avec un quota d'exemple. Les paramètres montrent leur défaut."
+      "hint": "Pour un membre d'une organisation qui a acheté toutes les features, avec un quota d'exemple. Les paramètres montrent leur défaut.",
+      "meteredHint": "Pour un membre d'une organisation qui a acheté toutes les features, avec des quotas d'exemple : pas de rôle d'accès, un pool de l'organisation par feature mesurée. Votre API clé ses compteurs par catalogue, produit, feature et pool."
     }
   },
   "members": {
@@ -350,12 +366,13 @@
       "give": "Donner un produit",
       "empty": "La team ne donne aucun produit.",
       "noneAssigned": "L'organisation n'a encore aucun produit : c'est le realm owner qui les assigne.",
-      "allRoles": "tous les achetés",
+      "allFeatures": "toutes les achetées",
       "orgPoolOnly": "pool de l'org",
+      "orgPoolPerFeature": "pools de l'org, par feature",
       "quota": "{{quota}} / {{cycle}}",
       "columns": {
         "product": "Produit",
-        "roles": "Rôles",
+        "features": "Features",
         "quota": "Quota de team"
       },
       "removeTitle": "Ne plus donner {{product}} ?",
@@ -373,10 +390,14 @@
       "product": "Produit",
       "productPlaceholder": "Choisir un produit de l'organisation",
       "productRequired": "Choisissez un produit",
-      "allRoles": "Tous les rôles achetés par l'organisation",
-      "allRolesDescription": "Y compris ceux qu'elle achètera plus tard.",
-      "roles": "Rôles donnés",
-      "rolesDescription": "Parmi ceux achetés par l'organisation. Aucun : le produit seul.",
+      "allFeatures": "Toutes les features achetées par l'organisation",
+      "allFeaturesDescription": "Y compris celles qu'elle achètera plus tard.",
+      "features": "Features données",
+      "featuresDescription": "Parmi celles achetées par l'organisation. Aucune : le produit seul.",
+      "featuresDescriptionMetered": "Parmi celles achetées par l'organisation. Au moins une : le produit ne donne rien d'autre.",
+      "featuresRequired": "Choisissez au moins une feature",
+      "meteredOption": "{{feature}} ({{quota}} / {{cycle}})",
+      "meteredHint": "Les membres partagent le quota de l'organisation pour chaque feature mesurée (pool {{pool}} dans les tokens). Pas de quota de team pour ce produit.",
       "quota": "Quota de team",
       "quotaDescription": "Optionnel : un budget partagé par les membres, en plus du pool de l'organisation ({{quota}} / {{cycle}}).",
       "quotaInvalid": "Un entier supérieur à 0, ou vide",

@@ -18,14 +18,14 @@ import {
 import { useDisclosure } from '@mantine/hooks';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router';
-import { useDeleteProduct, useDeleteProductRole, useProduct } from '../api/catalogs';
-import type { Product, ProductRole } from '../api/products';
+import { useDeleteFeature, useDeleteProduct, useProduct } from '../api/catalogs';
+import type { Feature, Product } from '../api/products';
 import ConfirmModal from '../components/ConfirmModal';
-import { OrgCount } from './CatalogPage';
+import { OrgCount, ProductKindBadge } from './CatalogPage';
+import FeatureModal from './FeatureModal';
 import ProductModal from './ProductModal';
-import ProductRoleModal from './ProductRoleModal';
 
-// One product of a catalog (realm owner): its header, its roles, its parameters, and what it gives in the tokens.
+// One product of a catalog (realm owner): its header, its features, its parameters, and what it gives in the tokens.
 export default function ProductPage() {
   const { t } = useTranslation();
   // both parts of the route /catalogs/:catalog/products/:product
@@ -62,7 +62,7 @@ export default function ProductPage() {
       </Breadcrumbs>
 
       <ProductHeader product={product} />
-      <RolesSection product={product} />
+      <FeaturesSection product={product} />
       <ParamsSection product={product} />
       <TokenHint product={product} />
     </Stack>
@@ -93,8 +93,12 @@ function ProductHeader({ product }: { product: Product }) {
           <Code>
             {product.catalog}/{product.name}
           </Code>
+          <ProductKindBadge metered={product.metered} />
         </Group>
         {product.description && <Text c="dimmed">{product.description}</Text>}
+        <Text size="sm" c="dimmed">
+          {product.metered ? t('productDetail.kind.meteredHint') : t('productDetail.kind.simpleHint')}
+        </Text>
         <OrgCount catalog={product.catalog} product={product.name} count={product.orgCount} />
       </Stack>
 
@@ -135,22 +139,22 @@ function ProductHeader({ product }: { product: Product }) {
   );
 }
 
-// The roles of the product: the options an organisation buys, or the permissions it gives to its teams
-function RolesSection({ product }: { product: Product }) {
+// The features of the product: the permissions an organisation buys, and the capacities it buys with a quota each
+function FeaturesSection({ product }: { product: Product }) {
   const { t } = useTranslation();
-  const deleteRole = useDeleteProductRole(product.catalog, product.name);
-  // null = closed, 'new' = "Add a role", a role = "Edit" of this role
-  const [roleTarget, setRoleTarget] = useState<ProductRole | 'new' | null>(null);
-  const [removeTarget, setRemoveTarget] = useState<ProductRole | null>(null);
+  const deleteFeature = useDeleteFeature(product.catalog, product.name);
+  // null = closed, 'new' = "Add a feature", a feature = "Edit" of this feature
+  const [featureTarget, setFeatureTarget] = useState<Feature | 'new' | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<Feature | null>(null);
 
   function closeRemoveConfirm() {
-    deleteRole.reset();
+    deleteFeature.reset();
     setRemoveTarget(null);
   }
 
   function confirmRemove() {
     if (removeTarget) {
-      deleteRole.mutate(removeTarget.name, { onSuccess: closeRemoveConfirm });
+      deleteFeature.mutate(removeTarget.name, { onSuccess: closeRemoveConfirm });
     }
   }
 
@@ -158,44 +162,55 @@ function RolesSection({ product }: { product: Product }) {
     <Stack>
       <Group justify="space-between" align="flex-end">
         <div>
-          <Title order={3}>{t('productDetail.roles.title')}</Title>
-          <Text c="dimmed">{t('productDetail.roles.subtitle')}</Text>
+          <Title order={3}>{t('productDetail.features.title')}</Title>
+          <Text c="dimmed">{t('productDetail.features.subtitle')}</Text>
         </div>
-        <Button variant="light" onClick={() => setRoleTarget('new')}>
-          {t('productDetail.roles.add')}
+        <Button variant="light" onClick={() => setFeatureTarget('new')}>
+          {t('productDetail.features.add')}
         </Button>
       </Group>
 
-      {product.roles.length === 0 ? (
-        <Text c="dimmed">{t('productDetail.roles.empty')}</Text>
+      {product.features.length === 0 ? (
+        <Text c="dimmed">{t('productDetail.features.empty')}</Text>
       ) : (
         <Table.ScrollContainer minWidth={560}>
           <Table withTableBorder>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>{t('productDetail.roles.columns.name')}</Table.Th>
-                <Table.Th>{t('productDetail.roles.columns.displayName')}</Table.Th>
-                <Table.Th>{t('productDetail.roles.columns.inToken')}</Table.Th>
+                <Table.Th>{t('productDetail.features.columns.name')}</Table.Th>
+                <Table.Th>{t('productDetail.features.columns.displayName')}</Table.Th>
+                <Table.Th>{t('productDetail.features.columns.inToken')}</Table.Th>
                 <Table.Th />
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {product.roles.map((role) => (
-                <Table.Tr key={role.name}>
-                  <Table.Td ff="monospace">{role.name}</Table.Td>
-                  <Table.Td>{role.displayName}</Table.Td>
-                  {/* a product role is prefixed by its product in the tokens */}
+              {product.features.map((feature) => (
+                <Table.Tr key={feature.name}>
+                  <Table.Td>
+                    <Group gap="xs" wrap="nowrap">
+                      <Text ff="monospace" size="sm">
+                        {feature.name}
+                      </Text>
+                      {feature.metered && (
+                        <Badge variant="light" color="grape" size="sm">
+                          {t('productForm.features.metered')}
+                        </Badge>
+                      )}
+                    </Group>
+                  </Table.Td>
+                  <Table.Td>{feature.displayName}</Table.Td>
+                  {/* a feature is prefixed by its product in the tokens */}
                   <Table.Td>
                     <Code>
-                      {product.name}:{role.name}
+                      {product.name}:{feature.name}
                     </Code>
                   </Table.Td>
                   <Table.Td>
                     <Group gap="xs" justify="flex-end" wrap="nowrap">
-                      <Button variant="subtle" size="xs" onClick={() => setRoleTarget(role)}>
+                      <Button variant="subtle" size="xs" onClick={() => setFeatureTarget(feature)}>
                         {t('common.edit')}
                       </Button>
-                      <Button variant="subtle" size="xs" color="red" onClick={() => setRemoveTarget(role)}>
+                      <Button variant="subtle" size="xs" color="red" onClick={() => setRemoveTarget(feature)}>
                         {t('common.remove')}
                       </Button>
                     </Group>
@@ -207,22 +222,24 @@ function RolesSection({ product }: { product: Product }) {
         </Table.ScrollContainer>
       )}
 
-      <ProductRoleModal
-        key={roleTarget === 'new' || roleTarget === null ? 'new' : roleTarget.name}
+      <FeatureModal
+        key={featureTarget === 'new' || featureTarget === null ? 'new' : featureTarget.name}
         catalog={product.catalog}
         product={product.name}
-        opened={roleTarget !== null}
-        onClose={() => setRoleTarget(null)}
-        current={roleTarget === 'new' ? null : roleTarget}
+        opened={featureTarget !== null}
+        onClose={() => setFeatureTarget(null)}
+        current={featureTarget === 'new' ? null : featureTarget}
       />
 
+      {/* the core refuses a metered feature bought by an organisation, or the last one of an assigned product:
+          its message is shown in the modal */}
       <ConfirmModal
         opened={removeTarget !== null}
-        title={t('productDetail.roles.removeTitle', { role: removeTarget?.name ?? '' })}
-        message={t('productDetail.roles.removeMessage')}
+        title={t('productDetail.features.removeTitle', { feature: removeTarget?.name ?? '' })}
+        message={t('productDetail.features.removeMessage')}
         confirmLabel={t('common.remove')}
-        pending={deleteRole.isPending}
-        error={deleteRole.error}
+        pending={deleteFeature.isPending}
+        error={deleteFeature.error}
         onConfirm={confirmRemove}
         onClose={closeRemoveConfirm}
       />
@@ -285,10 +302,18 @@ function ParamsSection({ product }: { product: Product }) {
 // What a user receives in the token once a team of their organisation gives the product, with the real names
 function TokenHint({ product }: { product: Product }) {
   const { t } = useTranslation();
-  const roles = [product.name, ...product.roles.map((role) => `${product.name}:${role.name}`)];
+  const features = product.features.map((feature) => `${product.name}:${feature.name}`);
+  // a metered product has no access role: the API checks the feature a call needs
+  const roles = product.metered ? features : [product.name, ...features];
+  // a simple product has one pool of the org; a metered product one per metered feature, which says its feature
+  const quotas = product.metered
+    ? product.features
+        .filter((feature) => feature.metered)
+        .map((feature) => ({ feature: feature.name, pool: 'acme', limit: 200, cycle: 'daily' }))
+    : [{ pool: 'acme', limit: 1000, cycle: 'monthly' }];
   // the defaults stand for the values an organisation negotiates
   const params = Object.fromEntries(product.params.map((param) => [param.name, param.defaultValue ?? '...']));
-  const claim: Record<string, unknown> = { quotas: [{ pool: 'acme', limit: 1000, cycle: 'monthly' }] };
+  const claim: Record<string, unknown> = { quotas };
   if (product.params.length > 0) {
     claim.params = params;
   }
@@ -305,7 +330,7 @@ function TokenHint({ product }: { product: Product }) {
         {/* null, 2: indented by 2 spaces, like a pretty printer */}
         <Code block>{JSON.stringify(token, null, 2)}</Code>
         <Text size="sm" c="dimmed">
-          {t('productDetail.token.hint')}
+          {product.metered ? t('productDetail.token.meteredHint') : t('productDetail.token.hint')}
         </Text>
       </Stack>
     </Paper>

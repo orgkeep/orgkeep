@@ -32,10 +32,12 @@ interface ProductModalProps {
 
 // A row of a list of the form. "key" is only for React (key={...} of the row), never sent to the backend:
 // the index would not do, it shifts when a row in the middle is removed.
-interface RoleRow {
+interface FeatureRow {
   key: string;
   name: string;
   displayName: string;
+  // bought with its own quota: cannot change once the feature exists
+  metered: boolean;
 }
 
 interface ParamRow {
@@ -53,8 +55,8 @@ interface FormValues {
   name: string;
   displayName: string;
   description: string;
-  // only when creating: the roles of an existing product are changed one by one, on its page
-  roles: RoleRow[];
+  // only when creating: the features of an existing product are changed one by one, on its page
+  features: FeatureRow[];
   params: ParamRow[];
 }
 
@@ -79,7 +81,7 @@ function toParamDefinition(row: ParamRow): ParamDefinition {
   };
 }
 
-// Creates a product with its roles and its parameter schema, or edits a product.
+// Creates a product with its features and its parameter schema, or edits a product.
 export default function ProductModal({ catalog, opened, onClose, current, onSaved }: ProductModalProps) {
   const { t } = useTranslation();
   const createProduct = useCreateProduct(catalog);
@@ -92,14 +94,14 @@ export default function ProductModal({ catalog, opened, onClose, current, onSave
       name: current?.name ?? '',
       displayName: current?.displayName ?? '',
       description: current?.description ?? '',
-      roles: [],
+      features: [],
       params: current?.params.map(toParamRow) ?? [],
     },
-    // Rules of a list: one rule per field, applied to every row (roles.0.name, roles.1.name...)
+    // Rules of a list: one rule per field, applied to every row (features.0.name, features.1.name...)
     validate: {
       name: (value) => (current || isSlug(value) ? null : t('productForm.nameInvalid')),
       displayName: (value) => (value.trim() !== '' ? null : t('productForm.displayNameRequired')),
-      roles: {
+      features: {
         name: (value) => (isSlug(value) ? null : t('productForm.nameInvalid')),
       },
       params: {
@@ -131,8 +133,12 @@ export default function ProductModal({ catalog, opened, onClose, current, onSave
     if (current) {
       updateProduct.mutate({ displayName, description, params }, { onSuccess: saved });
     } else {
-      const roles = values.roles.map((row) => ({ name: row.name.trim(), displayName: emptyToNull(row.displayName) }));
-      createProduct.mutate({ name: values.name.trim(), displayName, description, roles, params }, { onSuccess: saved });
+      const features = values.features.map((row) => ({
+        name: row.name.trim(),
+        displayName: emptyToNull(row.displayName),
+        metered: row.metered,
+      }));
+      createProduct.mutate({ name: values.name.trim(), displayName, description, features, params }, { onSuccess: saved });
     }
   });
 
@@ -170,7 +176,7 @@ export default function ProductModal({ catalog, opened, onClose, current, onSave
           </SimpleGrid>
           <Textarea label={t('productForm.description')} autosize minRows={2} {...form.getInputProps('description')} />
 
-          {!current && <RolesFieldset form={form} />}
+          {!current && <FeaturesFieldset form={form} />}
           <ParamsFieldset form={form} />
 
           {mutation.error && (
@@ -197,32 +203,37 @@ export default function ProductModal({ catalog, opened, onClose, current, onSave
 // bean shared by several fragments of a page.
 type ProductForm = UseFormReturnType<FormValues>;
 
-// The roles of a new product: one row per role, added and removed freely
-function RolesFieldset({ form }: { form: ProductForm }) {
+// The features of a new product: one row per feature, added and removed freely.
+// One metered feature makes the product metered: a quota per metered feature instead of a quota of product.
+function FeaturesFieldset({ form }: { form: ProductForm }) {
   const { t } = useTranslation();
 
   return (
-    <Fieldset legend={t('productForm.roles.legend')}>
+    <Fieldset legend={t('productForm.features.legend')}>
       <Stack gap="sm">
         <Text size="xs" c="dimmed">
-          {t('productForm.roles.description')}
+          {t('productForm.features.description')}
         </Text>
-        {form.values.roles.map((role, index) => (
-          <Group key={role.key} align="flex-start" wrap="nowrap">
+        {form.values.features.map((feature, index) => (
+          <Group key={feature.key} align="center" wrap="nowrap">
             <TextInput
-              aria-label={t('productForm.roles.name')}
+              aria-label={t('productForm.features.name')}
               placeholder="read"
               styles={{ input: { fontFamily: 'monospace' } }}
               style={{ flex: 1 }}
-              {...form.getInputProps(`roles.${index}.name`)}
+              {...form.getInputProps(`features.${index}.name`)}
             />
             <TextInput
-              aria-label={t('productForm.roles.displayName')}
-              placeholder={t('productForm.roles.displayNamePlaceholder')}
+              aria-label={t('productForm.features.displayName')}
+              placeholder={t('productForm.features.displayNamePlaceholder')}
               style={{ flex: 1 }}
-              {...form.getInputProps(`roles.${index}.displayName`)}
+              {...form.getInputProps(`features.${index}.displayName`)}
             />
-            <Button variant="subtle" color="red" onClick={() => form.removeListItem('roles', index)}>
+            <Checkbox
+              label={t('productForm.features.metered')}
+              {...form.getInputProps(`features.${index}.metered`, { type: 'checkbox' })}
+            />
+            <Button variant="subtle" color="red" onClick={() => form.removeListItem('features', index)}>
               {t('common.remove')}
             </Button>
           </Group>
@@ -231,11 +242,16 @@ function RolesFieldset({ form }: { form: ProductForm }) {
           <Button
             variant="light"
             size="xs"
-            onClick={() => form.insertListItem('roles', { key: randomId(), name: '', displayName: '' })}
+            onClick={() =>
+              form.insertListItem('features', { key: randomId(), name: '', displayName: '', metered: false })
+            }
           >
-            {t('productForm.roles.add')}
+            {t('productForm.features.add')}
           </Button>
         </Group>
+        <Text size="xs" c="dimmed">
+          {t('productForm.features.meteredHint')}
+        </Text>
       </Stack>
     </Fieldset>
   );

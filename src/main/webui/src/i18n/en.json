@@ -122,7 +122,7 @@
       }
     },
     "products": {
-      "subtitle": "What the organisation negotiated for each product: its quota, the roles it bought, its parameters. The API of the product counts the usage.",
+      "subtitle": "What the organisation negotiated for each product: the features it bought, its quotas, its parameters. The API of the product counts the usage.",
       "assign": "Assign a product",
       "loadError": "Could not load the products",
       "empty": "No product assigned yet.",
@@ -130,11 +130,11 @@
       "remove": "Remove",
       "removeTitle": "Remove {{product}}?",
       "removeMessage": "The members of the organisation lose this product.",
+      "quotaValue": "{{quota}} / {{cycle}}",
       "columns": {
         "product": "Product",
         "quota": "Quota",
-        "cycle": "Cycle",
-        "boughtRoles": "Bought roles",
+        "boughtFeatures": "Bought features",
         "params": "Parameters"
       }
     },
@@ -148,8 +148,12 @@
       "quota": "Quota",
       "quotaInvalid": "A whole number greater than 0",
       "cycle": "Cycle",
-      "boughtRoles": "Bought roles",
-      "boughtRolesDescription": "The roles of the product the organisation bought: its teams can give these, never more.",
+      "boughtFeatures": "Bought features",
+      "boughtFeaturesDescription": "The features of the product the organisation bought: its teams can give these, never more.",
+      "boughtFeaturesRequired": "Choose at least one feature: a metered product gives nothing else",
+      "meteredHint": "A product with metered features has no quota of its own: the organisation gets a quota for each metered feature it buys.",
+      "meteredOption": "{{feature}} (metered)",
+      "featureQuota": "Quota of {{feature}}",
       "paramDefault": "Default: {{value}}",
       "true": "Yes",
       "false": "No",
@@ -195,14 +199,15 @@
     },
     "products": {
       "title": "Products",
-      "subtitle": "Each product is an access to one of your APIs, with the roles an organisation can buy and the parameters it negotiates.",
+      "subtitle": "Each product is an access to one of your APIs, with the features an organisation can buy and the parameters it negotiates.",
       "new": "New product",
       "loadError": "Could not load the products",
       "empty": "No product yet in this catalog.",
       "columns": {
         "product": "Product",
         "description": "Description",
-        "roles": "Roles",
+        "kind": "Quotas",
+        "features": "Features",
         "params": "Parameters",
         "organisations": "Organisations"
       },
@@ -213,6 +218,7 @@
     "token": {
       "title": "What your APIs receive in the tokens",
       "scope": "An application gets this catalog by default, or asks for it with",
+      "kinds": "Here billing is a simple product (an access role, one quota), shop a product with metered features (no access role, one quota per metered feature, each entry says its feature).",
       "usage": "Orgkeep does not count the usage: your API compares its own counters with the limits of the token."
     }
   },
@@ -225,13 +231,15 @@
     "displayName": "Display name",
     "displayNameRequired": "A display name is required",
     "description": "Description",
-    "roles": {
-      "legend": "Roles (optional)",
-      "description": "The options an organisation buys, or the permissions its teams give (e.g. read, write). They can also be added later.",
-      "name": "Role name",
+    "features": {
+      "legend": "Features (optional)",
+      "description": "The permissions an organisation buys and its teams give (e.g. read, write), or the capacities it buys with a quota each (metered, e.g. an engine). They can also be added later.",
+      "name": "Feature name",
       "displayName": "Display name",
       "displayNamePlaceholder": "Display name (optional)",
-      "add": "Add a role"
+      "metered": "Metered",
+      "meteredHint": "A metered feature is bought with its own quota. One metered feature is enough: the product then has no quota of its own, only a quota per metered feature. Cannot be changed later.",
+      "add": "Add a feature"
     },
     "params": {
       "legend": "Parameters (optional)",
@@ -259,19 +267,26 @@
     "loadError": "Could not load the product {{product}}",
     "delete": {
       "title": "Delete {{product}}?",
-      "message": "Its roles and its parameters are deleted with it. This cannot be undone.",
+      "message": "Its features and its parameters are deleted with it. This cannot be undone.",
       "assigned_one": "The product is assigned to {{count}} organisation: remove it from the organisation first.",
       "assigned_other": "The product is assigned to {{count}} organisations: remove it from these organisations first."
     },
-    "roles": {
-      "title": "Roles",
-      "subtitle": "An organisation buys some of them, and its teams give them to their members.",
-      "add": "Add a role",
-      "addTitle": "Add a role",
-      "editTitle": "Role {{role}}",
+    "kind": {
+      "simple": "Quota per product",
+      "metered": "Quota per feature",
+      "simpleHint": "One quota per organisation for the whole product, and an access role in the tokens.",
+      "meteredHint": "No quota of product nor access role: one quota per metered feature an organisation buys. This stays so while the product is assigned to organisations."
+    },
+    "features": {
+      "title": "Features",
+      "subtitle": "An organisation buys some of them, and its teams give them to their members. A metered feature is bought with its own quota.",
+      "add": "Add a feature",
+      "addTitle": "Add a feature",
+      "editTitle": "Feature {{feature}}",
       "nameDescription": "Lowercase letters, digits and hyphens. In the tokens: {{product}}:<name>",
-      "empty": "No role: the product is a plain access.",
-      "removeTitle": "Remove the role {{role}}?",
+      "meteredFixed": "Chosen when the feature was created: delete it and add it again to change it.",
+      "empty": "No feature: the product is a plain access.",
+      "removeTitle": "Remove the feature {{feature}}?",
       "removeMessage": "The organisations that bought it lose it, and their members no longer get it in their tokens.",
       "columns": {
         "name": "Name",
@@ -286,7 +301,8 @@
     },
     "token": {
       "title": "In the tokens",
-      "hint": "For a member of an organisation that bought every role, with an example quota. The parameters show their defaults."
+      "hint": "For a member of an organisation that bought every feature, with an example quota. The parameters show their defaults.",
+      "meteredHint": "For a member of an organisation that bought every feature, with example quotas: no access role, one pool of the organisation per metered feature. Your API keys its counters by catalog, product, feature and pool."
     }
   },
   "members": {
@@ -350,12 +366,13 @@
       "give": "Give a product",
       "empty": "The team gives no product.",
       "noneAssigned": "The organisation has no product yet: the realm owner assigns them.",
-      "allRoles": "all bought",
+      "allFeatures": "all bought",
       "orgPoolOnly": "pool of the org",
+      "orgPoolPerFeature": "pools of the org, per feature",
       "quota": "{{quota}} / {{cycle}}",
       "columns": {
         "product": "Product",
-        "roles": "Roles",
+        "features": "Features",
         "quota": "Quota of team"
       },
       "removeTitle": "Stop giving {{product}}?",
@@ -373,10 +390,14 @@
       "product": "Product",
       "productPlaceholder": "Choose a product of the organisation",
       "productRequired": "Choose a product",
-      "allRoles": "Every role the organisation bought",
-      "allRolesDescription": "Including those it buys later.",
-      "roles": "Roles given",
-      "rolesDescription": "Among those the organisation bought. None: the product alone.",
+      "allFeatures": "Every feature the organisation bought",
+      "allFeaturesDescription": "Including those it buys later.",
+      "features": "Features given",
+      "featuresDescription": "Among those the organisation bought. None: the product alone.",
+      "featuresDescriptionMetered": "Among those the organisation bought. At least one: the product gives nothing else.",
+      "featuresRequired": "Choose at least one feature",
+      "meteredOption": "{{feature}} ({{quota}} / {{cycle}})",
+      "meteredHint": "The members share the quota of the organisation for each metered feature (pool {{pool}} in the tokens). No quota of team for this product.",
       "quota": "Quota of team",
       "quotaDescription": "Optional: a budget shared by the members, on top of the pool of the organisation ({{quota}} / {{cycle}}).",
       "quotaInvalid": "A whole number greater than 0, or empty",

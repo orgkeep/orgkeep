@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deleteRequest, getJson, postJson, putJson } from './http';
-import type { ParamDefinition, Product, ProductRole } from './products';
+import type { Feature, ParamDefinition, Product } from './products';
 
 // The catalogs endpoints of the API of the core (CatalogsResource and ProductsResource in orgkeep-core),
 // called directly by the front. Mirror the records of io.orgkeep.api.model.
@@ -30,11 +30,11 @@ export interface CreateProductRequest {
   name: string;
   displayName: string;
   description: string | null;
-  roles: ProductRole[];
+  features: Feature[];
   params: ParamDefinition[];
 }
 
-// The name cannot change, the roles are changed one by one (see usePutProductRole)
+// The name cannot change, the features are changed one by one (see usePutFeature)
 export interface UpdateProductRequest {
   displayName: string;
   description: string | null;
@@ -152,25 +152,31 @@ export function useDeleteProduct(catalog: string) {
   });
 }
 
-// ---- Roles of a product ----
+// ---- Features of a product ----
 
-// Creates the role, or changes its display name: the core has a single PUT for both
-export function usePutProductRole(catalog: string, product: string) {
+function featureUrl(catalog: string, product: string, feature: string): string {
+  return `${productUrl(catalog, product)}/features/${encodeURIComponent(feature)}`;
+}
+
+// Creates the feature, or changes its display name: the core has a single PUT for both.
+// metered is only read when the feature is created: the core answers 409 if it differs from an existing feature
+export function usePutFeature(catalog: string, product: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ role, displayName }: { role: string; displayName: string | null }) =>
-      putJson<Product>(`${productUrl(catalog, product)}/roles/${encodeURIComponent(role)}`, { displayName }),
+    mutationFn: ({ feature, displayName, metered }: { feature: string; displayName: string | null; metered: boolean }) =>
+      putJson<Product>(featureUrl(catalog, product, feature), { displayName, metered }),
     onSuccess: () => refreshCatalogs(queryClient),
   });
 }
 
-// The core also removes the role from the bought roles of the organisations
-export function useDeleteProductRole(catalog: string, product: string) {
+// The core also removes the feature from what the organisations bought. A metered feature bought by an
+// organisation is refused (409): it carries a negotiated quota
+export function useDeleteFeature(catalog: string, product: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (role: string) => deleteRequest(`${productUrl(catalog, product)}/roles/${encodeURIComponent(role)}`),
+    mutationFn: (feature: string) => deleteRequest(featureUrl(catalog, product, feature)),
     onSuccess: () => {
-      // the bought roles of the organisations changed too
+      // the bought features of the organisations changed too
       queryClient.invalidateQueries({ queryKey: ['organisations'] });
       return refreshCatalogs(queryClient);
     },

@@ -191,7 +191,7 @@ function MembersSection({ org, team }: SectionProps) {
   );
 }
 
-// The products the team gives, with their roles and quota of team
+// The products the team gives, with their features and quota of team
 function ProductsSection({ org, team }: SectionProps) {
   const { t, i18n } = useTranslation();
   const { data: available } = useAvailableProducts(org);
@@ -235,7 +235,7 @@ function ProductsSection({ org, team }: SectionProps) {
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>{t('team.products.columns.product')}</Table.Th>
-                <Table.Th>{t('team.products.columns.roles')}</Table.Th>
+                <Table.Th>{t('team.products.columns.features')}</Table.Th>
                 <Table.Th ta="right">{t('team.products.columns.quota')}</Table.Th>
                 <Table.Th />
               </Table.Tr>
@@ -250,21 +250,24 @@ function ProductsSection({ org, team }: SectionProps) {
                     </Text>
                   </Table.Td>
                   <Table.Td>
-                    {given.roles === null && (
+                    {given.features === null && (
                       <Badge variant="outline" mr={4}>
-                        {t('team.products.allRoles')}
+                        {t('team.products.allFeatures')}
                       </Badge>
                     )}
-                    {given.effectiveRoles.length === 0 && given.roles !== null
+                    {given.effectiveFeatures.length === 0 && given.features !== null
                       ? '-'
-                      : given.effectiveRoles.map((role) => (
-                          <Badge key={role} variant="light" mr={4} tt="none">
-                            {role}
+                      : given.effectiveFeatures.map((feature) => (
+                          <Badge key={feature} variant="light" mr={4} tt="none">
+                            {feature}
                           </Badge>
                         ))}
                   </Table.Td>
                   <Table.Td ta="right">
-                    {given.quota === null || given.cycle === null
+                    {/* a metered product has no quota of team: the members share the pool of the org of each feature */}
+                    {offer(given)?.metered
+                      ? t('team.products.orgPoolPerFeature')
+                      : given.quota === null || given.cycle === null
                       ? t('team.products.orgPoolOnly')
                       : t('team.products.quota', {
                           quota: numberFormat.format(given.quota),

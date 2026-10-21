@@ -232,6 +232,42 @@ function MembersTab({ members, isPending, error }: MembersTabProps) {
   );
 }
 
+// What the org negotiated: one quota for a simple product, one short line per metered feature for a metered one
+// (an org buys few of them: a list stays short)
+function QuotaCell({ product, numberFormat }: { product: OrgProduct; numberFormat: Intl.NumberFormat }) {
+  const { t } = useTranslation();
+  const featureQuotas = Object.entries(product.featureQuotas);
+
+  if (featureQuotas.length > 0) {
+    return (
+      <Stack gap={2}>
+        {featureQuotas.map(([feature, quota]) => (
+          <Text key={feature} size="sm">
+            <Text span ff="monospace" size="sm">
+              {feature}
+            </Text>{' '}
+            {t('orgDetail.products.quotaValue', {
+              quota: numberFormat.format(quota.quota),
+              cycle: t(`orgDetail.cycles.${quota.cycle}`),
+            })}
+          </Text>
+        ))}
+      </Stack>
+    );
+  }
+  if (product.quota === null || product.cycle === null) {
+    return <Text c="dimmed">-</Text>;
+  }
+  return (
+    <Text fw={600} size="sm">
+      {t('orgDetail.products.quotaValue', {
+        quota: numberFormat.format(product.quota),
+        cycle: t(`orgDetail.cycles.${product.cycle}`),
+      })}
+    </Text>
+  );
+}
+
 interface ProductsTabProps {
   org: string;
   products: OrgProduct[] | undefined;
@@ -296,9 +332,8 @@ function ProductsTab({ org, products, isPending, error }: ProductsTabProps) {
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>{t('orgDetail.products.columns.product')}</Table.Th>
-                <Table.Th ta="right">{t('orgDetail.products.columns.quota')}</Table.Th>
-                <Table.Th>{t('orgDetail.products.columns.cycle')}</Table.Th>
-                <Table.Th>{t('orgDetail.products.columns.boughtRoles')}</Table.Th>
+                <Table.Th>{t('orgDetail.products.columns.quota')}</Table.Th>
+                <Table.Th>{t('orgDetail.products.columns.boughtFeatures')}</Table.Th>
                 <Table.Th>{t('orgDetail.products.columns.params')}</Table.Th>
                 <Table.Th />
               </Table.Tr>
@@ -312,18 +347,12 @@ function ProductsTab({ org, products, isPending, error }: ProductsTabProps) {
                       {productKey(product.catalog, product.product)}
                     </Text>
                   </Table.Td>
-                  <Table.Td ta="right" fw={600}>
-                    {product.quota === null ? '-' : numberFormat.format(product.quota)}
-                  </Table.Td>
-                  <Table.Td>{product.cycle === null ? '-' : t(`orgDetail.cycles.${product.cycle}`)}</Table.Td>
                   <Table.Td>
-                    {product.boughtRoles.length === 0
-                      ? '-'
-                      : product.boughtRoles.map((role) => (
-                          <Badge key={role} variant="light" mr={4} tt="none">
-                            {role}
-                          </Badge>
-                        ))}
+                    <QuotaCell product={product} numberFormat={numberFormat} />
+                  </Table.Td>
+                  {/* a count, not a list: the names are in the tooltip, and in the form of the assignment */}
+                  <Table.Td title={product.boughtFeatures.join(', ')}>
+                    {product.boughtFeatures.length === 0 ? '-' : product.boughtFeatures.length}
                   </Table.Td>
                   <Table.Td c="dimmed" ff="monospace" fz="sm">
                     {Object.keys(product.params).length === 0

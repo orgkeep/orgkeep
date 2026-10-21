@@ -16,7 +16,7 @@ import { useForm } from '@mantine/form';
 import { useTranslation } from 'react-i18next';
 import type { QuotaCycle } from '../api/organisations';
 import { productKey, splitProductKey } from '../api/products';
-import { type AvailableProduct, type TeamProduct, useGrantProduct } from '../api/teams';
+import { type AvailableFeature, type AvailableProduct, type TeamProduct, useGrantProduct } from '../api/teams';
 
 interface GrantProductModalProps {
   org: string;
@@ -32,10 +32,10 @@ interface GrantProductModalProps {
 interface FormValues {
   // "catalog/product", see productKey
   productKey: string | null;
-  // true: every role the org bought, also those it buys later (roles: null for the core)
-  allRoles: boolean;
-  roles: string[];
-  // NumberInput gives '' while the field is empty: no quota of team
+  // true: every feature the org bought, also those it buys later (features: null for the core)
+  allFeatures: boolean;
+  features: string[];
+  // NumberInput gives '' while the field is empty: no quota of team (simple product only)
   quota: number | string;
   cycle: QuotaCycle;
 }
@@ -43,8 +43,10 @@ interface FormValues {
 const CYCLES: QuotaCycle[] = ['DAILY', 'MONTHLY', 'YEARLY'];
 
 // Gives a product of the org to a team, or edits what the team gives of it: the core has a single PUT for both.
+// A metered product takes no quota of team (its members use the quotas of the org, one per metered feature), and at
+// least one feature: the core answers 400 otherwise.
 export default function GrantProductModal({ org, team, opened, onClose, available, current }: GrantProductModalProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const grantProduct = useGrantProduct(org, team);
 
   function offerOf(key: string | null): AvailableProduct | null {
@@ -56,24 +58,44 @@ export default function GrantProductModal({ org, team, opened, onClose, availabl
     // read once, when the component is created: the parent gives it a new key for each product (see TeamPage)
     initialValues: {
       productKey: initialKey,
-      allRoles: current ? current.roles === null : true,
-      roles: current?.roles ?? [],
+      allFeatures: current ? current.features === null : true,
+      features: current?.features ?? [],
       quota: current?.quota ?? '',
       // the form proposes the cycle of the org: the quota of the team usually follows it
       cycle: current?.cycle ?? offerOf(initialKey)?.cycle ?? 'MONTHLY',
     },
     validate: {
       productKey: (value) => (value ? null : t('team.grant.productRequired')),
+      // a metered product without any feature would give nothing: it has no access role
+      features: (value, values) =>
+        offerOf(values.productKey)?.metered && !values.allFeatures && value.length === 0
+          ? t('team.grant.featuresRequired')
+          : null,
       // empty is fine (no quota of team), otherwise the same rule as the core (@Positive)
       quota: (value) => (value === '' || (typeof value === 'number' && value > 0) ? null : t('team.grant.quotaInvalid')),
     },
   });
 
   const offer = offerOf(form.values.productKey);
+  // the language of the page decides the thousand separator: 50,000 in English, 50 000 in French
+  const numberFormat = new Intl.NumberFormat(i18n.language);
 
   function changeProduct(key: string | null) {
-    // the roles of the previous product mean nothing for the new one; its cycle is the new default
-    form.setValues({ productKey: key, roles: [], cycle: offerOf(key)?.cycle ?? 'MONTHLY' });
+    // the features of the previous product mean nothing for the new one; its cycle is the new default
+    form.setValues({ productKey: key, features: [], quota: '', cycle: offerOf(key)?.cycle ?? 'MONTHLY' });
+  }
+
+  // a metered feature shows the quota of the org for it: what the members of the team share
+  function featureLabel(feature: AvailableFeature): string {
+    const label = feature.displayName ?? feature.name;
+    if (!feature.metered || feature.quota === null || feature.cycle === null) {
+      return label;
+    }
+    return t('team.grant.meteredOption', {
+      feature: label,
+      quota: numberFormat.format(feature.quota),
+      cycle: t(`orgDetail.cycles.${feature.cycle}`),
+    });
   }
 
   function close() {
@@ -84,13 +106,14 @@ export default function GrantProductModal({ org, team, opened, onClose, availabl
 
   const submit = form.onSubmit((values) => {
     const { catalog, name } = splitProductKey(values.productKey!);
-    const quota = values.quota === '' ? null : Number(values.quota);
+    // no quota of team on a metered product: the core refuses it (400)
+    const quota = values.quota === '' || offerOf(values.productKey)?.metered ? null : Number(values.quota);
     grantProduct.mutate(
       {
         catalog,
         product: name,
         request: {
-          roles: values.allRoles ? null : values.roles,
+          features: values.allFeatures ? null : values.features,
           quota,
           // no cycle without a quota: the core refuses it (400)
           cycle: quota === null ? null : values.cycle,
@@ -132,38 +155,50 @@ export default function GrantProductModal({ org, team, opened, onClose, availabl
             error={form.errors.productKey}
           />
 
-          {/* only for a product of which the org bought roles: otherwise there is nothing to choose */}
-          {offer && offer.boughtRoles.length > 0 && (
+          {/* only for a product of which the org bought features: otherwise there is nothing to choose */}
+          {offer && offer.boughtFeatures.length > 0 && (
             <>
               <Switch
-                label={t('team.grant.allRoles')}
-                description={t('team.grant.allRolesDescription')}
-                {...form.getInputProps('allRoles', { type: 'checkbox' })}
+                label={t('team.grant.allFeatures')}
+                description={t('team.grant.allFeaturesDescription')}
+                {...form.getInputProps('allFeatures', { type: 'checkbox' })}
               />
-              {!form.values.allRoles && (
+              {!form.values.allFeatures && (
                 <MultiSelect
-                  label={t('team.grant.roles')}
-                  description={t('team.grant.rolesDescription')}
-                  data={offer.boughtRoles.map((role) => ({ value: role.name, label: role.displayName ?? role.name }))}
-                  {...form.getInputProps('roles')}
+                  label={t('team.grant.features')}
+                  description={
+                    offer.metered ? t('team.grant.featuresDescriptionMetered') : t('team.grant.featuresDescription')
+                  }
+                  data={offer.boughtFeatures.map((feature) => ({ value: feature.name, label: featureLabel(feature) }))}
+                  withAsterisk={offer.metered}
+                  {...form.getInputProps('features')}
                 />
               )}
             </>
           )}
 
-          <NumberInput
-            label={t('team.grant.quota')}
-            description={t('team.grant.quotaDescription', {
-              quota: offer?.quota ?? '-',
-              cycle: offer?.cycle ? t(`orgDetail.cycles.${offer.cycle}`) : '-',
-            })}
-            min={1}
-            allowDecimal={false}
-            allowNegative={false}
-            thousandSeparator=" "
-            {...form.getInputProps('quota')}
-          />
-          {form.values.quota !== '' && (
+          {/* a metered product: the members share the quotas of the org, one per metered feature */}
+          {offer?.metered && (
+            <Text size="sm" c="dimmed">
+              {t('team.grant.meteredHint', { pool: org })}
+            </Text>
+          )}
+
+          {!offer?.metered && (
+            <NumberInput
+              label={t('team.grant.quota')}
+              description={t('team.grant.quotaDescription', {
+                quota: offer?.quota ?? '-',
+                cycle: offer?.cycle ? t(`orgDetail.cycles.${offer.cycle}`) : '-',
+              })}
+              min={1}
+              allowDecimal={false}
+              allowNegative={false}
+              thousandSeparator=" "
+              {...form.getInputProps('quota')}
+            />
+          )}
+          {!offer?.metered && form.values.quota !== '' && (
             // Input.Wrapper adds the label above a component that has none, like SegmentedControl
             <Input.Wrapper label={t('team.grant.cycle')}>
               <SegmentedControl
@@ -173,7 +208,7 @@ export default function GrantProductModal({ org, team, opened, onClose, availabl
               />
             </Input.Wrapper>
           )}
-          {form.values.quota !== '' && (
+          {!offer?.metered && form.values.quota !== '' && (
             <Text size="sm" c="dimmed">
               {t('team.grant.poolHint', { pool: `${org}/${team}` })}
             </Text>

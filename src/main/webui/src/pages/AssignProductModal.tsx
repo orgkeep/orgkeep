@@ -15,14 +15,14 @@ import {
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useTranslation } from 'react-i18next';
-import { type OrgProduct, type QuotaCycle, useAssignProduct } from '../api/organisations';
+import { type FeatureQuota, type OrgProduct, type QuotaCycle, useAssignProduct } from '../api/organisations';
 import { type ParamDefinition, type Product, productKey, productOptions, splitProductKey } from '../api/products';
 
 interface AssignProductModalProps {
   org: string;
   opened: boolean;
   onClose: () => void;
-  // every product of every catalog: the list to choose from, the roles and the parameters of the chosen one
+  // every product of every catalog: the list to choose from, the features and the parameters of the chosen one
   products: Product[];
   // the products already assigned: left out of the list when assigning a new one
   assigned: OrgProduct[];
@@ -30,24 +30,50 @@ interface AssignProductModalProps {
   current: OrgProduct | null;
 }
 
+// The quota of a metered feature while it is typed: NumberInput gives '' while the field is empty
+interface FeatureQuotaRow {
+  quota: number | string;
+  cycle: QuotaCycle;
+}
+
 interface FormValues {
   // "catalog/product", see productKey
   productKey: string | null;
-  // NumberInput gives '' while the field is empty, a number otherwise
+  // simple product only. NumberInput gives '' while the field is empty, a number otherwise
   quota: number | string;
   cycle: QuotaCycle;
-  boughtRoles: string[];
+  boughtFeatures: string[];
+  // metered product only: by feature name. A feature taken out of boughtFeatures keeps its row here, so that its
+  // values come back if it is selected again; only the bought metered features are sent
+  featureQuotas: Record<string, FeatureQuotaRow>;
   // one entry per parameter, '' when the field is empty
   params: Record<string, string>;
 }
 
 const CYCLES: QuotaCycle[] = ['DAILY', 'MONTHLY', 'YEARLY'];
 
-// Assigns a product to the organisation with what it negotiated (quota, bought roles, parameters), or edits an
+function isPositiveNumber(value: number | string): boolean {
+  return typeof value === 'number' && value > 0;
+}
+
+// The metered features of the product that the form says are bought: one quota row each
+function boughtMeteredFeatures(product: Product, boughtFeatures: string[]): string[] {
+  return product.features
+    .filter((feature) => feature.metered && boughtFeatures.includes(feature.name))
+    .map((feature) => feature.name);
+}
+
+// Assigns a product to the organisation with what it negotiated (features bought, quotas, parameters), or edits an
 // assignment: the core has a single PUT for both (assigning again replaces the values).
+// The quotas follow the kind of the product: a simple product has one quota, a metered product one per metered
+// feature bought (the core checks it again and answers 400).
 export default function AssignProductModal({ org, opened, onClose, products, assigned, current }: AssignProductModalProps) {
   const { t } = useTranslation();
   const assignProduct = useAssignProduct(org);
+
+  function findProduct(key: string | null): Product | null {
+    return products.find((p) => productKey(p.catalog, p.name) === key) ?? null;
+  }
 
   const form = useForm<FormValues>({
     // read once, when the component is created: the parent gives it a new key for each assignment (see OrganisationPage)
@@ -55,26 +81,61 @@ export default function AssignProductModal({ org, opened, onClose, products, ass
       productKey: current ? productKey(current.catalog, current.product) : null,
       quota: current?.quota ?? '',
       cycle: current?.cycle ?? 'MONTHLY',
-      boughtRoles: current?.boughtRoles ?? [],
+      boughtFeatures: current?.boughtFeatures ?? [],
+      featureQuotas: current?.featureQuotas ?? {},
       params: current?.params ?? {},
     },
-    validate: {
-      productKey: (value) => (value ? null : t('orgDetail.assign.productRequired')),
-      // same rule as the core (@Positive), checked here to show it while typing
-      quota: (value) => (typeof value === 'number' && value > 0 ? null : t('orgDetail.assign.quotaInvalid')),
+    // A function rather than one rule per field: what is required depends on the kind of the chosen product.
+    // The keys of the errors are the paths of the fields ("featureQuotas.scan.quota"), as getInputProps reads them.
+    validate: (values) => {
+      const errors: Record<string, string> = {};
+      const chosen = findProduct(values.productKey);
+      if (!chosen) {
+        errors.productKey = t('orgDetail.assign.productRequired');
+        return errors;
+      }
+      if (!chosen.metered) {
+        // same rule as the core (@Positive), checked here to show it while typing
+        if (!isPositiveNumber(values.quota)) {
+          errors.quota = t('orgDetail.assign.quotaInvalid');
+        }
+        return errors;
+      }
+      // without an access role, a metered product bought without any feature would give nothing
+      if (values.boughtFeatures.length === 0) {
+        errors.boughtFeatures = t('orgDetail.assign.boughtFeaturesRequired');
+      }
+      for (const feature of boughtMeteredFeatures(chosen, values.boughtFeatures)) {
+        if (!isPositiveNumber(values.featureQuotas[feature]?.quota ?? '')) {
+          errors[`featureQuotas.${feature}.quota`] = t('orgDetail.assign.quotaInvalid');
+        }
+      }
+      return errors;
     },
   });
 
-  // the product chosen in the form: its roles and its parameters drive the rest of the form
-  const product = products.find((p) => productKey(p.catalog, p.name) === form.values.productKey) ?? null;
+  // the product chosen in the form: its kind, its features and its parameters drive the rest of the form
+  const product = findProduct(form.values.productKey);
 
   const assignedKeys = assigned.map((a) => productKey(a.catalog, a.product));
   // a new assignment only offers the products the org does not have yet
   const options = productOptions(products.filter((p) => current !== null || !assignedKeys.includes(productKey(p.catalog, p.name))));
 
   function changeProduct(key: string | null) {
-    // the roles and parameters of the previous product mean nothing for the new one
-    form.setValues({ productKey: key, boughtRoles: [], params: {} });
+    // the features, quotas and parameters of the previous product mean nothing for the new one
+    form.setValues({ productKey: key, boughtFeatures: [], featureQuotas: {}, params: {} });
+  }
+
+  function changeBoughtFeatures(features: string[]) {
+    form.setFieldValue('boughtFeatures', features);
+    // a feature newly bought gets an empty quota row, daily by default (only shown for a metered feature)
+    const rows = { ...form.values.featureQuotas };
+    for (const feature of features) {
+      if (!rows[feature]) {
+        rows[feature] = { quota: '', cycle: 'DAILY' };
+      }
+    }
+    form.setFieldValue('featureQuotas', rows);
   }
 
   function close() {
@@ -84,15 +145,30 @@ export default function AssignProductModal({ org, opened, onClose, products, ass
   }
 
   const submit = form.onSubmit((values) => {
-    // the validation above guarantees a product and a number
+    // the validation above guarantees a product, and numbers where a quota is needed
     const { catalog, name } = splitProductKey(values.productKey!);
+    const chosen = findProduct(values.productKey)!;
     // an empty field is left out: the core applies the default of the parameter
     const params = Object.fromEntries(Object.entries(values.params).filter(([, value]) => value !== ''));
+    // the kind of the product decides which quotas are sent: the core refuses the others
+    const featureQuotas: Record<string, FeatureQuota> = {};
+    if (chosen.metered) {
+      for (const feature of boughtMeteredFeatures(chosen, values.boughtFeatures)) {
+        const row = values.featureQuotas[feature];
+        featureQuotas[feature] = { quota: Number(row.quota), cycle: row.cycle };
+      }
+    }
     assignProduct.mutate(
       {
         catalog,
         product: name,
-        request: { quota: Number(values.quota), cycle: values.cycle, boughtRoles: values.boughtRoles, params },
+        request: {
+          quota: chosen.metered ? null : Number(values.quota),
+          cycle: chosen.metered ? null : values.cycle,
+          boughtFeatures: values.boughtFeatures,
+          featureQuotas,
+          params,
+        },
       },
       { onSuccess: close },
     );
@@ -122,35 +198,78 @@ export default function AssignProductModal({ org, opened, onClose, products, ass
             onChange={changeProduct}
             error={form.errors.productKey}
           />
-          <NumberInput
-            label={t('orgDetail.assign.quota')}
-            placeholder="1000"
-            min={1}
-            // whole numbers only: the core stores a long
-            allowDecimal={false}
-            allowNegative={false}
-            thousandSeparator=" "
-            withAsterisk
-            {...form.getInputProps('quota')}
-          />
-          {/* Input.Wrapper adds the label above a component that has none, like SegmentedControl */}
-          <Input.Wrapper label={t('orgDetail.assign.cycle')} withAsterisk>
-            <SegmentedControl
-              fullWidth
-              data={CYCLES.map((cycle) => ({ value: cycle, label: t(`orgDetail.cycles.${cycle}`) }))}
-              {...form.getInputProps('cycle')}
-            />
-          </Input.Wrapper>
+          {/* a simple product: one quota for the product (also while no product is chosen yet) */}
+          {!product?.metered && (
+            <>
+              <NumberInput
+                label={t('orgDetail.assign.quota')}
+                placeholder="1000"
+                min={1}
+                // whole numbers only: the core stores a long
+                allowDecimal={false}
+                allowNegative={false}
+                thousandSeparator=" "
+                withAsterisk
+                {...form.getInputProps('quota')}
+              />
+              {/* Input.Wrapper adds the label above a component that has none, like SegmentedControl */}
+              <Input.Wrapper label={t('orgDetail.assign.cycle')} withAsterisk>
+                <SegmentedControl
+                  fullWidth
+                  data={CYCLES.map((cycle) => ({ value: cycle, label: t(`orgDetail.cycles.${cycle}`) }))}
+                  {...form.getInputProps('cycle')}
+                />
+              </Input.Wrapper>
+            </>
+          )}
 
-          {/* only for a product that has roles: the ceiling of what the teams of the org can give */}
-          {product && product.roles.length > 0 && (
+          {product?.metered && (
+            <Text size="sm" c="dimmed">
+              {t('orgDetail.assign.meteredHint')}
+            </Text>
+          )}
+
+          {/* only for a product that has features: the ceiling of what the teams of the org can give */}
+          {product && product.features.length > 0 && (
             <MultiSelect
-              label={t('orgDetail.assign.boughtRoles')}
-              description={t('orgDetail.assign.boughtRolesDescription')}
-              data={product.roles.map((role) => ({ value: role.name, label: role.displayName ?? role.name }))}
-              {...form.getInputProps('boughtRoles')}
+              label={t('orgDetail.assign.boughtFeatures')}
+              description={t('orgDetail.assign.boughtFeaturesDescription')}
+              data={product.features.map((feature) => ({
+                value: feature.name,
+                label: feature.metered
+                  ? t('orgDetail.assign.meteredOption', { feature: feature.displayName ?? feature.name })
+                  : (feature.displayName ?? feature.name),
+              }))}
+              withAsterisk={product.metered}
+              value={form.values.boughtFeatures}
+              onChange={changeBoughtFeatures}
+              error={form.errors.boughtFeatures}
             />
           )}
+
+          {/* a metered product: one quota and its cycle per metered feature bought, added and removed with the selection */}
+          {product?.metered &&
+            boughtMeteredFeatures(product, form.values.boughtFeatures).map((feature) => (
+              <Group key={feature} align="flex-start" grow>
+                <NumberInput
+                  label={t('orgDetail.assign.featureQuota', { feature })}
+                  placeholder="200"
+                  min={1}
+                  allowDecimal={false}
+                  allowNegative={false}
+                  thousandSeparator=" "
+                  withAsterisk
+                  {...form.getInputProps(`featureQuotas.${feature}.quota`)}
+                />
+                <Select
+                  label={t('orgDetail.assign.cycle')}
+                  data={CYCLES.map((cycle) => ({ value: cycle, label: t(`orgDetail.cycles.${cycle}`) }))}
+                  allowDeselect={false}
+                  withAsterisk
+                  {...form.getInputProps(`featureQuotas.${feature}.cycle`)}
+                />
+              </Group>
+            ))}
 
           {product?.params.map((param) => (
             <ParamField

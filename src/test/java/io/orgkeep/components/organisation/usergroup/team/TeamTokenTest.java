@@ -53,12 +53,13 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Real tokens on the whole model (the native engine, see "Moteur" in ARCHITECTURE.md): everything is set up through the
+ * Real tokens on the whole model (the native engine: rights written ahead on the teams, read by native mappers):
+ * everything is set up through the
  * services of the core, as the API would, then tokens are asked to Keycloak. No mock: what is checked is what
  * Keycloak really issues from the role mappings and attributes written on the teams.
  * <p>
  * The login client is the real one (provisioned by RealmProvisioner, fullScopeAllowed=false), with the password grant
- * turned on for the test as DemoSeeder does. Setup, the second example of ARCHITECTURE.md:
+ * turned on for the test as DemoSeeder does. Setup, the example with several environments:
  * <ul>
  *   <li>catalogs "prod" and "sandbox", optional scopes of the login client;</li>
  *   <li>"shop-repository" in prod (roles scan and flow, parameter region), assigned to acme: 1000 a month, scan bought;</li>

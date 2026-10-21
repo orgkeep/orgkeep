@@ -116,7 +116,7 @@ class DemoSeederTest {
         assertEquals("acme", claims.at("/products/billing/quotas/0/pool").asText(), claims.toString());
     }
 
-    // the example token of ARCHITECTURE.md: Paul, team ops, scopes prod and sandbox
+    // the example token of the spec: Paul, team ops, scopes prod and sandbox
     @Test
     void paulGetsTheExampleTokenOfTheSpec() throws Exception {
         JsonNode claims = logIn(DemoSeeder.PAUL, "openid prod sandbox");

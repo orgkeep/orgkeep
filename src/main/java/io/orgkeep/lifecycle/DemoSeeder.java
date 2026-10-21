@@ -39,8 +39,8 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Seeds an organisation, its owner, members, and the two examples of catalogs, products and teams of ARCHITECTURE.md
- * for manual testing (Bruno, Postman, the dashboard), when orgkeep.demo.enabled is true:
+ * Seeds an organisation, its owner, members, and two examples of catalogs, products and teams (a simple one, and one
+ * with several environments) for manual testing (Bruno, Postman, the dashboard), when orgkeep.demo.enabled is true:
  * always in dev mode, ORGKEEP_DEMO_ENABLED=true in the Docker image.
  * The realm and its owner are created beforehand by OnPremiseBootstrap.
  * Idempotent: does nothing if the organisation already exists.
@@ -115,7 +115,7 @@ public class DemoSeeder {
     }
 
     /**
-     * The simple case of ARCHITECTURE.md: a product without roles nor parameters, in the default catalog, assigned to
+     * The simple case: a product without roles nor parameters, in the default catalog, assigned to
      * the org and given to every member by the predefined team users. Skipped if the realm owner deleted the default
      * catalog.
      */
@@ -131,7 +131,7 @@ public class DemoSeeder {
     }
 
     /**
-     * The case with several environments of ARCHITECTURE.md: catalogs prod and sandbox, products with roles bought by
+     * The case with several environments: catalogs prod and sandbox, products with roles bought by
      * the org, catalog roles, and two teams, one with a quota of its own. Paul is in the team ops.
      * Checked on its own, not with the org: a realm seeded before this example existed gets it too.
      */

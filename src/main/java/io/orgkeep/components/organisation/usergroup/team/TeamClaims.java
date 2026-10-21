@@ -37,6 +37,16 @@ public final class TeamClaims {
     }
 
     /**
+     * One pool of a metered feature, e.g. {"feature":"scan","pool":"acme","limit":200,"cycle":"daily"}: the API keys
+     * its counter by (catalog, product, feature, pool). Same rule as {@link #pool(String, long, QuotaCycle)}: always
+     * built the same way, feature first, so that Keycloak merges the pool of the org carried by several teams.
+     */
+    public static String pool(String feature, String pool, long limit, QuotaCycle cycle) {
+        return "{\"feature\":\"%s\",\"pool\":\"%s\",\"limit\":%d,\"cycle\":\"%s\"}"
+                .formatted(feature, pool, limit, cycle.getValue());
+    }
+
+    /**
      * The parameter values of an org as a JSON object, typed after the schema ({"region":"eu","seats":10}), keys sorted
      * so that the value is stable. Null without any value: the token then has no "params".
      */

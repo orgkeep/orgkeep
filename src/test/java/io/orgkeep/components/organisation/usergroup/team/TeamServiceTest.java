@@ -14,6 +14,7 @@ import io.orgkeep.api.exceptions.ProductNotAssignedException;
 import io.orgkeep.api.exceptions.UserGroupNotFoundException;
 import io.orgkeep.api.model.AddMemberRequest;
 import io.orgkeep.api.model.AssignProductRequest;
+import io.orgkeep.api.model.AvailableFeature;
 import io.orgkeep.api.model.AvailableProduct;
 import io.orgkeep.api.model.CatalogRole;
 import io.orgkeep.api.model.CreateCatalogRequest;
@@ -22,6 +23,7 @@ import io.orgkeep.api.model.CreateOrgRequest;
 import io.orgkeep.api.model.CreateProductRequest;
 import io.orgkeep.api.model.CreateUserGroupRequest;
 import io.orgkeep.api.model.Feature;
+import io.orgkeep.api.model.FeatureQuota;
 import io.orgkeep.api.model.GrantProductRequest;
 import io.orgkeep.api.model.ParamDefinition;
 import io.orgkeep.api.model.ParamType;
@@ -58,7 +60,7 @@ import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
  * <p>
  * Common setup: the catalog "prod" with the product "shop-repository" (features scan and flow, an enum parameter
  * region), assigned to the org "acme" with a quota of 1000 a month, the org bought "scan" only. The team "ops" has
- * one member, alice.
+ * one member, alice. The tests of a metered product add "billing" first (see assignBilling).
  */
 @QuarkusTest
 class TeamServiceTest {
@@ -70,6 +72,10 @@ class TeamServiceTest {
     private static final String PARAMS = "prod.shop-repository.params";
     private static final String ORG_POOL = "{\"pool\":\"acme\",\"limit\":1000,\"cycle\":\"monthly\"}";
     private static final ParamDefinition REGION = new ParamDefinition("region", ParamType.ENUM, true, "eu", List.of("eu", "us"));
+    private static final String BILLING = "billing";
+    private static final String BILLING_QUOTAS = "prod.billing.quotas";
+    private static final String SCAN_POOL = "{\"feature\":\"scan\",\"pool\":\"acme\",\"limit\":200,\"cycle\":\"daily\"}";
+    private static final String FLOW_POOL = "{\"feature\":\"flow\",\"pool\":\"acme\",\"limit\":100,\"cycle\":\"daily\"}";
 
     @Inject Keycloak keycloak;
     @Inject TeamService teamService;
@@ -341,8 +347,145 @@ class TeamServiceTest {
     // what the org admins see of the products of their org: display names included
     @Test
     void availableProducts() {
-        assertEquals(List.of(new AvailableProduct(CATALOG, PRODUCT, "Shop repository", 1000L, QuotaCycle.MONTHLY,
-                List.of(new Feature("scan", "Scan engine")))), teamService.availableProducts(realmName(), ORG));
+        assertEquals(List.of(new AvailableProduct(CATALOG, PRODUCT, "Shop repository", false, 1000L, QuotaCycle.MONTHLY,
+                List.of(new AvailableFeature("scan", "Scan engine", false, null, null)))),
+                teamService.availableProducts(realmName(), ORG));
+    }
+
+    // --- a metered product: features without access role, a pool of the org per metered feature
+
+    // every feature bought: no access role "billing", each feature a role, one pool per metered feature
+    @Test
+    void aMeteredProductGivesItsFeaturesAndAPoolPerFeature() {
+        assignBilling();
+
+        TeamProduct given = teamService.grantProduct(realmName(), ORG, TEAM, CATALOG, BILLING, GrantProductRequest.allFeatures());
+
+        assertEquals(new TeamProduct(CATALOG, BILLING, null, List.of("flow", "scan", "stats"), null, null), given);
+        assertEquals(Set.of("billing:stats", "billing:scan", "billing:flow"), teamRoles(TEAM));
+        assertEquals(Set.of(SCAN_POOL, FLOW_POOL), Set.copyOf(team(TEAM).getAttributes().get(BILLING_QUOTAS)));
+        // read back from the role mappings: the features, and no catalog role taken for one
+        UserGroup ops = userGroupService.list(realmName(), ORG).stream()
+                .filter(group -> TEAM.equals(group.name()))
+                .findFirst().orElseThrow();
+        assertEquals(List.of(given), ops.products());
+        assertEquals(List.of(), ops.catalogRoles());
+    }
+
+    // a feature without quota is worth something on its own: the role, no pool
+    @Test
+    void aMeteredProductWithOnlyAFeatureWithoutQuota() {
+        assignBilling();
+
+        teamService.grantProduct(realmName(), ORG, TEAM, CATALOG, BILLING, new GrantProductRequest(List.of("stats"), null, null));
+
+        assertEquals(Set.of("billing:stats"), teamRoles(TEAM));
+        assertNull(team(TEAM).getAttributes().get(BILLING_QUOTAS));
+    }
+
+    // no quota of team on a metered product yet, and at least one feature: without access role, nothing would be given
+    @Test
+    void grantRefusesAQuotaOfTeamOrNoFeatureOnAMeteredProduct() {
+        assignBilling();
+
+        assertThrowsExactly(InvalidRequestException.class, () -> teamService.grantProduct(realmName(), ORG, TEAM,
+                CATALOG, BILLING, new GrantProductRequest(null, 300L, null)));
+        assertThrowsExactly(InvalidRequestException.class, () -> teamService.grantProduct(realmName(), ORG, TEAM,
+                CATALOG, BILLING, new GrantProductRequest(null, null, QuotaCycle.DAILY)));
+        assertThrowsExactly(InvalidRequestException.class, () -> teamService.grantProduct(realmName(), ORG, TEAM,
+                CATALOG, BILLING, new GrantProductRequest(List.of(), null, null)));
+        assertEquals(Set.of(), teamRoles(TEAM));
+    }
+
+    // the org no longer buys a metered feature: the team loses it with its pool, and keeps the rest
+    @Test
+    void aMeteredFeatureNoLongerBoughtLeavesWithItsPool() {
+        assignBilling();
+        teamService.grantProduct(realmName(), ORG, TEAM, CATALOG, BILLING, GrantProductRequest.allFeatures());
+
+        productService.assign(realmName(), ORG, CATALOG, BILLING,
+                AssignProductRequest.metered(List.of("stats", "scan"), Map.of("scan", new FeatureQuota(200L, QuotaCycle.DAILY))));
+
+        assertEquals(Set.of("billing:stats", "billing:scan"), teamRoles(TEAM));
+        assertEquals(List.of(SCAN_POOL), team(TEAM).getAttributes().get(BILLING_QUOTAS));
+    }
+
+    // none of its metered features bought any more: the team keeps its features without quota, nothing special
+    @Test
+    void noMeteredFeatureBoughtAnyMore() {
+        assignBilling();
+        teamService.grantProduct(realmName(), ORG, TEAM, CATALOG, BILLING, GrantProductRequest.allFeatures());
+
+        productService.assign(realmName(), ORG, CATALOG, BILLING, AssignProductRequest.metered(List.of("stats"), Map.of()));
+
+        assertEquals(Set.of("billing:stats"), teamRoles(TEAM));
+        assertNull(team(TEAM).getAttributes().get(BILLING_QUOTAS));
+    }
+
+    // the team listed only features the org stopped buying: nothing derived any more for the product, but the choices
+    // stay and take effect again when the org buys them again
+    @Test
+    void featuresListedButNoLongerBoughtComeBackWhenBoughtAgain() {
+        assignBilling();
+        teamService.grantProduct(realmName(), ORG, TEAM, CATALOG, BILLING, new GrantProductRequest(List.of("scan"), null, null));
+
+        productService.assign(realmName(), ORG, CATALOG, BILLING, AssignProductRequest.metered(List.of("stats"), Map.of()));
+        assertEquals(Set.of(), teamRoles(TEAM));
+        assertNull(team(TEAM).getAttributes().get(BILLING_QUOTAS));
+        assertEquals(List.of("listed"), team(TEAM).getAttributes().get("grant:prod:billing"));
+
+        assignBilling();
+        assertEquals(Set.of("billing:scan"), teamRoles(TEAM));
+        assertEquals(List.of(SCAN_POOL), team(TEAM).getAttributes().get(BILLING_QUOTAS));
+    }
+
+    // a feature without quota deleted by the realm owner: the team loses it, keeps the metered ones
+    @Test
+    void aDeletedFeatureOfAMeteredProduct() {
+        assignBilling();
+        teamService.grantProduct(realmName(), ORG, TEAM, CATALOG, BILLING, GrantProductRequest.allFeatures());
+
+        productService.deleteFeature(realmName(), CATALOG, BILLING, "stats");
+
+        assertEquals(Set.of("billing:scan", "billing:flow"), teamRoles(TEAM));
+        assertEquals(Set.of(SCAN_POOL, FLOW_POOL), Set.copyOf(team(TEAM).getAttributes().get(BILLING_QUOTAS)));
+    }
+
+    @Test
+    void unassignAMeteredProduct() {
+        assignBilling();
+        teamService.grantProduct(realmName(), ORG, TEAM, CATALOG, BILLING, GrantProductRequest.allFeatures());
+
+        productService.unassign(realmName(), ORG, CATALOG, BILLING);
+
+        assertEquals(Set.of(), teamRoles(TEAM));
+        assertEquals(Map.of(), teamAttributes(TEAM));
+    }
+
+    // what the org admins see of a metered product: the quota of the org per metered feature, no quota of product
+    @Test
+    void availableMeteredProduct() {
+        assignBilling();
+
+        AvailableProduct billing = teamService.availableProducts(realmName(), ORG).stream()
+                .filter(product -> BILLING.equals(product.product()))
+                .findFirst().orElseThrow();
+
+        assertEquals(new AvailableProduct(CATALOG, BILLING, "Billing", true, null, null, List.of(
+                new AvailableFeature("flow", null, true, 100L, QuotaCycle.DAILY),
+                new AvailableFeature("scan", null, true, 200L, QuotaCycle.DAILY),
+                new AvailableFeature("stats", null, false, null, null))), billing);
+    }
+
+    /** The metered product billing, bought with stats, scan (200 a day) and flow (100 a day), not read. */
+    private void assignBilling() {
+        if (productService.list(realmName(), CATALOG).stream().noneMatch(product -> BILLING.equals(product.name()))) {
+            productService.create(realmName(), CATALOG, new CreateProductRequest(BILLING, "Billing", null, List.of(
+                    new Feature("read", null), new Feature("stats", null),
+                    new Feature("scan", null, true), new Feature("flow", null, true)), List.of()));
+        }
+        productService.assign(realmName(), ORG, CATALOG, BILLING, AssignProductRequest.metered(List.of("stats", "scan", "flow"),
+                Map.of("scan", new FeatureQuota(200L, QuotaCycle.DAILY), "flow", new FeatureQuota(100L, QuotaCycle.DAILY))));
     }
 
     private void assign(List<String> boughtFeatures) {

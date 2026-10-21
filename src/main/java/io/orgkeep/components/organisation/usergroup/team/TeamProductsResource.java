@@ -38,9 +38,12 @@ public class TeamProductsResource {
     @Operation(summary = "Give a product of the organisation to a team",
             description = "With the features of the product given (absent: every feature the organisation bought, also those "
                     + "it buys later; empty: no feature) and an optional quota of team, whose cycle defaults to the one "
-                    + "of the organisation. A member is in at most one team with a quota for a given product.")
+                    + "of the organisation. A member is in at most one team with a quota for a given product. "
+                    + "A product with metered features takes no quota of team (its members use the quotas of the "
+                    + "organisation), and at least one feature.")
     @APIResponseSchema(value = TeamProduct.class, responseCode = "200", responseDescription = "Product given")
-    @APIResponse(responseCode = "400", description = "Invalid request, feature the organisation did not buy, or cycle without quota")
+    @APIResponse(responseCode = "400", description = "Invalid request, feature the organisation did not buy, cycle without quota, "
+            + "or a quota of team or no feature for a metered product")
     @APIResponse(responseCode = "404", description = "Unknown organisation, user group or catalog, or product not assigned to the organisation")
     @APIResponse(responseCode = "409", description = "With a quota: a member of the team is in another team with a quota for this product")
     public TeamProduct grant(@PathParam("org") String org, @PathParam("group") String group,

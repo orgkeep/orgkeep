@@ -10,8 +10,9 @@ import java.util.List;
  *
  * @param features optional, features of the product given (by name, without the product prefix), among those the org
  *                 bought. null: every feature the org bought, those it buys later included. Empty: the product without
- *                 any feature
- * @param quota    optional quota of the team: a budget its members share, on top of the pool of the org
+ *                 any feature, refused for a metered product (without access role, it would give nothing)
+ * @param quota    optional quota of the team: a budget its members share, on top of the pool of the org. Simple
+ *                 product only: refused for a metered product
  * @param cycle    cycle of the quota of the team, only with a quota. Default: the cycle of the org for this product
  */
 public record GrantProductRequest(

@@ -9,10 +9,12 @@ import io.orgkeep.api.exceptions.InvalidRequestException;
 import io.orgkeep.api.exceptions.OperationNotAllowedException;
 import io.orgkeep.api.exceptions.ProductNotAssignedException;
 import io.orgkeep.api.exceptions.UserGroupNotFoundException;
+import io.orgkeep.api.model.AvailableFeature;
 import io.orgkeep.api.model.AvailableProduct;
 import io.orgkeep.api.model.CatalogRole;
 import io.orgkeep.api.model.CatalogRoles;
 import io.orgkeep.api.model.Feature;
+import io.orgkeep.api.model.FeatureQuota;
 import io.orgkeep.api.model.GrantProductRequest;
 import io.orgkeep.api.model.OrgGroups;
 import io.orgkeep.api.model.OrgProduct;
@@ -66,15 +68,19 @@ public class TeamServiceImpl implements TeamService {
                     catalog -> clients.listRoles(realm, catalogSetup.get(realm, catalog).clientUuid()).stream()
                             .collect(Collectors.toMap(RoleRepresentation::getName, Function.identity())));
             RoleRepresentation product = roles.get(orgProduct.product());
-            List<Feature> boughtFeatures = orgProduct.boughtFeatures().stream()
-                    .map(feature -> {
-                        RoleRepresentation role = roles.get(CatalogRoles.feature(orgProduct.product(), feature));
+            List<AvailableFeature> boughtFeatures = orgProduct.boughtFeatures().stream()
+                    .map(name -> {
+                        RoleRepresentation role = roles.get(CatalogRoles.feature(orgProduct.product(), name));
                         // a bought feature without its role was changed outside of Orgkeep: shown by its name only
-                        return role == null ? new Feature(feature, null) : productMapper.toFeature(orgProduct.product(), role);
+                        Feature feature = role == null ? new Feature(name, null) : productMapper.toFeature(orgProduct.product(), role);
+                        FeatureQuota quota = orgProduct.featureQuotas().get(name);
+                        return new AvailableFeature(feature.name(), feature.displayName(), feature.metered(),
+                                quota == null ? null : quota.quota(), quota == null ? null : quota.cycle());
                     })
                     .toList();
+            boolean metered = productMapper.isMetered(List.copyOf(roles.values()), orgProduct.product());
             available.add(new AvailableProduct(orgProduct.catalog(), orgProduct.product(), displayName(product),
-                    orgProduct.quota(), orgProduct.cycle(), boughtFeatures));
+                    metered, orgProduct.quota(), orgProduct.cycle(), boughtFeatures));
         }
         return available;
     }
@@ -104,13 +110,27 @@ public class TeamServiceImpl implements TeamService {
                                     GrantProductRequest request) {
         orgs.getByName(realm, orgName);
         String teamId = teamId(realm, orgName, team);
-        if (request.cycle() != null && request.quota() == null) {
-            throw new InvalidRequestException("A cycle is only given with a quota of team");
-        }
-        catalogSetup.get(realm, catalog);
+        String clientUuid = catalogSetup.get(realm, catalog).clientUuid();
         GroupRepresentation assignment = groups.find(realm, OrgGroups.assignment(orgName, catalog, product))
                 .orElseThrow(() -> new ProductNotAssignedException(orgName, catalog, product));
         OrgProduct orgProduct = productMapper.toOrgProduct(catalog, assignment);
+
+        if (productMapper.isMetered(clients.listRoles(realm, clientUuid), product)) {
+            // no quota of team per metered feature yet: only the pools of the org reach the tokens
+            if (request.quota() != null || request.cycle() != null) {
+                throw new InvalidRequestException(
+                        "Product '%s' has metered features: no quota of team, the members use the quotas of the organisation"
+                                .formatted(product));
+            }
+            // without an access role, a metered product without any feature would give nothing
+            if (request.features() != null && request.features().isEmpty()) {
+                throw new InvalidRequestException(
+                        "Product '%s' has metered features: a team gives at least one of them".formatted(product));
+            }
+        }
+        if (request.cycle() != null && request.quota() == null) {
+            throw new InvalidRequestException("A cycle is only given with a quota of team");
+        }
 
         // never more than the org bought
         if (request.features() != null) {

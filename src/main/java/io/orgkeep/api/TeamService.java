@@ -39,7 +39,8 @@ public interface TeamService {
      * Gives the product to the team, or replaces what the team gives of it.
      *
      * @throws io.orgkeep.api.exceptions.ProductNotAssignedException if the product is not assigned to the org
-     * @throws io.orgkeep.api.exceptions.InvalidRequestException for a feature the org did not buy, or a cycle without quota
+     * @throws io.orgkeep.api.exceptions.InvalidRequestException for a feature the org did not buy, a cycle without quota,
+     *                                                           or, for a metered product, a quota of team or no feature
      * @throws io.orgkeep.api.exceptions.OperationNotAllowedException with a quota, if a member of the team is already in
      *                                                               another team with a quota for this product
      */

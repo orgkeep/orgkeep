@@ -30,15 +30,21 @@ import {
   useUnassignProduct,
 } from '../api/organisations';
 import { type Product, productKey, useProducts } from '../api/products';
+import { type UserGroup, useUserGroups } from '../api/teams';
 import ConfirmModal from '../components/ConfirmModal';
 import AssignProductModal from './AssignProductModal';
 import { ROLE_COLORS } from './orgRoles';
 import { personName } from './personName';
 
-// The two tabs of the page. The selected one is in the URL (?tab=products) like the product filter of the list:
+// The tabs of the page. The selected one is in the URL (?tab=products) like the product filter of the list:
 // the product count of the list links straight to the products tab.
-const TABS = ['members', 'products'] as const;
+const TABS = ['members', 'products', 'teams'] as const;
 type Tab = (typeof TABS)[number];
+
+// Any other value of ?tab (or none) gives the default tab
+function toTab(value: string | null): Tab {
+  return TABS.find((tab) => tab === value) ?? 'members';
+}
 
 // The detail of an organisation (realm owner): its header, its members and its products.
 export default function OrganisationPage() {
@@ -46,12 +52,14 @@ export default function OrganisationPage() {
   // the :org part of the route /organisations/:org. Always set on this route, hence the "!"
   const org = useParams().org!;
   const [searchParams, setSearchParams] = useSearchParams();
-  const tab: Tab = searchParams.get('tab') === 'products' ? 'products' : 'members';
+  const tab = toTab(searchParams.get('tab'));
 
   const { data: details, isPending, error } = useOrganisation(org);
-  // both lists are loaded at once: the tabs show their counts
+  // the lists are loaded at once: the tabs show their counts
   const members = useOrgMembers(org);
   const products = useOrgProducts(org);
+  // the API of the org admins, opened to the realm owner by the core
+  const teams = useUserGroups(org);
 
   if (isPending) {
     return (
@@ -71,7 +79,8 @@ export default function OrganisationPage() {
 
   function changeTab(value: string | null) {
     // the members tab is the default: no "?tab=members" in the URL
-    setSearchParams(value === 'products' ? { tab: 'products' } : {});
+    const next = toTab(value);
+    setSearchParams(next === 'members' ? {} : { tab: next });
   }
 
   return (
@@ -93,6 +102,9 @@ export default function OrganisationPage() {
           <Tabs.Tab value="products" rightSection={<Count value={products.data?.length} />}>
             {t('orgDetail.tabs.products')}
           </Tabs.Tab>
+          <Tabs.Tab value="teams" rightSection={<Count value={teams.data?.length} />}>
+            {t('orgDetail.tabs.teams')}
+          </Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="members" pt="md">
@@ -100,6 +112,9 @@ export default function OrganisationPage() {
         </Tabs.Panel>
         <Tabs.Panel value="products" pt="md">
           <ProductsTab org={org} products={products.data} isPending={products.isPending} error={products.error} />
+        </Tabs.Panel>
+        <Tabs.Panel value="teams" pt="md">
+          <TeamsTab org={org} teams={teams.data} isPending={teams.isPending} error={teams.error} />
         </Tabs.Panel>
       </Tabs>
     </Stack>
@@ -213,6 +228,69 @@ function StatusButton({ details }: { details: OrgDetails }) {
         onClose={closeModal}
       />
     </>
+  );
+}
+
+interface TeamsTabProps {
+  org: string;
+  // undefined while loading
+  teams: UserGroup[] | undefined;
+  isPending: boolean;
+  error: Error | null;
+}
+
+// Read only, counts rather than lists: the org admins manage their teams. A team opens on a read-only page
+function TeamsTab({ org, teams, isPending, error }: TeamsTabProps) {
+  const { t } = useTranslation();
+
+  if (isPending) {
+    return <Loader size="sm" />;
+  }
+  if (error) {
+    return (
+      <Alert color="red" title={t('orgDetail.teams.loadError')}>
+        {error.message}
+      </Alert>
+    );
+  }
+
+  return (
+    <Stack gap="sm">
+      <Text c="dimmed" size="sm">
+        {t('orgDetail.teams.hint')}
+      </Text>
+      <Table.ScrollContainer minWidth={560}>
+        <Table highlightOnHover withTableBorder>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>{t('orgDetail.teams.columns.team')}</Table.Th>
+              <Table.Th>{t('orgDetail.teams.columns.members')}</Table.Th>
+              <Table.Th>{t('orgDetail.teams.columns.products')}</Table.Th>
+              <Table.Th>{t('orgDetail.teams.columns.catalogRoles')}</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {(teams ?? []).map((team) => (
+              <Table.Tr key={team.id}>
+                <Table.Td>
+                  <Anchor component={Link} to={`/organisations/${org}/teams/${team.name}`} ff="monospace" fw={500}>
+                    {team.name}
+                  </Anchor>
+                  {team.predefined && (
+                    <Badge variant="light" color="gray" ml="xs" size="sm">
+                      {t('teams.predefined')}
+                    </Badge>
+                  )}
+                </Table.Td>
+                <Table.Td>{team.memberIds.length}</Table.Td>
+                <Table.Td>{team.products.length}</Table.Td>
+                <Table.Td>{team.catalogRoles.length}</Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      </Table.ScrollContainer>
+    </Stack>
   );
 }
 

@@ -98,7 +98,18 @@
     "none": "None",
     "tabs": {
       "members": "Members",
-      "products": "Products"
+      "products": "Products",
+      "teams": "Teams"
+    },
+    "teams": {
+      "loadError": "Could not load the teams",
+      "hint": "Managed by the org admins: what each team gives its members. Open a team to see its members, products and roles.",
+      "columns": {
+        "team": "Team",
+        "members": "Members",
+        "products": "Products",
+        "catalogRoles": "Catalog roles"
+      }
     },
     "roles": {
       "ORG_OWNER": "org-owner",
@@ -427,6 +438,7 @@
     "backToTeams": "Back to the teams",
     "hint": "What this team gives reaches the tokens of its members at their next login or token refresh.",
     "usersHint": "Every member of the organisation is in this team: what it gives, everybody has.",
+    "readOnly": "Read only: the org admins of the organisation manage its teams.",
     "members": {
       "title": "Members ({{count}})",
       "add": "Add a member",

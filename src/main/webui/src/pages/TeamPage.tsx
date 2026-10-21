@@ -37,13 +37,21 @@ import ConfirmModal from '../components/ConfirmModal';
 import GrantProductModal from './GrantProductModal';
 import { personName } from './personName';
 
+interface TeamPageProps {
+  // true for the realm owner (/organisations/:org/teams/:team): the org admins manage their teams, the realm owner
+  // only looks (e.g. to answer "why does Paul not have scan?"). The actions are hidden
+  readOnly?: boolean;
+}
+
 // The detail of a team: its members, the products it gives and its catalog roles.
 // Three sections on one page: a team has few of each, and the org admin configures them together.
-export default function TeamPage() {
+export default function TeamPage({ readOnly = false }: TeamPageProps) {
   const { t } = useTranslation();
-  // the :org and :team parts of the route /orgs/:org/teams/:team
+  // the :org and :team parts of the route /orgs/:org/teams/:team (or /organisations/:org/teams/:team)
   const org = useParams().org!;
   const teamName = useParams().team!;
+  // where the list of the teams is: the page of the org admins, or the Teams tab of the org for the realm owner
+  const teamsPath = readOnly ? `/organisations/${org}?tab=teams` : `/orgs/${org}/teams`;
   // the core lists the groups of the org, not one group: the team is picked from the list
   const { data: teams, isPending, error } = useUserGroups(org);
 
@@ -66,7 +74,7 @@ export default function TeamPage() {
     // e.g. a name typed in the URL, or a team deleted in another tab
     return (
       <Alert color="red" title={t('team.notFound', { team: teamName })} maw={1100}>
-        <Anchor component={Link} to={`/orgs/${org}/teams`}>
+        <Anchor component={Link} to={teamsPath}>
           {t('team.backToTeams')}
         </Anchor>
       </Alert>
@@ -77,7 +85,7 @@ export default function TeamPage() {
     <Stack maw={1100} gap="xl">
       <Stack gap="xs">
         <Breadcrumbs>
-          <Anchor component={Link} to={`/orgs/${org}/teams`}>
+          <Anchor component={Link} to={teamsPath}>
             {t('teams.title', { org })}
           </Anchor>
           <Text ff="monospace">{team.name}</Text>
@@ -93,11 +101,12 @@ export default function TeamPage() {
           )}
         </Group>
         <Text c="dimmed">{t(team.name === 'users' ? 'team.usersHint' : 'team.hint')}</Text>
+        {readOnly && <Alert color="gray">{t('team.readOnly')}</Alert>}
       </Stack>
 
-      <MembersSection org={org} team={team} />
-      <ProductsSection org={org} team={team} />
-      <CatalogRolesSection org={org} team={team} />
+      <MembersSection org={org} team={team} readOnly={readOnly} />
+      <ProductsSection org={org} team={team} readOnly={readOnly} />
+      <CatalogRolesSection org={org} team={team} readOnly={readOnly} />
     </Stack>
   );
 }
@@ -105,10 +114,12 @@ export default function TeamPage() {
 interface SectionProps {
   org: string;
   team: UserGroup;
+  // hides the buttons and pickers: what the team gives is shown, nothing can be changed
+  readOnly: boolean;
 }
 
 // The members of the team, among those of the org
-function MembersSection({ org, team }: SectionProps) {
+function MembersSection({ org, team, readOnly }: SectionProps) {
   const { t } = useTranslation();
   const { data: orgMembers } = useOrgMembers(org);
   const addMember = useAddTeamMember(org, team.name);
@@ -134,7 +145,7 @@ function MembersSection({ org, team }: SectionProps) {
       <Group justify="space-between">
         <Title order={3}>{t('team.members.title', { count: members.length })}</Title>
         {/* every member stays in users: nobody to add there */}
-        {others.length > 0 && (
+        {!readOnly && others.length > 0 && (
           <Select
             placeholder={t('team.members.add')}
             data={others.map((member) => ({ value: member.id, label: personName(member) }))}
@@ -164,7 +175,7 @@ function MembersSection({ org, team }: SectionProps) {
                 <Table.Td>
                   <Group justify="flex-end">
                     {/* the core refuses it for users (409): every member of the org stays in it */}
-                    {team.name !== 'users' && (
+                    {!readOnly && team.name !== 'users' && (
                       <Button variant="subtle" size="xs" color="red" onClick={() => setRemoveTarget(member)}>
                         {t('common.remove')}
                       </Button>
@@ -192,7 +203,7 @@ function MembersSection({ org, team }: SectionProps) {
 }
 
 // The products the team gives, with their features and quota of team
-function ProductsSection({ org, team }: SectionProps) {
+function ProductsSection({ org, team, readOnly }: SectionProps) {
   const { t, i18n } = useTranslation();
   const { data: available } = useAvailableProducts(org);
   const revokeProduct = useRevokeProduct(org, team.name);
@@ -221,9 +232,11 @@ function ProductsSection({ org, team }: SectionProps) {
     <Stack>
       <Group justify="space-between">
         <Title order={3}>{t('team.products.title', { count: team.products.length })}</Title>
-        <Button onClick={() => setGrantTarget('new')} disabled={left.length === 0}>
-          {t('team.products.give')}
-        </Button>
+        {!readOnly && (
+          <Button onClick={() => setGrantTarget('new')} disabled={left.length === 0}>
+            {t('team.products.give')}
+          </Button>
+        )}
       </Group>
       {available && available.length === 0 && <Text c="dimmed">{t('team.products.noneAssigned')}</Text>}
 
@@ -275,14 +288,16 @@ function ProductsSection({ org, team }: SectionProps) {
                         })}
                   </Table.Td>
                   <Table.Td>
-                    <Group gap="xs" justify="flex-end" wrap="nowrap">
-                      <Button variant="subtle" size="xs" onClick={() => setGrantTarget(given)}>
-                        {t('common.edit')}
-                      </Button>
-                      <Button variant="subtle" size="xs" color="red" onClick={() => setRemoveTarget(given)}>
-                        {t('common.remove')}
-                      </Button>
-                    </Group>
+                    {!readOnly && (
+                      <Group gap="xs" justify="flex-end" wrap="nowrap">
+                        <Button variant="subtle" size="xs" onClick={() => setGrantTarget(given)}>
+                          {t('common.edit')}
+                        </Button>
+                        <Button variant="subtle" size="xs" color="red" onClick={() => setRemoveTarget(given)}>
+                          {t('common.remove')}
+                        </Button>
+                      </Group>
+                    )}
                   </Table.Td>
                 </Table.Tr>
               ))}
@@ -323,7 +338,7 @@ function ProductsSection({ org, team }: SectionProps) {
 }
 
 // The catalog roles the team gives: those the realm owner made grantable, in the catalogs of the org
-function CatalogRolesSection({ org, team }: SectionProps) {
+function CatalogRolesSection({ org, team, readOnly }: SectionProps) {
   const { t } = useTranslation();
   const { data: grantable } = useGrantableRoles(org);
   const grantRole = useGrantCatalogRole(org, team.name);
@@ -355,7 +370,7 @@ function CatalogRolesSection({ org, team }: SectionProps) {
     <Stack>
       <Group justify="space-between">
         <Title order={3}>{t('team.catalogRoles.title', { count: team.catalogRoles.length })}</Title>
-        {left.length > 0 && (
+        {!readOnly && left.length > 0 && (
           <Select
             placeholder={t('team.catalogRoles.add')}
             // grouped by catalog, like the products: [{ group: 'prod', items: [...] }]
@@ -400,17 +415,19 @@ function CatalogRolesSection({ org, team }: SectionProps) {
                   resource_access.{given.catalog}: {given.role}
                 </Table.Td>
                 <Table.Td>
-                  <Group justify="flex-end">
-                    <Button
-                      variant="subtle"
-                      size="xs"
-                      color="red"
-                      loading={revokeRole.isPending && revokeRole.variables?.role === given.role}
-                      onClick={() => revokeRole.mutate({ catalog: given.catalog, role: given.role })}
-                    >
-                      {t('common.remove')}
-                    </Button>
-                  </Group>
+                  {!readOnly && (
+                    <Group justify="flex-end">
+                      <Button
+                        variant="subtle"
+                        size="xs"
+                        color="red"
+                        loading={revokeRole.isPending && revokeRole.variables?.role === given.role}
+                        onClick={() => revokeRole.mutate({ catalog: given.catalog, role: given.role })}
+                      >
+                        {t('common.remove')}
+                      </Button>
+                    </Group>
+                  )}
                 </Table.Td>
               </Table.Tr>
             ))}

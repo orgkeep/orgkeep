@@ -98,7 +98,18 @@
     "none": "Aucun",
     "tabs": {
       "members": "Membres",
-      "products": "Produits"
+      "products": "Produits",
+      "teams": "Teams"
+    },
+    "teams": {
+      "loadError": "Impossible de charger les teams",
+      "hint": "Gérées par les org admins : ce que chaque team donne à ses membres. Ouvrez une team pour voir ses membres, ses produits et ses rôles.",
+      "columns": {
+        "team": "Team",
+        "members": "Membres",
+        "products": "Produits",
+        "catalogRoles": "Rôles de catalogue"
+      }
     },
     "roles": {
       "ORG_OWNER": "org-owner",
@@ -427,6 +438,7 @@
     "backToTeams": "Retour aux teams",
     "hint": "Ce que donne cette team arrive dans les tokens de ses membres à leur prochain login ou refresh.",
     "usersHint": "Tous les membres de l'organisation sont dans cette team : ce qu'elle donne, tout le monde l'a.",
+    "readOnly": "Lecture seule : les org admins de l'organisation gèrent ses teams.",
     "members": {
       "title": "Membres ({{count}})",
       "add": "Ajouter un membre",

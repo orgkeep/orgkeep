@@ -18,7 +18,7 @@ import java.util.List;
  * is true (dev mode).
  * <p>
  * Swagger UI calls the Keycloak token endpoint from the browser, from another origin (localhost:8282 to
- * localhost:8180): Keycloak only answers with CORS headers for a client whose web origins allow it,
+ * localhost:8280): Keycloak only answers with CORS headers for a client whose web origins allow it,
  * which admin-cli does not. Hence a dedicated public client, allowed from any origin: dev only.
  */
 @Slf4j

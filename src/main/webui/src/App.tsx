@@ -5,6 +5,7 @@ import { useCurrentUser } from './api/currentUser';
 import { administeredOrgs, isRealmOwner } from './auth/roles';
 import AppLayout from './layout/AppLayout';
 import CatalogPage from './pages/CatalogPage';
+import CatalogRolePage from './pages/CatalogRolePage';
 import CatalogsPage from './pages/CatalogsPage';
 import HomePage from './pages/HomePage';
 import LoginClientPage from './pages/LoginClientPage';
@@ -55,6 +56,7 @@ export default function App() {
         {isRealmOwner(user) && <Route path="/catalogs" element={<CatalogsPage />} />}
         {isRealmOwner(user) && <Route path="/catalogs/:catalog" element={<CatalogPage />} />}
         {isRealmOwner(user) && <Route path="/catalogs/:catalog/products/:product" element={<ProductPage />} />}
+        {isRealmOwner(user) && <Route path="/catalogs/:catalog/roles/:role" element={<CatalogRolePage />} />}
         {isRealmOwner(user) && <Route path="/login-client" element={<LoginClientPage />} />}
         {administeredOrgs(user).length > 0 && <Route path="/orgs/:org/members" element={<OrgMembersPage />} />}
         {administeredOrgs(user).length > 0 && <Route path="/orgs/:org/teams" element={<OrgTeamsPage />} />}

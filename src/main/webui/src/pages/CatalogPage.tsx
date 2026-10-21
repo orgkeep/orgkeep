@@ -17,12 +17,13 @@ import {
 import { useDisclosure } from '@mantine/hooks';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router';
-import { type Catalog, useCatalog, useCatalogProducts, useDeleteCatalog } from '../api/catalogs';
+import { type Catalog, useCatalog, useCatalogProducts, useCatalogRoles, useDeleteCatalog } from '../api/catalogs';
 import ConfirmModal from '../components/ConfirmModal';
 import CatalogModal from './CatalogModal';
+import CatalogRoleModal from './CatalogRoleModal';
 import ProductModal from './ProductModal';
 
-// One catalog (realm owner): its header and its products.
+// One catalog (realm owner): its header, its products and its roles.
 export default function CatalogPage() {
   const { t } = useTranslation();
   // the :catalog part of the route /catalogs/:catalog. Always set on this route, hence the "!"
@@ -56,6 +57,7 @@ export default function CatalogPage() {
 
       <CatalogHeader catalog={catalog} />
       <ProductsSection catalog={catalog.name} />
+      <RolesSection catalog={catalog.name} />
       <TokenHint catalog={catalog.name} />
     </Stack>
   );
@@ -203,6 +205,87 @@ function ProductsSection({ catalog }: { catalog: string }) {
         onSaved={(product) => navigate(`/catalogs/${catalog}/products/${product.name}`)}
       />
     </Stack>
+  );
+}
+
+// The catalog roles: valid for the whole catalog, given by the org admins (grantable) or by the realm owner only
+function RolesSection({ catalog }: { catalog: string }) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { data: roles, isPending, error } = useCatalogRoles(catalog);
+  const [createOpened, { open: openCreate, close: closeCreate }] = useDisclosure();
+
+  return (
+    <Stack>
+      <Group justify="space-between" align="flex-end">
+        <div>
+          <Title order={3}>{t('catalogDetail.roles.title')}</Title>
+          <Text c="dimmed">{t('catalogDetail.roles.subtitle')}</Text>
+        </div>
+        <Button onClick={openCreate}>{t('catalogDetail.roles.new')}</Button>
+      </Group>
+
+      {isPending && <Loader size="sm" />}
+
+      {error && (
+        <Alert color="red" title={t('catalogDetail.roles.loadError')}>
+          {error.message}
+        </Alert>
+      )}
+
+      {roles && roles.length === 0 && <Text c="dimmed">{t('catalogDetail.roles.empty')}</Text>}
+
+      {roles && roles.length > 0 && (
+        <Table.ScrollContainer minWidth={600}>
+          <Table highlightOnHover withTableBorder>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>{t('catalogDetail.roles.columns.role')}</Table.Th>
+                <Table.Th>{t('catalogDetail.roles.columns.description')}</Table.Th>
+                <Table.Th>{t('catalogDetail.roles.columns.grantedBy')}</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {roles.map((role) => (
+                <Table.Tr key={role.name}>
+                  <Table.Td>
+                    <Anchor component={Link} to={`/catalogs/${catalog}/roles/${role.name}`} fw={500}>
+                      {role.displayName ?? role.name}
+                    </Anchor>
+                    <Text size="xs" c="dimmed" ff="monospace">
+                      {role.name}
+                    </Text>
+                  </Table.Td>
+                  <Table.Td c="dimmed">{role.description}</Table.Td>
+                  <Table.Td>
+                    <RoleKindBadge orgGrantable={role.orgGrantable} />
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
+      )}
+
+      {/* once created, the role opens on its page */}
+      <CatalogRoleModal
+        catalog={catalog}
+        opened={createOpened}
+        onClose={closeCreate}
+        current={null}
+        onSaved={(role) => navigate(`/catalogs/${catalog}/roles/${role.name}`)}
+      />
+    </Stack>
+  );
+}
+
+// Who gives a catalog role: the org admins through their teams, or the realm owner only. Shared with CatalogRolePage
+export function RoleKindBadge({ orgGrantable }: { orgGrantable: boolean }) {
+  const { t } = useTranslation();
+  return (
+    <Badge variant="light" color={orgGrantable ? 'blue' : 'orange'} tt="none">
+      {orgGrantable ? t('catalogDetail.roles.grantable') : t('catalogDetail.roles.reserved')}
+    </Badge>
   );
 }
 

@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { deleteRequest, getJson, postJson, putJson } from './http';
+import { deleteRequest, getJson, postJson, putJson, putRequest } from './http';
 import type { Feature, ParamDefinition, Product } from './products';
 
-// The catalogs endpoints of the API of the core (CatalogsResource and ProductsResource in orgkeep-core),
+// The catalogs endpoints of the API of the core (CatalogsResource, ProductsResource and CatalogRolesResource in orgkeep-core),
 // called directly by the front. Mirror the records of io.orgkeep.api.model.
 // Written by hand for now: to be replaced by types generated from /q/openapi.
 
@@ -149,6 +149,118 @@ export function useDeleteProduct(catalog: string) {
       queryClient.removeQueries({ queryKey: [CATALOGS_KEY, 'detail', catalog, 'products', product] });
       return refreshCatalogs(queryClient);
     },
+  });
+}
+
+// ---- Catalog roles (CatalogRolesResource) ----
+
+// A role valid for the whole catalog (scanner, beta-tester...), in resource_access.<catalog>.roles of the tokens
+export interface CatalogRole {
+  catalog: string;
+  name: string;
+  displayName: string | null;
+  description: string | null;
+  // true: the org admins give it through their teams. False: reserved, only the realm owner gives it, to a user
+  orgGrantable: boolean;
+}
+
+export interface CreateCatalogRoleRequest {
+  name: string;
+  displayName: string | null;
+  description: string | null;
+  orgGrantable: boolean;
+}
+
+// the name of a role cannot change
+export interface UpdateCatalogRoleRequest {
+  displayName: string | null;
+  description: string | null;
+  orgGrantable: boolean;
+}
+
+// A user holding the role directly (given by the realm owner), not through a team
+export interface RoleHolder {
+  userId: string;
+  username: string;
+  email: string | null;
+}
+
+function rolesUrl(catalog: string): string {
+  return `${catalogUrl(catalog)}/roles`;
+}
+
+function roleUrl(catalog: string, role: string): string {
+  return `${rolesUrl(catalog)}/${encodeURIComponent(role)}`;
+}
+
+// A change of a role also changes the teams: a role made reserved leaves them, a deleted one too
+function refreshRoles(queryClient: ReturnType<typeof useQueryClient>) {
+  queryClient.invalidateQueries({ queryKey: ['teams'] });
+  return refreshCatalogs(queryClient);
+}
+
+export function useCatalogRoles(catalog: string) {
+  return useQuery({
+    queryKey: [CATALOGS_KEY, 'detail', catalog, 'roles'],
+    queryFn: () => getJson<CatalogRole[]>(rolesUrl(catalog)),
+  });
+}
+
+export function useCatalogRole(catalog: string, role: string) {
+  return useQuery({
+    queryKey: [CATALOGS_KEY, 'detail', catalog, 'roles', role],
+    queryFn: () => getJson<CatalogRole>(roleUrl(catalog, role)),
+  });
+}
+
+export function useCreateCatalogRole(catalog: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (request: CreateCatalogRoleRequest) => postJson<CatalogRole>(rolesUrl(catalog), request),
+    onSuccess: () => refreshRoles(queryClient),
+  });
+}
+
+export function useUpdateCatalogRole(catalog: string, role: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (request: UpdateCatalogRoleRequest) => putJson<CatalogRole>(roleUrl(catalog, role), request),
+    onSuccess: () => refreshRoles(queryClient),
+  });
+}
+
+export function useDeleteCatalogRole(catalog: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (role: string) => deleteRequest(roleUrl(catalog, role)),
+    onSuccess: (_result, role) => {
+      queryClient.removeQueries({ queryKey: [CATALOGS_KEY, 'detail', catalog, 'roles', role] });
+      return refreshRoles(queryClient);
+    },
+  });
+}
+
+export function useRoleHolders(catalog: string, role: string) {
+  return useQuery({
+    queryKey: [CATALOGS_KEY, 'detail', catalog, 'roles', role, 'users'],
+    queryFn: () => getJson<RoleHolder[]>(`${roleUrl(catalog, role)}/users`),
+  });
+}
+
+// Gives the role directly to a user, who must be a member of an organisation (409 otherwise). Idempotent
+export function useGrantRoleToUser(catalog: string, role: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: string) => putRequest(`${roleUrl(catalog, role)}/users/${encodeURIComponent(userId)}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: [CATALOGS_KEY, 'detail', catalog, 'roles', role] }),
+  });
+}
+
+export function useRevokeRoleFromUser(catalog: string, role: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: string) => deleteRequest(`${roleUrl(catalog, role)}/users/${encodeURIComponent(userId)}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: [CATALOGS_KEY, 'detail', catalog, 'roles', role] }),
   });
 }
 

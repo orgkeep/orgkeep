@@ -238,6 +238,61 @@
       "scope": "Une application reçoit ce catalogue par défaut, ou le demande avec",
       "kinds": "Ici billing est un produit simple (un rôle d'accès, un quota), shop un produit à features mesurées (pas de rôle d'accès, un quota par feature mesurée, chaque entrée dit sa feature).",
       "usage": "Orgkeep ne compte pas l'usage : votre API compare ses propres compteurs aux limites du token."
+    },
+    "roles": {
+      "title": "Rôles",
+      "subtitle": "Valables pour tout le catalogue, pas pour un produit : ce qu'un user peut faire dans cet environnement (scanner, beta-tester...). Votre API les combine avec les produits du user.",
+      "new": "Nouveau rôle",
+      "loadError": "Impossible de charger les rôles",
+      "empty": "Aucun rôle dans ce catalogue.",
+      "columns": {
+        "role": "Rôle",
+        "description": "Description",
+        "grantedBy": "Donné par"
+      },
+      "grantable": "Org admins",
+      "reserved": "Vous seulement"
+    }
+  },
+  "catalogRoleForm": {
+    "createTitle": "Nouveau rôle",
+    "editTitle": "Modifier {{role}}",
+    "name": "Nom",
+    "nameDescription": "Lettres minuscules, chiffres et tirets. Non modifiable ensuite : c'est le nom dans les tokens.",
+    "nameInvalid": "Lettres minuscules, chiffres et tirets internes uniquement",
+    "displayName": "Nom affiché",
+    "description": "Description",
+    "orgGrantable": "Les org admins peuvent le donner",
+    "orgGrantableDescription": "Activé : les org admins le donnent à leurs teams. Désactivé : réservé, vous seul le donnez, à un user (comptes de test, partenaires...).",
+    "orgGrantableWarning": "Désactiver retire le rôle des teams de toutes les organisations. Les users à qui vous l'avez donné le gardent."
+  },
+  "catalogRole": {
+    "loadError": "Impossible de charger le rôle {{role}}",
+    "grantableHint": "Les org admins le donnent à leurs teams, dans les organisations qui ont un produit de ce catalogue. Vous pouvez aussi le donner à un user ci-dessous.",
+    "reservedHint": "Réservé : vous seul le donnez, à un user ci-dessous.",
+    "delete": {
+      "title": "Supprimer le rôle {{role}} ?",
+      "message": "Il est retiré des teams et des users qui l'ont. Action irréversible."
+    },
+    "users": {
+      "title": "Donné par vous",
+      "subtitle": "Les users qui ont le rôle directement, quelles que soient leurs teams. Seulement des membres d'une organisation.",
+      "loadError": "Impossible de charger les users",
+      "empty": "Donné à personne directement.",
+      "organisation": "Organisation",
+      "organisationPlaceholder": "Choisir une organisation",
+      "member": "Donner à",
+      "memberPlaceholder": "Choisir un membre",
+      "columns": {
+        "user": "User",
+        "email": "Email"
+      },
+      "removeTitle": "Retirer {{role}} ?",
+      "removeMessage": "{{user}} perd le rôle (sauf si une team le lui donne)."
+    },
+    "token": {
+      "title": "Dans les tokens",
+      "scope": "Seulement si le token a le catalogue : par défaut, ou demandé avec"
     }
   },
   "productForm": {

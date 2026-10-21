@@ -145,4 +145,17 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!--
+        mvn package -Pdocker : also builds the image orgkeep/orgkeep:<version>, the core plus the front (needs a Docker
+        daemon). The Docker extension comes with orgkeep-core, see src/main/docker/Dockerfile.jvm.
+        -->
+        <profile>
+            <id>docker</id>
+            <properties>
+                <quarkus.container-image.build>true</quarkus.container-image.build>
+            </properties>
+        </profile>
+    </profiles>
 </project>

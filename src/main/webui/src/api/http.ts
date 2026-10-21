@@ -77,6 +77,11 @@ export async function putJson<T>(url: string, body: unknown): Promise<T> {
   return (await request('PUT', url, body)).json();
 }
 
+// A PUT without body, answered 204 No Content (e.g. putting a member in a team): nothing to parse, hence void
+export async function putRequest(url: string): Promise<void> {
+  await request('PUT', url);
+}
+
 // The backend answers 204 No Content, or the changed resource that nobody reads: nothing to parse, hence void
 export async function deleteRequest(url: string): Promise<void> {
   await request('DELETE', url);

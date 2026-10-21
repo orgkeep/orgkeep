@@ -21,7 +21,8 @@
     "organisations": "Organisations",
     "catalogs": "Catalogs",
     "organisation": "Organisation {{org}}",
-    "members": "Members"
+    "members": "Members",
+    "teams": "Teams"
   },
   "login": {
     "subtitle": "Sign in to manage your organisations.",
@@ -289,6 +290,99 @@
     }
   },
   "members": {
-    "title": "Members of {{org}}"
+    "title": "Members of {{org}}",
+    "loadError": "Could not load the members of {{org}}",
+    "empty": "No member yet.",
+    "add": "Add a member",
+    "columns": {
+      "name": "Name",
+      "email": "Email",
+      "role": "Role"
+    },
+    "removeTitle": "Remove {{member}}?",
+    "removeMessage": "The member leaves the organisation {{org}} and its teams, and loses their products. The account is kept.",
+    "form": {
+      "title": "Add a member to {{org}}",
+      "email": "Email",
+      "emailInvalid": "A valid email address",
+      "firstName": "First name",
+      "lastName": "Last name",
+      "invitation": "A new user receives an email to choose a password. The member joins the team users.",
+      "submit": "Add"
+    }
+  },
+  "teams": {
+    "title": "Teams of {{org}}",
+    "subtitle": "A team gives products of the organisation and catalog roles to its members. The team users holds every member: what it gives, everybody has.",
+    "loadError": "Could not load the teams of {{org}}",
+    "create": "New team",
+    "predefined": "predefined",
+    "columns": {
+      "name": "Team",
+      "members": "Members",
+      "products": "Products",
+      "catalogRoles": "Catalog roles"
+    },
+    "deleteTitle": "Delete the team {{team}}?",
+    "deleteMessage": "Its members lose what it gives, unless another team gives it too.",
+    "form": {
+      "title": "New team in {{org}}",
+      "name": "Name",
+      "nameDescription": "Lowercase letters, digits and inner hyphens. It cannot be changed afterwards.",
+      "nameInvalid": "Lowercase letters, digits and inner hyphens only",
+      "poolHint": "With a quota of team, its pool is named {{pool}} in the tokens."
+    }
+  },
+  "team": {
+    "notFound": "No team {{team}}",
+    "backToTeams": "Back to the teams",
+    "hint": "What this team gives reaches the tokens of its members at their next login or token refresh.",
+    "usersHint": "Every member of the organisation is in this team: what it gives, everybody has.",
+    "members": {
+      "title": "Members ({{count}})",
+      "add": "Add a member",
+      "empty": "No member in this team.",
+      "removeTitle": "Take {{member}} out of {{team}}?",
+      "removeMessage": "The member loses what this team gives, unless another team gives it too."
+    },
+    "products": {
+      "title": "Products ({{count}})",
+      "give": "Give a product",
+      "empty": "The team gives no product.",
+      "noneAssigned": "The organisation has no product yet: the realm owner assigns them.",
+      "allRoles": "all bought",
+      "orgPoolOnly": "pool of the org",
+      "quota": "{{quota}} / {{cycle}}",
+      "columns": {
+        "product": "Product",
+        "roles": "Roles",
+        "quota": "Quota of team"
+      },
+      "removeTitle": "Stop giving {{product}}?",
+      "removeMessage": "The members lose this product, unless another team gives it."
+    },
+    "catalogRoles": {
+      "title": "Catalog roles ({{count}})",
+      "add": "Give a catalog role",
+      "hint": "Valid for every product of the catalog: what the APIs combine with the products of the user.",
+      "empty": "The team gives no catalog role."
+    },
+    "grant": {
+      "title": "Give a product to {{team}}",
+      "editTitle": "{{product}} in {{team}}",
+      "product": "Product",
+      "productPlaceholder": "Choose a product of the organisation",
+      "productRequired": "Choose a product",
+      "allRoles": "Every role the organisation bought",
+      "allRolesDescription": "Including those it buys later.",
+      "roles": "Roles given",
+      "rolesDescription": "Among those the organisation bought. None: the product alone.",
+      "quota": "Quota of team",
+      "quotaDescription": "Optional: a budget shared by the members, on top of the pool of the organisation ({{quota}} / {{cycle}}).",
+      "quotaInvalid": "A whole number greater than 0, or empty",
+      "cycle": "Cycle",
+      "poolHint": "Pool {{pool}} in the tokens. A member is in at most one team with a quota per product.",
+      "submit": "Give"
+    }
   }
 }

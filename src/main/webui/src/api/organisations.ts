@@ -162,7 +162,45 @@ export function useOrgMembers(org: string) {
   return useQuery({
     queryKey: [ORGANISATIONS_KEY, 'detail', org, 'members'],
     // the path of the org admins (/api/organisations/{org}/members): the core opens it to the realm owner too
-    queryFn: () => getJson<OrgMember[]>(`/api/organisations/${encodeURIComponent(org)}/members`),
+    queryFn: () => getJson<OrgMember[]>(membersUrl(org)),
+  });
+}
+
+export interface AddMemberRequest {
+  email: string;
+  // optional: the member can fill them in at the first login
+  firstName: string | null;
+  lastName: string | null;
+}
+
+function membersUrl(org: string): string {
+  return `/api/organisations/${encodeURIComponent(org)}/members`;
+}
+
+// After a member change: the members, the member count of the org, and the teams (every member is in "users")
+function useInvalidateMembers(org: string) {
+  const queryClient = useQueryClient();
+  return () => {
+    queryClient.invalidateQueries({ queryKey: ['teams', org] });
+    return queryClient.invalidateQueries({ queryKey: [ORGANISATIONS_KEY] });
+  };
+}
+
+// The core creates the user if needed and sends the invitation email (choose a password)
+export function useAddOrgMember(org: string) {
+  const invalidate = useInvalidateMembers(org);
+  return useMutation({
+    mutationFn: (request: AddMemberRequest) => postJson<OrgMember>(membersUrl(org), request),
+    onSuccess: invalidate,
+  });
+}
+
+// The user is kept in Keycloak, only taken out of the org (and of its teams)
+export function useRemoveOrgMember(org: string) {
+  const invalidate = useInvalidateMembers(org);
+  return useMutation({
+    mutationFn: (userId: string) => deleteRequest(`${membersUrl(org)}/${encodeURIComponent(userId)}`),
+    onSuccess: invalidate,
   });
 }
 

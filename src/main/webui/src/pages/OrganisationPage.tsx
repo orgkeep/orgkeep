@@ -22,7 +22,6 @@ import {
   type OrgDetails,
   type OrgMember,
   type OrgProduct,
-  type OrgRole,
   useDeleteOrganisation,
   useOrganisation,
   useOrgMembers,
@@ -32,6 +31,7 @@ import {
 import { type Product, productKey, useProducts } from '../api/products';
 import ConfirmModal from '../components/ConfirmModal';
 import AssignProductModal from './AssignProductModal';
+import { ROLE_COLORS } from './orgRoles';
 import { personName } from './personName';
 
 // The two tabs of the page. The selected one is in the URL (?tab=products) like the product filter of the list:
@@ -179,13 +179,6 @@ function OrgHeader({ details }: { details: OrgDetails }) {
   );
 }
 
-// The colors of the role badges: owner > admin > user
-const ROLE_COLORS: Record<OrgRole, string> = {
-  ORG_OWNER: 'orange',
-  ORG_ADMIN: 'blue',
-  ORG_USER: 'gray',
-};
-
 interface MembersTabProps {
   // undefined while loading
   members: OrgMember[] | undefined;
@@ -193,7 +186,7 @@ interface MembersTabProps {
   error: Error | null;
 }
 
-// Read only for now: adding and removing members will come with the members page of the org admins
+// Read only: the org admins add and remove members on their own page (OrgMembersPage)
 function MembersTab({ members, isPending, error }: MembersTabProps) {
   const { t } = useTranslation();
 

@@ -32,7 +32,10 @@ export function buildMenu(user: CurrentUser, t: TFunction): MenuSection[] {
   for (const org of administeredOrgs(user)) {
     sections.push({
       title: t('menu.organisation', { org }),
-      items: [{ label: t('menu.members'), path: `/orgs/${org}/members` }],
+      items: [
+        { label: t('menu.members'), path: `/orgs/${org}/members` },
+        { label: t('menu.teams'), path: `/orgs/${org}/teams` },
+      ],
     });
   }
 

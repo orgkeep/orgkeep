@@ -12,7 +12,9 @@ import NotFoundPage from './pages/NotFoundPage';
 import OrganisationPage from './pages/OrganisationPage';
 import OrganisationsPage from './pages/OrganisationsPage';
 import OrgMembersPage from './pages/OrgMembersPage';
+import OrgTeamsPage from './pages/OrgTeamsPage';
 import ProductPage from './pages/ProductPage';
+import TeamPage from './pages/TeamPage';
 
 export default function App() {
   // t(key) returns the text of the current language, like a Spring MessageSource.getMessage(key)
@@ -53,6 +55,8 @@ export default function App() {
         {isRealmOwner(user) && <Route path="/catalogs/:catalog" element={<CatalogPage />} />}
         {isRealmOwner(user) && <Route path="/catalogs/:catalog/products/:product" element={<ProductPage />} />}
         {administeredOrgs(user).length > 0 && <Route path="/orgs/:org/members" element={<OrgMembersPage />} />}
+        {administeredOrgs(user).length > 0 && <Route path="/orgs/:org/teams" element={<OrgTeamsPage />} />}
+        {administeredOrgs(user).length > 0 && <Route path="/orgs/:org/teams/:team" element={<TeamPage />} />}
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </AppLayout>

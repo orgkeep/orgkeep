@@ -3,7 +3,7 @@ package io.orgkeep.components.catalog;
 import io.orgkeep.api.model.Catalogs;
 import io.orgkeep.api.model.CreateCatalogRequest;
 import io.orgkeep.api.model.CreateProductRequest;
-import io.orgkeep.api.model.ProductRole;
+import io.orgkeep.api.model.Feature;
 import io.orgkeep.api.model.UpdateCatalogRequest;
 import io.orgkeep.fixtures.TestRealm;
 import io.orgkeep.web.CurrentRealm;
@@ -181,11 +181,11 @@ class CatalogsResourceTest {
     void deleteWithProductsReturns409() {
         createCatalog(SANDBOX);
         given().contentType(ContentType.JSON)
-                .body(new CreateProductRequest("billing", "Billing", null, List.of(new ProductRole("read", null)), List.of()))
+                .body(new CreateProductRequest("billing", "Billing", null, List.of(new Feature("read", null)), List.of()))
                 .when().post(BASE + "/{catalog}/products", SANDBOX)
                 .then().statusCode(201);
 
-        // the role of the product is not a product
+        // the feature of the product is not a product
         given().when().get(BASE + "/{catalog}", SANDBOX)
                 .then().statusCode(200)
                 .body("productCount", equalTo(1));

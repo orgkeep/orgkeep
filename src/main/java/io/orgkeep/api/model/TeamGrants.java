@@ -8,11 +8,11 @@ package io.orgkeep.api.model;
  *       team when the assignment of the product changes;</li>
  *   <li>what is <b>derived</b> from them and from the assignment, read by the native mappers of the product
  *       ({@link CatalogRoles#quotasAttribute}, {@link CatalogRoles#paramsAttribute}), next to the role mappings of the
- *       group (the product, its roles granted ∩ bought, the catalog roles).</li>
+ *       group (the product, its features granted ∩ bought, the catalog roles).</li>
  * </ul>
  * <pre>
  * grant:prod:shop-repository              = all | listed   the team gives the product
- * grant:prod:shop-repository:roles        = scan, ...      if listed: the roles asked for (absent: none)
+ * grant:prod:shop-repository:features     = scan, ...      if listed: the features asked for (absent: none)
  * grant:prod:shop-repository:quota        = 300            optional quota of the team
  * grant:prod:shop-repository:quota-cycle  = monthly        its cycle
  * </pre>
@@ -23,10 +23,10 @@ public final class TeamGrants {
     public static final String PREFIX = "grant:";
     private static final String SEPARATOR = ":";
 
-    /** Value of {@link #product}: every role the org bought, those it buys later included. */
-    public static final String ALL_ROLES = "all";
-    /** Value of {@link #product}: only the roles in {@link #roles}, among those bought. */
-    public static final String LISTED_ROLES = "listed";
+    /** Value of {@link #product}: every feature the org bought, those it buys later included. */
+    public static final String ALL_FEATURES = "all";
+    /** Value of {@link #product}: only the features in {@link #features}, among those bought. */
+    public static final String LISTED_FEATURES = "listed";
 
     private TeamGrants() {
     }
@@ -36,9 +36,9 @@ public final class TeamGrants {
         return PREFIX + catalog + SEPARATOR + product;
     }
 
-    /** Multivalued attribute of the roles of the product the team gives, without the product prefix. */
-    public static String roles(String catalog, String product) {
-        return product(catalog, product) + SEPARATOR + "roles";
+    /** Multivalued attribute of the features of the product the team gives, without the product prefix. */
+    public static String features(String catalog, String product) {
+        return product(catalog, product) + SEPARATOR + "features";
     }
 
     public static String quota(String catalog, String product) {
@@ -51,7 +51,7 @@ public final class TeamGrants {
 
     /**
      * The catalog and the product of a {@link #product} attribute ("grant:prod:billing" gives ["prod", "billing"]),
-     * null for another attribute (the roles or quota of a grant included).
+     * null for another attribute (the features or quota of a grant included).
      */
     public static String[] productOf(String attribute) {
         if (!attribute.startsWith(PREFIX)) {

@@ -2,12 +2,12 @@ package io.orgkeep.components.catalog.product;
 
 import io.orgkeep.api.model.AssignProductRequest;
 import io.orgkeep.api.model.CatalogRoles;
+import io.orgkeep.api.model.Feature;
 import io.orgkeep.api.model.OrgGroups;
 import io.orgkeep.api.model.OrgProduct;
 import io.orgkeep.api.model.ParamDefinition;
 import io.orgkeep.api.model.ParamType;
 import io.orgkeep.api.model.Product;
-import io.orgkeep.api.model.ProductRole;
 import io.orgkeep.api.model.QuotaCycle;
 import org.keycloak.representations.idm.GroupRepresentation;
 import org.keycloak.representations.idm.ProtocolMapperRepresentation;
@@ -53,41 +53,48 @@ public interface ProductMapper {
         return role;
     }
 
-    /** The client role of a role of a product, e.g. "shop-repository:scan". */
-    default RoleRepresentation toRoleRepresentation(String product, ProductRole productRole) {
+    /** The client role of a feature of a product, e.g. "shop-repository:scan". */
+    default RoleRepresentation toRoleRepresentation(String product, Feature feature) {
         Map<String, List<String>> attributes = new HashMap<>();
-        attributes.put(CatalogRoles.TYPE, List.of(CatalogRoles.TYPE_PRODUCT_ROLE));
+        attributes.put(CatalogRoles.TYPE, List.of(CatalogRoles.TYPE_FEATURE));
         attributes.put(CatalogRoles.PRODUCT, List.of(product));
-        if (productRole.displayName() != null) {
-            attributes.put(CatalogRoles.DISPLAY_NAME, List.of(productRole.displayName()));
+        attributes.put(CatalogRoles.METERED, List.of(String.valueOf(feature.metered())));
+        if (feature.displayName() != null) {
+            attributes.put(CatalogRoles.DISPLAY_NAME, List.of(feature.displayName()));
         }
-        RoleRepresentation role = new RoleRepresentation(CatalogRoles.productRole(product, productRole.name()), null, false);
+        RoleRepresentation role = new RoleRepresentation(CatalogRoles.feature(product, feature.name()), null, false);
         role.setAttributes(attributes);
         return role;
     }
 
     /**
-     * @param roles    every role of the catalog client, full representations: the roles of this product are picked out
+     * @param roles    every role of the catalog client, full representations: the features of this product are picked out
      * @param orgCount number of orgs the product is assigned to
      */
     default Product toProduct(String catalog, RoleRepresentation product, List<RoleRepresentation> roles, int orgCount) {
-        List<ProductRole> productRoles = roles.stream()
-                .filter(role -> isRoleOf(role, product.getName()))
-                .map(role -> new ProductRole(
-                        role.getName().substring(product.getName().length() + CatalogRoles.SEPARATOR.length()),
-                        firstValue(role.getAttributes(), CatalogRoles.DISPLAY_NAME)))
-                .sorted(Comparator.comparing(ProductRole::name))
+        List<Feature> features = roles.stream()
+                .filter(role -> isFeatureOf(role, product.getName()))
+                .map(role -> toFeature(product.getName(), role))
+                .sorted(Comparator.comparing(Feature::name))
                 .toList();
         return new Product(catalog, product.getName(), firstValue(product.getAttributes(), CatalogRoles.DISPLAY_NAME),
-                blankToNull(product.getDescription()), productRoles, params(product.getAttributes()), orgCount);
+                blankToNull(product.getDescription()), features, params(product.getAttributes()), orgCount);
+    }
+
+    /** The feature of a client role of the product ("shop-repository:scan" gives "scan"). */
+    default Feature toFeature(String product, RoleRepresentation role) {
+        return new Feature(
+                role.getName().substring(product.length() + CatalogRoles.SEPARATOR.length()),
+                firstValue(role.getAttributes(), CatalogRoles.DISPLAY_NAME),
+                Boolean.parseBoolean(firstValue(role.getAttributes(), CatalogRoles.METERED)));
     }
 
     default boolean isProduct(RoleRepresentation role) {
         return CatalogRoles.TYPE_PRODUCT.equals(CatalogRoles.typeOf(role.getAttributes()));
     }
 
-    default boolean isRoleOf(RoleRepresentation role, String product) {
-        return CatalogRoles.TYPE_PRODUCT_ROLE.equals(CatalogRoles.typeOf(role.getAttributes()))
+    default boolean isFeatureOf(RoleRepresentation role, String product) {
+        return CatalogRoles.TYPE_FEATURE.equals(CatalogRoles.typeOf(role.getAttributes()))
                 && product.equals(firstValue(role.getAttributes(), CatalogRoles.PRODUCT));
     }
 
@@ -158,8 +165,8 @@ public interface ProductMapper {
         Map<String, List<String>> attributes = new HashMap<>();
         attributes.put(OrgGroups.QUOTA_ATTRIBUTE, List.of(request.quota().toString()));
         attributes.put(OrgGroups.QUOTA_CYCLE_ATTRIBUTE, List.of(request.cycle().getValue()));
-        if (!request.boughtRoles().isEmpty()) {
-            attributes.put(OrgGroups.BOUGHT_ROLES_ATTRIBUTE, request.boughtRoles().stream().distinct().sorted().toList());
+        if (!request.boughtFeatures().isEmpty()) {
+            attributes.put(OrgGroups.BOUGHT_FEATURES_ATTRIBUTE, request.boughtFeatures().stream().distinct().sorted().toList());
         }
         params.forEach((name, value) -> attributes.put(OrgGroups.paramAttribute(name), List.of(value)));
         return attributes;
@@ -172,7 +179,7 @@ public interface ProductMapper {
         return new OrgProduct(catalog, group.getName(), group.getId(),
                 parseQuota(firstValue(attributes, OrgGroups.QUOTA_ATTRIBUTE)),
                 cycle == null ? null : QuotaCycle.fromValue(cycle).orElse(null),
-                attributes.getOrDefault(OrgGroups.BOUGHT_ROLES_ATTRIBUTE, List.of()).stream().sorted().toList(),
+                attributes.getOrDefault(OrgGroups.BOUGHT_FEATURES_ATTRIBUTE, List.of()).stream().sorted().toList(),
                 paramValues(attributes));
     }
 

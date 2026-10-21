@@ -21,10 +21,10 @@ import io.orgkeep.api.model.CreateCatalogRoleRequest;
 import io.orgkeep.api.model.CreateOrgRequest;
 import io.orgkeep.api.model.CreateProductRequest;
 import io.orgkeep.api.model.CreateUserGroupRequest;
+import io.orgkeep.api.model.Feature;
 import io.orgkeep.api.model.GrantProductRequest;
 import io.orgkeep.api.model.ParamDefinition;
 import io.orgkeep.api.model.ParamType;
-import io.orgkeep.api.model.ProductRole;
 import io.orgkeep.api.model.QuotaCycle;
 import io.orgkeep.api.model.TeamCatalogRole;
 import io.orgkeep.api.model.TeamProduct;
@@ -56,7 +56,7 @@ import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
  * Keycloak directly: the role mappings and attributes of the group of the team are what the native mappers put in
  * the tokens (the tokens themselves are checked by TeamTokenTest).
  * <p>
- * Common setup: the catalog "prod" with the product "shop-repository" (roles scan and flow, an enum parameter
+ * Common setup: the catalog "prod" with the product "shop-repository" (features scan and flow, an enum parameter
  * region), assigned to the org "acme" with a quota of 1000 a month, the org bought "scan" only. The team "ops" has
  * one member, alice.
  */
@@ -88,7 +88,7 @@ class TeamServiceTest {
         testRealm = TestRealm.create(keycloak);
         catalogService.create(realmName(), new CreateCatalogRequest(CATALOG, "Production", null));
         productService.create(realmName(), CATALOG, new CreateProductRequest(PRODUCT, "Shop repository", null,
-                List.of(new ProductRole("scan", "Scan engine"), new ProductRole("flow", null)), List.of(REGION)));
+                List.of(new Feature("scan", "Scan engine"), new Feature("flow", null)), List.of(REGION)));
         orgService.create(realmName(), new CreateOrgRequest(ORG, Set.of(), null, null));
         assign(List.of("scan"));
         userGroupService.create(realmName(), ORG, new CreateUserGroupRequest(TEAM));
@@ -101,10 +101,10 @@ class TeamServiceTest {
         testRealm.close();
     }
 
-    // no role listed: the team gives the product with every role the org bought, the pool of the org, its parameters
+    // no feature listed: the team gives the product with every feature the org bought, the pool of the org, its parameters
     @Test
-    void grantWithoutRolesGivesEveryBoughtRole() {
-        TeamProduct given = teamService.grantProduct(realmName(), ORG, TEAM, CATALOG, PRODUCT, GrantProductRequest.allRoles());
+    void grantWithoutFeaturesGivesEveryBoughtFeature() {
+        TeamProduct given = teamService.grantProduct(realmName(), ORG, TEAM, CATALOG, PRODUCT, GrantProductRequest.allFeatures());
 
         assertEquals(new TeamProduct(CATALOG, PRODUCT, null, List.of("scan"), null, null), given);
         assertEquals(Set.of(PRODUCT, PRODUCT + ":scan"), teamRoles(TEAM));
@@ -114,19 +114,19 @@ class TeamServiceTest {
         assertEquals(List.of("all"), attributes.get("grant:prod:shop-repository"));
     }
 
-    // "every role bought" follows the purchases: a role bought later reaches the team without the org admin
+    // "every feature bought" follows the purchases: a feature bought later reaches the team without the org admin
     @Test
-    void everyBoughtRoleFollowsThePurchases() {
-        teamService.grantProduct(realmName(), ORG, TEAM, CATALOG, PRODUCT, GrantProductRequest.allRoles());
+    void everyBoughtFeatureFollowsThePurchases() {
+        teamService.grantProduct(realmName(), ORG, TEAM, CATALOG, PRODUCT, GrantProductRequest.allFeatures());
 
         assign(List.of("scan", "flow"));
 
         assertEquals(Set.of(PRODUCT, PRODUCT + ":scan", PRODUCT + ":flow"), teamRoles(TEAM));
     }
 
-    // a listed role is given only while the org has bought it, and comes back when the org buys it again
+    // a listed feature is given only while the org has bought it, and comes back when the org buys it again
     @Test
-    void listedRolesAreCappedByThePurchases() {
+    void listedFeaturesAreCappedByThePurchases() {
         teamService.grantProduct(realmName(), ORG, TEAM, CATALOG, PRODUCT, new GrantProductRequest(List.of("scan"), null, null));
         assertEquals(Set.of(PRODUCT, PRODUCT + ":scan"), teamRoles(TEAM));
 
@@ -138,13 +138,13 @@ class TeamServiceTest {
         assertEquals(Set.of(PRODUCT, PRODUCT + ":scan"), teamRoles(TEAM));
     }
 
-    // an empty list: the product without any role (the catalog roles of the user decide what they can do)
+    // an empty list: the product without any feature (the catalog roles of the user decide what they can do)
     @Test
     void grantWithAnEmptyListGivesTheProductAlone() {
         TeamProduct given = teamService.grantProduct(realmName(), ORG, TEAM, CATALOG, PRODUCT,
                 new GrantProductRequest(List.of(), null, null));
 
-        assertEquals(List.of(), given.roles());
+        assertEquals(List.of(), given.features());
         assertEquals(Set.of(PRODUCT), teamRoles(TEAM));
     }
 
@@ -158,9 +158,9 @@ class TeamServiceTest {
                 CATALOG, PRODUCT, new GrantProductRequest(null, null, QuotaCycle.DAILY)));
         productService.create(realmName(), CATALOG, new CreateProductRequest("billing", "Billing", null));
         assertThrowsExactly(ProductNotAssignedException.class, () -> teamService.grantProduct(realmName(), ORG, TEAM,
-                CATALOG, "billing", GrantProductRequest.allRoles()));
+                CATALOG, "billing", GrantProductRequest.allFeatures()));
         assertThrowsExactly(UserGroupNotFoundException.class, () -> teamService.grantProduct(realmName(), ORG, "unknown",
-                CATALOG, PRODUCT, GrantProductRequest.allRoles()));
+                CATALOG, PRODUCT, GrantProductRequest.allFeatures()));
     }
 
     // the quota of the team is a second pool, keyed by org/team; its cycle defaults to the one of the org
@@ -177,7 +177,7 @@ class TeamServiceTest {
     // a renegotiation reaches the teams: new pool of the org
     @Test
     void aRenegotiationReachesTheTeams() {
-        teamService.grantProduct(realmName(), ORG, TEAM, CATALOG, PRODUCT, GrantProductRequest.allRoles());
+        teamService.grantProduct(realmName(), ORG, TEAM, CATALOG, PRODUCT, GrantProductRequest.allFeatures());
 
         productService.assign(realmName(), ORG, CATALOG, PRODUCT,
                 new AssignProductRequest(50L, QuotaCycle.DAILY, List.of("scan"), Map.of("region", "us")));
@@ -195,7 +195,7 @@ class TeamServiceTest {
         userGroupService.addMember(realmName(), ORG, "analysts", aliceId);
 
         // a team without quota is fine
-        teamService.grantProduct(realmName(), ORG, "analysts", CATALOG, PRODUCT, GrantProductRequest.allRoles());
+        teamService.grantProduct(realmName(), ORG, "analysts", CATALOG, PRODUCT, GrantProductRequest.allFeatures());
         assertThrowsExactly(OperationNotAllowedException.class, () -> teamService.grantProduct(realmName(), ORG,
                 "analysts", CATALOG, PRODUCT, new GrantProductRequest(null, 100L, null)));
     }
@@ -229,7 +229,7 @@ class TeamServiceTest {
     @Test
     void unassignTakesTheProductAndTheCatalogRolesAway() {
         catalogRoleService.create(realmName(), CATALOG, new CreateCatalogRoleRequest("scanner", null, null, true));
-        teamService.grantProduct(realmName(), ORG, TEAM, CATALOG, PRODUCT, GrantProductRequest.allRoles());
+        teamService.grantProduct(realmName(), ORG, TEAM, CATALOG, PRODUCT, GrantProductRequest.allFeatures());
         teamService.grantCatalogRole(realmName(), ORG, TEAM, CATALOG, "scanner");
         assertEquals(Set.of(PRODUCT, PRODUCT + ":scan", "scanner"), teamRoles(TEAM));
 
@@ -239,21 +239,21 @@ class TeamServiceTest {
         assertEquals(Map.of(), teamAttributes(TEAM));
     }
 
-    // a role deleted by the realm owner: Keycloak takes it from the groups, the team forgets it in its choices
+    // a feature deleted by the realm owner: Keycloak takes it from the groups, the team forgets it in its choices
     @Test
-    void aDeletedProductRoleIsForgotten() {
+    void aDeletedFeatureIsForgotten() {
         teamService.grantProduct(realmName(), ORG, TEAM, CATALOG, PRODUCT, new GrantProductRequest(List.of("scan"), null, null));
 
-        productService.deleteRole(realmName(), CATALOG, PRODUCT, "scan");
+        productService.deleteFeature(realmName(), CATALOG, PRODUCT, "scan");
 
         assertEquals(Set.of(PRODUCT), teamRoles(TEAM));
-        assertNull(team(TEAM).getAttributes().get("grant:prod:shop-repository:roles"));
+        assertNull(team(TEAM).getAttributes().get("grant:prod:shop-repository:features"));
     }
 
     // a new parameter of the schema reaches the teams with its default
     @Test
     void aNewParameterReachesTheTeams() {
-        teamService.grantProduct(realmName(), ORG, TEAM, CATALOG, PRODUCT, GrantProductRequest.allRoles());
+        teamService.grantProduct(realmName(), ORG, TEAM, CATALOG, PRODUCT, GrantProductRequest.allFeatures());
 
         productService.update(realmName(), CATALOG, PRODUCT, new UpdateProductRequest("Shop repository", null,
                 List.of(REGION, new ParamDefinition("seats", ParamType.NUMBER, false, "10", List.of()))));
@@ -342,12 +342,12 @@ class TeamServiceTest {
     @Test
     void availableProducts() {
         assertEquals(List.of(new AvailableProduct(CATALOG, PRODUCT, "Shop repository", 1000L, QuotaCycle.MONTHLY,
-                List.of(new ProductRole("scan", "Scan engine")))), teamService.availableProducts(realmName(), ORG));
+                List.of(new Feature("scan", "Scan engine")))), teamService.availableProducts(realmName(), ORG));
     }
 
-    private void assign(List<String> boughtRoles) {
+    private void assign(List<String> boughtFeatures) {
         productService.assign(realmName(), ORG, CATALOG, PRODUCT,
-                new AssignProductRequest(1000L, QuotaCycle.MONTHLY, boughtRoles, Map.of()));
+                new AssignProductRequest(1000L, QuotaCycle.MONTHLY, boughtFeatures, Map.of()));
     }
 
     private String addMember(String email) {

@@ -15,9 +15,9 @@ import io.orgkeep.api.model.CreateCatalogRoleRequest;
 import io.orgkeep.api.model.CreateOrgRequest;
 import io.orgkeep.api.model.CreateProductRequest;
 import io.orgkeep.api.model.CreateUserGroupRequest;
+import io.orgkeep.api.model.Feature;
 import io.orgkeep.api.model.GrantProductRequest;
 import io.orgkeep.api.model.OrgGroups;
-import io.orgkeep.api.model.ProductRole;
 import io.orgkeep.api.model.QuotaCycle;
 import io.orgkeep.config.OrgkeepConfig;
 import io.orgkeep.repository.keycloak.KeycloakClients;
@@ -115,7 +115,7 @@ public class DemoSeeder {
     }
 
     /**
-     * The simple case: a product without roles nor parameters, in the default catalog, assigned to
+     * The simple case: a product without features nor parameters, in the default catalog, assigned to
      * the org and given to every member by the predefined team users. Skipped if the realm owner deleted the default
      * catalog.
      */
@@ -127,11 +127,11 @@ public class DemoSeeder {
             productService.create(realm, Catalogs.DEFAULT, new CreateProductRequest(PRODUCT, "Billing API", "Invoices"));
         }
         productService.assign(realm, ORG, Catalogs.DEFAULT, PRODUCT, new AssignProductRequest(1000L, QuotaCycle.MONTHLY));
-        teamService.grantProduct(realm, ORG, OrgGroups.USERS, Catalogs.DEFAULT, PRODUCT, GrantProductRequest.allRoles());
+        teamService.grantProduct(realm, ORG, OrgGroups.USERS, Catalogs.DEFAULT, PRODUCT, GrantProductRequest.allFeatures());
     }
 
     /**
-     * The case with several environments: catalogs prod and sandbox, products with roles bought by
+     * The case with several environments: catalogs prod and sandbox, products with features bought by
      * the org, catalog roles, and two teams, one with a quota of its own. Paul is in the team ops.
      * Checked on its own, not with the org: a realm seeded before this example existed gets it too.
      */
@@ -139,7 +139,7 @@ public class DemoSeeder {
         if (catalogService.list(realm).stream().anyMatch(catalog -> PROD.equals(catalog.name()))) {
             return;
         }
-        List<ProductRole> engines = List.of(new ProductRole("scan", "Scan engine"), new ProductRole("flow", "Flow engine"));
+        List<Feature> engines = List.of(new Feature("scan", "Scan engine"), new Feature("flow", "Flow engine"));
         for (String catalog : List.of(PROD, SANDBOX)) {
             catalogService.create(realm, new CreateCatalogRequest(catalog, PROD.equals(catalog) ? "Production" : "Sandbox", null));
             productService.create(realm, catalog, new CreateProductRequest(SHOP_REPOSITORY, "Shop repository",
@@ -162,12 +162,12 @@ public class DemoSeeder {
 
         // analysts: both products of prod and the statistics; ops: shop-repository everywhere, with its own quota in prod
         userGroupService.create(realm, ORG, new CreateUserGroupRequest(ANALYSTS));
-        teamService.grantProduct(realm, ORG, ANALYSTS, PROD, SHOP_REPOSITORY, GrantProductRequest.allRoles());
-        teamService.grantProduct(realm, ORG, ANALYSTS, PROD, LEGAL_REPOSITORY, GrantProductRequest.allRoles());
+        teamService.grantProduct(realm, ORG, ANALYSTS, PROD, SHOP_REPOSITORY, GrantProductRequest.allFeatures());
+        teamService.grantProduct(realm, ORG, ANALYSTS, PROD, LEGAL_REPOSITORY, GrantProductRequest.allFeatures());
         teamService.grantCatalogRole(realm, ORG, ANALYSTS, PROD, "stats");
         userGroupService.create(realm, ORG, new CreateUserGroupRequest(OPS));
         teamService.grantProduct(realm, ORG, OPS, PROD, SHOP_REPOSITORY, new GrantProductRequest(null, 300L, null));
-        teamService.grantProduct(realm, ORG, OPS, SANDBOX, SHOP_REPOSITORY, GrantProductRequest.allRoles());
+        teamService.grantProduct(realm, ORG, OPS, SANDBOX, SHOP_REPOSITORY, GrantProductRequest.allFeatures());
         teamService.grantCatalogRole(realm, ORG, OPS, PROD, "scanner");
         teamService.grantCatalogRole(realm, ORG, OPS, SANDBOX, "scanner");
 

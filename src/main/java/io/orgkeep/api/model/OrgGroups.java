@@ -25,8 +25,8 @@ public final class OrgGroups {
     /** Attributes of an assignment group: the quota of the org and its cycle (see {@link QuotaCycle}). */
     public static final String QUOTA_ATTRIBUTE = "quota";
     public static final String QUOTA_CYCLE_ATTRIBUTE = "quota-cycle";
-    /** Multivalued attribute of an assignment group: the roles of the product the org bought, without the prefix. */
-    public static final String BOUGHT_ROLES_ATTRIBUTE = "bought-roles";
+    /** Multivalued attribute of an assignment group: the features of the product the org bought, without the prefix. */
+    public static final String BOUGHT_FEATURES_ATTRIBUTE = "bought-features";
     private static final String PARAM_PREFIX = "param.";
     private static final Pattern USER_GROUP_NAME = Pattern.compile("[a-z0-9]([a-z0-9-]*[a-z0-9])?");
 

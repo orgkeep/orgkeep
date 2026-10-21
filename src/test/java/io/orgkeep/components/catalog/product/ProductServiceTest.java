@@ -5,26 +5,26 @@ import io.orgkeep.api.CatalogService;
 import io.orgkeep.api.OrgService;
 import io.orgkeep.api.ProductService;
 import io.orgkeep.api.exceptions.CatalogNotFoundException;
+import io.orgkeep.api.exceptions.FeatureNotFoundException;
 import io.orgkeep.api.exceptions.InvalidRequestException;
 import io.orgkeep.api.exceptions.OperationNotAllowedException;
 import io.orgkeep.api.exceptions.OrgNotFoundException;
 import io.orgkeep.api.exceptions.ProductNotAssignedException;
 import io.orgkeep.api.exceptions.ProductNotFoundException;
-import io.orgkeep.api.exceptions.ProductRoleNotFoundException;
 import io.orgkeep.api.exceptions.RoleNameTakenException;
 import io.orgkeep.api.model.AssignProductRequest;
 import io.orgkeep.api.model.CreateCatalogRequest;
 import io.orgkeep.api.model.CreateCatalogRoleRequest;
 import io.orgkeep.api.model.CreateOrgRequest;
 import io.orgkeep.api.model.CreateProductRequest;
+import io.orgkeep.api.model.Feature;
 import io.orgkeep.api.model.OrgProduct;
 import io.orgkeep.api.model.ParamDefinition;
 import io.orgkeep.api.model.ParamType;
 import io.orgkeep.api.model.Product;
-import io.orgkeep.api.model.ProductRole;
 import io.orgkeep.api.model.QuotaCycle;
+import io.orgkeep.api.model.UpdateFeatureRequest;
 import io.orgkeep.api.model.UpdateProductRequest;
-import io.orgkeep.api.model.UpdateProductRoleRequest;
 import io.orgkeep.fixtures.TestRealm;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -80,14 +80,14 @@ class ProductServiceTest {
         testRealm.close();
     }
 
-    // the product and each of its roles are real client roles, mapped on the scope of the catalog,
+    // the product and each of its features are real client roles, mapped on the scope of the catalog,
     // and the product has its two claim mappers on that scope
     @Test
     void createStoresRolesScopeMappingsAndMappers() {
         Product product = createProduct();
 
         assertEquals(new Product(CATALOG, PRODUCT, "Shop repository", "Repositories",
-                List.of(new ProductRole("flow", null), new ProductRole("scan", "Scan engine")), List.of(REGION), 0), product);
+                List.of(new Feature("flow", null), new Feature("scan", "Scan engine")), List.of(REGION), 0), product);
         Set<String> roles = catalogRoles().stream().map(RoleRepresentation::getName).collect(Collectors.toSet());
         assertEquals(Set.of(PRODUCT, PRODUCT + ":scan", PRODUCT + ":flow"), roles);
         assertEquals(Set.of(PRODUCT, PRODUCT + ":scan", PRODUCT + ":flow"), rolesInScope());
@@ -133,7 +133,7 @@ class ProductServiceTest {
         assertEquals(new OrgProduct(CATALOG, PRODUCT, group.getId(), 1000L, QuotaCycle.MONTHLY, List.of("scan"),
                 Map.of("region", "eu")), assigned);
         assertEquals(Map.of("quota", List.of("1000"), "quota-cycle", List.of("monthly"),
-                "bought-roles", List.of("scan"), "param.region", List.of("eu")), group.getAttributes());
+                "bought-features", List.of("scan"), "param.region", List.of("eu")), group.getAttributes());
         assertEquals(Set.of(PRODUCT), groupRoles(group.getId()));
         assertEquals(List.of(assigned), productService.listAssigned(realmName(), ORG));
     }
@@ -150,7 +150,7 @@ class ProductServiceTest {
         List<OrgProduct> assigned = productService.listAssigned(realmName(), ORG);
         assertEquals(1, assigned.size());
         assertEquals(20L, assigned.get(0).quota());
-        assertEquals(List.of("flow", "scan"), assigned.get(0).boughtRoles());
+        assertEquals(List.of("flow", "scan"), assigned.get(0).boughtFeatures());
         assertEquals(Map.of("region", "us"), assigned.get(0).params());
     }
 
@@ -190,36 +190,39 @@ class ProductServiceTest {
 
         productService.unassign(realmName(), ORG, CATALOG, PRODUCT);
         productService.delete(realmName(), CATALOG, PRODUCT);
-        // its roles and mappers go with it
+        // its features and mappers go with it
         assertEquals(List.of(), catalogRoles());
         assertEquals(Set.of(), mapperNames());
     }
 
-    // the orgs that bought a removed role lose it
+    // the orgs that bought a removed feature lose it
     @Test
-    void deleteRoleRemovesItFromTheAssignments() {
+    void deleteFeatureRemovesItFromTheAssignments() {
         createProduct();
         productService.assign(realmName(), ORG, CATALOG, PRODUCT,
                 new AssignProductRequest(10L, QuotaCycle.DAILY, List.of("scan", "flow"), Map.of()));
 
-        Product product = productService.deleteRole(realmName(), CATALOG, PRODUCT, "flow");
+        Product product = productService.deleteFeature(realmName(), CATALOG, PRODUCT, "flow");
 
-        assertEquals(List.of(new ProductRole("scan", "Scan engine")), product.roles());
-        assertEquals(List.of("scan"), productService.listAssigned(realmName(), ORG).get(0).boughtRoles());
-        assertThrowsExactly(ProductRoleNotFoundException.class, () -> productService.deleteRole(realmName(), CATALOG, PRODUCT, "flow"));
+        assertEquals(List.of(new Feature("scan", "Scan engine")), product.features());
+        assertEquals(List.of("scan"), productService.listAssigned(realmName(), ORG).get(0).boughtFeatures());
+        assertThrowsExactly(FeatureNotFoundException.class, () -> productService.deleteFeature(realmName(), CATALOG, PRODUCT, "flow"));
     }
 
+    // metered is read at creation only: renaming the feature keeps it
     @Test
-    void putRoleCreatesThenUpdates() {
+    void putFeatureCreatesThenUpdates() {
         createProduct();
 
-        productService.putRole(realmName(), CATALOG, PRODUCT, "export", new UpdateProductRoleRequest(null));
-        Product product = productService.putRole(realmName(), CATALOG, PRODUCT, "export", new UpdateProductRoleRequest("Export"));
+        productService.putFeature(realmName(), CATALOG, PRODUCT, "export", new UpdateFeatureRequest(null, true));
+        Product product = productService.putFeature(realmName(), CATALOG, PRODUCT, "export", new UpdateFeatureRequest("Export"));
 
-        assertTrue(product.roles().contains(new ProductRole("export", "Export")));
+        assertTrue(product.features().contains(new Feature("export", "Export", true)));
+        RoleRepresentation role = realm().clients().get(catalogUuid()).roles().get(PRODUCT + ":export").toRepresentation();
+        assertEquals(List.of("true"), role.getAttributes().get("metered"));
         assertTrue(rolesInScope().contains(PRODUCT + ":export"));
         assertThrowsExactly(InvalidRequestException.class,
-                () -> productService.putRole(realmName(), CATALOG, PRODUCT, "Not_A_Slug", new UpdateProductRoleRequest(null)));
+                () -> productService.putFeature(realmName(), CATALOG, PRODUCT, "Not_A_Slug", new UpdateFeatureRequest(null)));
     }
 
     // the values of the orgs follow the schema: a removed parameter goes, a new one gets its default
@@ -256,7 +259,7 @@ class ProductServiceTest {
 
     private Product createProduct() {
         return productService.create(realmName(), CATALOG, new CreateProductRequest(PRODUCT, "Shop repository", "Repositories",
-                List.of(new ProductRole("scan", "Scan engine"), new ProductRole("flow", null)), List.of(REGION)));
+                List.of(new Feature("scan", "Scan engine"), new Feature("flow", null)), List.of(REGION)));
     }
 
     private String realmName() {

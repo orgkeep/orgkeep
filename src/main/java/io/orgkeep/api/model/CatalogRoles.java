@@ -10,8 +10,8 @@ import java.util.Set;
  * <ul>
  *   <li>a <b>product</b> ("shop-repository"): its presence in resource_access.&lt;catalog&gt; says the user has the
  *       product. Its parameter schema is in its attributes ({@link #paramAttribute});</li>
- *   <li>a <b>product role</b> ("shop-repository:scan"): an option an org buys or a permission. A real client role,
- *       named after its product, so that it reaches resource_access natively;</li>
+ *   <li>a <b>feature</b> ("shop-repository:scan"): a permission, or a capacity an org buys with a quota if it is
+ *       {@value #METERED}. A real client role, named after its product, so that it reaches resource_access natively;</li>
  *   <li>a <b>catalog role</b> ("scanner"): valid for every product of the catalog, granted by the org admins
  *       ({@value #ORG_GRANTABLE}) or reserved to the realm owner.</li>
  * </ul>
@@ -24,16 +24,18 @@ import java.util.Set;
 public final class CatalogRoles {
     public static final String TYPE = "type";
     public static final String TYPE_PRODUCT = "product";
-    public static final String TYPE_PRODUCT_ROLE = "product-role";
+    public static final String TYPE_FEATURE = "feature";
     public static final String TYPE_CATALOG_ROLE = "catalog-role";
 
     public static final String DISPLAY_NAME = "display-name";
-    /** Attribute of a product role: the name of its product. */
+    /** Attribute of a feature: the name of its product. */
     public static final String PRODUCT = "product";
+    /** Attribute of a feature: "true" if the org buys it with its own quota. */
+    public static final String METERED = "metered";
     /** Attribute of a catalog role: "true" if the org admins may grant it through their teams. */
     public static final String ORG_GRANTABLE = "org-grantable";
 
-    /** Between a product and one of its roles: never in a slug, so a product role never clashes with another role. */
+    /** Between a product and one of its features: never in a slug, so a feature never clashes with another role. */
     public static final String SEPARATOR = ":";
 
     /** Parameters every product has, not part of its schema: the quota of the org and its cycle. */
@@ -62,9 +64,9 @@ public final class CatalogRoles {
         return values == null || values.isEmpty() ? null : values.get(0);
     }
 
-    /** Client role of a product role, e.g. "shop-repository:scan". */
-    public static String productRole(String product, String role) {
-        return product + SEPARATOR + role;
+    /** Client role of a feature, e.g. "shop-repository:scan". */
+    public static String feature(String product, String feature) {
+        return product + SEPARATOR + feature;
     }
 
     /** Attribute of a product holding a field of the definition of one of its parameters, e.g. "param.region.type". */

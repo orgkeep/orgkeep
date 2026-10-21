@@ -17,10 +17,10 @@ import io.orgkeep.api.model.CreateCatalogRoleRequest;
 import io.orgkeep.api.model.CreateOrgRequest;
 import io.orgkeep.api.model.CreateProductRequest;
 import io.orgkeep.api.model.CreateUserGroupRequest;
+import io.orgkeep.api.model.Feature;
 import io.orgkeep.api.model.GrantProductRequest;
 import io.orgkeep.api.model.ParamDefinition;
 import io.orgkeep.api.model.ParamType;
-import io.orgkeep.api.model.ProductRole;
 import io.orgkeep.api.model.QuotaCycle;
 import io.orgkeep.fixtures.TestRealm;
 import io.quarkus.test.junit.QuarkusTest;
@@ -62,10 +62,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * turned on for the test as DemoSeeder does. Setup, the example with several environments:
  * <ul>
  *   <li>catalogs "prod" and "sandbox", optional scopes of the login client;</li>
- *   <li>"shop-repository" in prod (roles scan and flow, parameter region), assigned to acme: 1000 a month, scan bought;</li>
+ *   <li>"shop-repository" in prod (features scan and flow, parameter region), assigned to acme: 1000 a month, scan bought;</li>
  *   <li>catalog roles "scanner" (grantable) and "anonymous" (reserved to the realm owner);</li>
- *   <li>Paul is in "ops" (the product, every role bought, quota of team 300, scanner) and "analysts" (the product
- *       without role, no quota); Claire is in no team giving anything.</li>
+ *   <li>Paul is in "ops" (the product, every feature bought, quota of team 300, scanner) and "analysts" (the product
+ *       without feature, no quota); Claire is in no team giving anything.</li>
  * </ul>
  */
 @Slf4j
@@ -101,7 +101,7 @@ class TeamTokenTest {
         catalogService.create(realm, new CreateCatalogRequest("prod", "Production", null));
         catalogService.create(realm, new CreateCatalogRequest("sandbox", "Sandbox", null));
         productService.create(realm, "prod", new CreateProductRequest(PRODUCT, "Shop repository", null,
-                List.of(new ProductRole("scan", null), new ProductRole("flow", null)),
+                List.of(new Feature("scan", null), new Feature("flow", null)),
                 List.of(new ParamDefinition("region", ParamType.ENUM, true, "eu", List.of("eu", "us")))));
         catalogRoleService.create(realm, "prod", new CreateCatalogRoleRequest("scanner", null, null, true));
         catalogRoleService.create(realm, "prod", new CreateCatalogRoleRequest("anonymous", null, null, false));
@@ -159,9 +159,9 @@ class TeamTokenTest {
         assertTrue(claims.path("prod").isMissingNode(), claims.toString());
     }
 
-    // flow is not bought: absent. Bought later, it reaches the token through ops ("every role bought")
+    // flow is not bought: absent. Bought later, it reaches the token through ops ("every feature bought")
     @Test
-    void aRoleBoughtLaterReachesTheToken() throws Exception {
+    void aFeatureBoughtLaterReachesTheToken() throws Exception {
         assertFalse(strings(logIn("paul", "openid prod").at("/resource_access/prod/roles")).contains(PRODUCT + ":flow"));
 
         assign(List.of("scan", "flow"));
@@ -186,9 +186,9 @@ class TeamTokenTest {
         assertTrue(strings(logIn("paul", "openid prod").at("/resource_access/prod/roles")).contains("anonymous"));
     }
 
-    private void assign(List<String> boughtRoles) {
+    private void assign(List<String> boughtFeatures) {
         productService.assign(testRealm.name(), ORG, "prod", PRODUCT,
-                new AssignProductRequest(1000L, QuotaCycle.MONTHLY, boughtRoles, Map.of()));
+                new AssignProductRequest(1000L, QuotaCycle.MONTHLY, boughtFeatures, Map.of()));
     }
 
     /** The login client of the realm (clientId = realm name) accepts the password grant for the test. */

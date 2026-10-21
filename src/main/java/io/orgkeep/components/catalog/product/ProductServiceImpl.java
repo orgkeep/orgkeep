@@ -1,22 +1,22 @@
 package io.orgkeep.components.catalog.product;
 
 import io.orgkeep.api.ProductService;
+import io.orgkeep.api.exceptions.FeatureNotFoundException;
 import io.orgkeep.api.exceptions.InvalidRequestException;
 import io.orgkeep.api.exceptions.OperationNotAllowedException;
 import io.orgkeep.api.exceptions.ProductNotAssignedException;
 import io.orgkeep.api.exceptions.ProductNotFoundException;
-import io.orgkeep.api.exceptions.ProductRoleNotFoundException;
 import io.orgkeep.api.exceptions.RoleNameTakenException;
 import io.orgkeep.api.model.AssignProductRequest;
 import io.orgkeep.api.model.CatalogRoles;
 import io.orgkeep.api.model.CreateProductRequest;
+import io.orgkeep.api.model.Feature;
 import io.orgkeep.api.model.OrgGroups;
 import io.orgkeep.api.model.OrgProduct;
 import io.orgkeep.api.model.ParamDefinition;
 import io.orgkeep.api.model.Product;
-import io.orgkeep.api.model.ProductRole;
+import io.orgkeep.api.model.UpdateFeatureRequest;
 import io.orgkeep.api.model.UpdateProductRequest;
-import io.orgkeep.api.model.UpdateProductRoleRequest;
 import io.orgkeep.components.catalog.CatalogSetup;
 import io.orgkeep.components.organisation.usergroup.team.TeamAlignment;
 import io.orgkeep.components.organisation.usergroup.team.TeamClaims;
@@ -60,10 +60,10 @@ public class ProductServiceImpl implements ProductService {
     @Override
     public Product create(String realm, String catalog, CreateProductRequest request) {
         ParamRules.checkSchema(request.params());
-        Set<String> roleNames = new HashSet<>();
-        request.roles().forEach(role -> {
-            if (!roleNames.add(role.name())) {
-                throw new InvalidRequestException("Role '%s' is given twice".formatted(role.name()));
+        Set<String> featureNames = new HashSet<>();
+        request.features().forEach(feature -> {
+            if (!featureNames.add(feature.name())) {
+                throw new InvalidRequestException("Feature '%s' is given twice".formatted(feature.name()));
             }
         });
         CatalogSetup.Ids ids = catalogSetup.get(realm, catalog);
@@ -75,8 +75,8 @@ public class ProductServiceImpl implements ProductService {
         }
         try {
             List<String> created = new ArrayList<>(List.of(request.name()));
-            for (ProductRole role : request.roles()) {
-                RoleRepresentation representation = productMapper.toRoleRepresentation(request.name(), role);
+            for (Feature feature : request.features()) {
+                RoleRepresentation representation = productMapper.toRoleRepresentation(request.name(), feature);
                 clients.createRole(realm, ids.clientUuid(), representation);
                 created.add(representation.getName());
             }
@@ -85,7 +85,7 @@ public class ProductServiceImpl implements ProductService {
             productMapper.toMappers(catalog, request.name())
                     .forEach(mapper -> scopes.addMapper(realm, ids.scopeId(), mapper));
         } catch (RuntimeException e) {
-            // admin API calls are not transactional: a product without its roles or mappers must not stay behind
+            // admin API calls are not transactional: a product without its features or mappers must not stay behind
             remove(realm, catalog, ids, request.name());
             throw e;
         }
@@ -158,33 +158,40 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
-    public Product putRole(String realm, String catalog, String product, String role, UpdateProductRoleRequest request) {
-        if (!SLUG.matcher(role).matches() || role.length() > 50) {
-            throw new InvalidRequestException("Role name '%s': lowercase letters, digits and inner hyphens only".formatted(role));
+    public Product putFeature(String realm, String catalog, String product, String feature, UpdateFeatureRequest request) {
+        if (!SLUG.matcher(feature).matches() || feature.length() > 50) {
+            throw new InvalidRequestException("Feature name '%s': lowercase letters, digits and inner hyphens only".formatted(feature));
         }
         CatalogSetup.Ids ids = catalogSetup.get(realm, catalog);
         getProductRole(realm, catalog, ids, product);
 
-        RoleRepresentation representation = productMapper.toRoleRepresentation(product,
-                new ProductRole(role, request == null ? null : request.displayName()));
-        if (clients.findRole(realm, ids.clientUuid(), representation.getName()).isPresent()) {
+        String displayName = request == null ? null : request.displayName();
+        Optional<RoleRepresentation> existing = clients.findRole(realm, ids.clientUuid(), CatalogRoles.feature(product, feature));
+        if (existing.isPresent()) {
+            // metered is set at creation and kept: only the display name changes
+            boolean metered = productMapper.toFeature(product, existing.get()).metered();
+            RoleRepresentation representation = productMapper.toRoleRepresentation(product,
+                    new Feature(feature, displayName, metered));
             clients.updateRole(realm, ids.clientUuid(), representation.getName(), representation);
         } else {
+            boolean metered = request != null && Boolean.TRUE.equals(request.metered());
+            RoleRepresentation representation = productMapper.toRoleRepresentation(product,
+                    new Feature(feature, displayName, metered));
             clients.createRole(realm, ids.clientUuid(), representation);
             scopes.addClientRolesToScope(realm, ids.scopeId(), ids.clientUuid(), List.of(representation.getName()));
-            log.info("Role '{}' added to product '{}' of catalog '{}' in realm '{}'", role, product, catalog, realm);
+            log.info("Feature '{}' added to product '{}' of catalog '{}' in realm '{}'", feature, product, catalog, realm);
         }
         return get(realm, catalog, product);
     }
 
     @Override
-    public Product deleteRole(String realm, String catalog, String product, String role) {
+    public Product deleteFeature(String realm, String catalog, String product, String feature) {
         CatalogSetup.Ids ids = catalogSetup.get(realm, catalog);
         getProductRole(realm, catalog, ids, product);
-        String roleName = CatalogRoles.productRole(product, role);
+        String roleName = CatalogRoles.feature(product, feature);
         clients.findRole(realm, ids.clientUuid(), roleName)
-                .filter(r -> productMapper.isRoleOf(r, product))
-                .orElseThrow(() -> new ProductRoleNotFoundException(catalog, product, role));
+                .filter(r -> productMapper.isFeatureOf(r, product))
+                .orElseThrow(() -> new FeatureNotFoundException(catalog, product, feature));
 
         // Keycloak removes the role from the groups holding it: the teams lose it at once
         clients.deleteRole(realm, ids.clientUuid(), roleName);
@@ -192,15 +199,15 @@ public class ProductServiceImpl implements ProductService {
         assignments(realm, catalog, ids.clientUuid(), product).forEach((org, path) -> {
             groups.findId(realm, path).ifPresent(groupId -> {
                 Map<String, List<String>> attributes = new HashMap<>(groups.attributes(realm, groupId));
-                List<String> bought = new ArrayList<>(attributes.getOrDefault(OrgGroups.BOUGHT_ROLES_ATTRIBUTE, List.of()));
-                if (bought.remove(role)) {
-                    attributes.put(OrgGroups.BOUGHT_ROLES_ATTRIBUTE, bought);
+                List<String> bought = new ArrayList<>(attributes.getOrDefault(OrgGroups.BOUGHT_FEATURES_ATTRIBUTE, List.of()));
+                if (bought.remove(feature)) {
+                    attributes.put(OrgGroups.BOUGHT_FEATURES_ATTRIBUTE, bought);
                     groups.replaceAttributes(realm, groupId, attributes);
                 }
             });
-            teamAlignment.forgetProductRole(realm, org, catalog, product, role);
+            teamAlignment.forgetFeature(realm, org, catalog, product, feature);
         });
-        log.info("Role '{}' removed from product '{}' of catalog '{}' in realm '{}'", role, product, catalog, realm);
+        log.info("Feature '{}' removed from product '{}' of catalog '{}' in realm '{}'", feature, product, catalog, realm);
         return get(realm, catalog, product);
     }
 
@@ -210,13 +217,13 @@ public class ProductServiceImpl implements ProductService {
         CatalogSetup.Ids ids = catalogSetup.get(realm, catalog);
         RoleRepresentation productRole = getProductRole(realm, catalog, ids, product);
 
-        Set<String> productRoles = new HashSet<>();
+        Set<String> features = new HashSet<>();
         clients.listRoles(realm, ids.clientUuid()).stream()
-                .filter(role -> productMapper.isRoleOf(role, product))
-                .forEach(role -> productRoles.add(role.getName().substring(product.length() + CatalogRoles.SEPARATOR.length())));
-        List<String> unknown = request.boughtRoles().stream().filter(role -> !productRoles.contains(role)).toList();
+                .filter(role -> productMapper.isFeatureOf(role, product))
+                .forEach(role -> features.add(productMapper.toFeature(product, role).name()));
+        List<String> unknown = request.boughtFeatures().stream().filter(feature -> !features.contains(feature)).toList();
         if (!unknown.isEmpty()) {
-            throw new InvalidRequestException("Not roles of the product '%s': %s".formatted(product, unknown));
+            throw new InvalidRequestException("Not features of the product '%s': %s".formatted(product, unknown));
         }
         List<ParamDefinition> schema = productMapper.params(productRole.getAttributes());
         Map<String, String> params = ParamRules.resolveValues(schema, request.params());
@@ -244,10 +251,10 @@ public class ProductServiceImpl implements ProductService {
             }
             log.info("Product '{}' of catalog '{}' assigned to organisation '{}' in realm '{}'", product, catalog, orgName, realm);
         }
-        // the teams giving the product follow what the org negotiated: quota, bought roles, parameters
+        // the teams giving the product follow what the org negotiated: quota, bought features, parameters
         teamAlignment.align(realm, orgName, catalog, product);
         return new OrgProduct(catalog, product, groupId, request.quota(), request.cycle(),
-                request.boughtRoles().stream().distinct().sorted().toList(), params);
+                request.boughtFeatures().stream().distinct().sorted().toList(), params);
     }
 
     @Override
@@ -326,10 +333,10 @@ public class ProductServiceImpl implements ProductService {
         return updated;
     }
 
-    /** Deletes what exists of the product: its roles, its mappers, its role. */
+    /** Deletes what exists of the product: its features, its mappers, its role. */
     private void remove(String realm, String catalog, CatalogSetup.Ids ids, String product) {
         clients.listRoles(realm, ids.clientUuid()).stream()
-                .filter(role -> productMapper.isRoleOf(role, product))
+                .filter(role -> productMapper.isFeatureOf(role, product))
                 .forEach(role -> clients.deleteRole(realm, ids.clientUuid(), role.getName()));
         scopes.removeMappers(realm, ids.scopeId(), productMapper.toMappers(catalog, product).stream()
                 .map(ProtocolMapperRepresentation::getName)

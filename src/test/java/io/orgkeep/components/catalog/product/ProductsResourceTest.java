@@ -6,11 +6,11 @@ import io.orgkeep.api.model.AssignProductRequest;
 import io.orgkeep.api.model.CreateCatalogRequest;
 import io.orgkeep.api.model.CreateOrgRequest;
 import io.orgkeep.api.model.CreateProductRequest;
+import io.orgkeep.api.model.Feature;
 import io.orgkeep.api.model.ParamDefinition;
 import io.orgkeep.api.model.ParamType;
-import io.orgkeep.api.model.ProductRole;
 import io.orgkeep.api.model.QuotaCycle;
-import io.orgkeep.api.model.UpdateProductRoleRequest;
+import io.orgkeep.api.model.UpdateFeatureRequest;
 import io.orgkeep.fixtures.TestRealm;
 import io.orgkeep.web.CurrentRealm;
 import io.quarkus.test.InjectMock;
@@ -81,7 +81,7 @@ class ProductsResourceTest {
         given().when().get(PRODUCTS + "/{product}", CATALOG, "billing")
                 .then().statusCode(200)
                 .body("catalog", equalTo(CATALOG))
-                .body("roles.name", contains("read", "write"))
+                .body("features.name", contains("read", "write"))
                 .body("params[0].type", equalTo("ENUM"))
                 .body("orgCount", equalTo(0));
         given().when().get(PRODUCTS, CATALOG)
@@ -92,7 +92,7 @@ class ProductsResourceTest {
         createBillingRequest().then().statusCode(409);
     }
 
-    // slugs only: a ":" would clash with the "<product>:<role>" names of the product roles
+    // slugs only: a ":" would clash with the "<product>:<feature>" names of the features
     @Test
     @TestSecurity(user = "owner", roles = "realm-owner")
     void invalidNamesReturn400() {
@@ -100,12 +100,12 @@ class ProductsResourceTest {
                 .when().post(PRODUCTS, CATALOG)
                 .then().statusCode(400);
         given().contentType(ContentType.JSON).body(new CreateProductRequest("billing", "Billing", null,
-                        List.of(new ProductRole("Read", null)), List.of()))
+                        List.of(new Feature("Read", null)), List.of()))
                 .when().post(PRODUCTS, CATALOG)
                 .then().statusCode(400);
         createBilling();
-        given().contentType(ContentType.JSON).body(new UpdateProductRoleRequest(null))
-                .when().put(PRODUCTS + "/{product}/roles/{role}", CATALOG, "billing", "export:all")
+        given().contentType(ContentType.JSON).body(new UpdateFeatureRequest(null))
+                .when().put(PRODUCTS + "/{product}/features/{feature}", CATALOG, "billing", "export:all")
                 .then().statusCode(400);
     }
 
@@ -118,7 +118,7 @@ class ProductsResourceTest {
                 .body(new AssignProductRequest(500L, QuotaCycle.MONTHLY, List.of("read"), Map.of("region", "us")))
                 .when().put(ASSIGNMENT, ORG, CATALOG, "billing")
                 .then().statusCode(200)
-                .body("boughtRoles", contains("read"))
+                .body("boughtFeatures", contains("read"))
                 .body("params.region", equalTo("us"));
         given().when().get("/api/admin/organisations/{org}/products", ORG)
                 .then().statusCode(200)
@@ -147,7 +147,7 @@ class ProductsResourceTest {
     void assignErrors() {
         createBilling();
 
-        // a role the product does not have, a value outside of the enum, no quota
+        // a feature the product does not have, a value outside of the enum, no quota
         given().contentType(ContentType.JSON).body(new AssignProductRequest(10L, QuotaCycle.DAILY, List.of("export"), Map.of()))
                 .when().put(ASSIGNMENT, ORG, CATALOG, "billing")
                 .then().statusCode(400);
@@ -172,7 +172,7 @@ class ProductsResourceTest {
     private io.restassured.response.Response createBillingRequest() {
         return given().contentType(ContentType.JSON)
                 .body(new CreateProductRequest("billing", "Billing", null,
-                        List.of(new ProductRole("read", null), new ProductRole("write", null)),
+                        List.of(new Feature("read", null), new Feature("write", null)),
                         List.of(new ParamDefinition("region", ParamType.ENUM, true, "eu", List.of("eu", "us")))))
                 .when().post(PRODUCTS, CATALOG);
     }

@@ -11,7 +11,7 @@ import io.orgkeep.api.model.CreateCatalogRoleRequest;
 import io.orgkeep.api.model.CreateOrgRequest;
 import io.orgkeep.api.model.CreateProductRequest;
 import io.orgkeep.api.model.CreateUserGroupRequest;
-import io.orgkeep.api.model.ProductRole;
+import io.orgkeep.api.model.Feature;
 import io.orgkeep.api.model.QuotaCycle;
 import io.orgkeep.fixtures.TestRealm;
 import io.orgkeep.web.CurrentRealm;
@@ -62,7 +62,7 @@ class TeamsResourceTest {
         Mockito.when(currentRealm.name()).thenReturn(testRealm.name());
         catalogService.create(testRealm.name(), new CreateCatalogRequest("prod", "Production", null));
         productService.create(testRealm.name(), "prod", new CreateProductRequest("billing", "Billing", null,
-                List.of(new ProductRole("export", "Export")), List.of()));
+                List.of(new Feature("export", "Export")), List.of()));
         catalogRoleService.create(testRealm.name(), "prod", new CreateCatalogRoleRequest("anonymous", null, null, false));
         orgService.create(testRealm.name(), new CreateOrgRequest(ORG, Set.of(), null, null));
         productService.assign(testRealm.name(), ORG, "prod", "billing",
@@ -85,20 +85,20 @@ class TeamsResourceTest {
                 .then().statusCode(403);
     }
 
-    // an empty body: every role the org bought, "roles" stays null in the answer (not an empty list)
+    // an empty body: every feature the org bought, "features" stays null in the answer (not an empty list)
     @Test
     @TestSecurity(user = "bob", roles = ADMIN)
     void grantAProduct() {
         given().contentType(ContentType.JSON).body("{}")
                 .when().put(TEAM_PRODUCT, ORG, "ops", "prod", "billing")
                 .then().statusCode(200)
-                .body("roles", nullValue())
-                .body("effectiveRoles", contains("export"));
+                .body("features", nullValue())
+                .body("effectiveFeatures", contains("export"));
 
-        given().contentType(ContentType.JSON).body("{\"roles\": [], \"quota\": 10, \"cycle\": \"DAILY\"}")
+        given().contentType(ContentType.JSON).body("{\"features\": [], \"quota\": 10, \"cycle\": \"DAILY\"}")
                 .when().put(TEAM_PRODUCT, ORG, "ops", "prod", "billing")
                 .then().statusCode(200)
-                .body("roles.size()", equalTo(0))
+                .body("features.size()", equalTo(0))
                 .body("quota", equalTo(10));
 
         given().when().get("/api/organisations/{org}/user-groups", ORG)
@@ -112,7 +112,7 @@ class TeamsResourceTest {
     @Test
     @TestSecurity(user = "bob", roles = ADMIN)
     void grantErrors() {
-        given().contentType(ContentType.JSON).body("{\"roles\": [\"unknown\"]}")
+        given().contentType(ContentType.JSON).body("{\"features\": [\"unknown\"]}")
                 .when().put(TEAM_PRODUCT, ORG, "ops", "prod", "billing")
                 .then().statusCode(400);
         given().contentType(ContentType.JSON).body("{\"quota\": 0}")
@@ -133,7 +133,7 @@ class TeamsResourceTest {
         given().when().get("/api/organisations/{org}/products", ORG)
                 .then().statusCode(200)
                 .body("[0].displayName", equalTo("Billing"))
-                .body("[0].boughtRoles[0].displayName", equalTo("Export"));
+                .body("[0].boughtFeatures[0].displayName", equalTo("Export"));
         given().when().get("/api/organisations/{org}/catalogs", ORG)
                 .then().statusCode(200)
                 .body("", contains("prod"));

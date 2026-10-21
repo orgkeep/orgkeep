@@ -30,23 +30,23 @@ public interface TeamMapper {
         return attributes.containsKey(TeamGrants.product(catalog, product));
     }
 
-    /** The roles asked for by the org admin, sorted. null: every role the org bought. */
-    default List<String> askedRoles(Map<String, List<String>> attributes, String catalog, String product) {
-        if (!TeamGrants.LISTED_ROLES.equals(firstValue(attributes, TeamGrants.product(catalog, product)))) {
+    /** The features asked for by the org admin, sorted. null: every feature the org bought. */
+    default List<String> askedFeatures(Map<String, List<String>> attributes, String catalog, String product) {
+        if (!TeamGrants.LISTED_FEATURES.equals(firstValue(attributes, TeamGrants.product(catalog, product)))) {
             return null;
         }
-        return attributes.getOrDefault(TeamGrants.roles(catalog, product), List.of()).stream()
+        return attributes.getOrDefault(TeamGrants.features(catalog, product), List.of()).stream()
                 .distinct()
                 .sorted()
                 .toList();
     }
 
-    /** The roles the members get: those asked for (all if none listed) that the org bought, sorted. */
-    default List<String> givenRoles(Map<String, List<String>> attributes, String catalog, String product,
-                                    List<String> boughtRoles) {
-        List<String> asked = askedRoles(attributes, catalog, product);
-        return boughtRoles.stream()
-                .filter(role -> asked == null || asked.contains(role))
+    /** The features the members get: those asked for (all if none listed) that the org bought, sorted. */
+    default List<String> givenFeatures(Map<String, List<String>> attributes, String catalog, String product,
+                                       List<String> boughtFeatures) {
+        List<String> asked = askedFeatures(attributes, catalog, product);
+        return boughtFeatures.stream()
+                .filter(feature -> asked == null || asked.contains(feature))
                 .distinct()
                 .sorted()
                 .toList();
@@ -81,16 +81,16 @@ public interface TeamMapper {
     /**
      * The attributes of the team with new choices for the product. The derived attributes are left to TeamAlignment.
      *
-     * @param roles null: every role the org bought
-     * @param quota null: no quota of team (then no cycle either)
+     * @param features null: every feature the org bought
+     * @param quota    null: no quota of team (then no cycle either)
      */
     default Map<String, List<String>> withChoices(Map<String, List<String>> attributes, String catalog, String product,
-                                                  List<String> roles, Long quota, QuotaCycle cycle) {
+                                                  List<String> features, Long quota, QuotaCycle cycle) {
         Map<String, List<String>> updated = new HashMap<>(attributes);
         updated.put(TeamGrants.product(catalog, product),
-                List.of(roles == null ? TeamGrants.ALL_ROLES : TeamGrants.LISTED_ROLES));
-        putOrRemove(updated, TeamGrants.roles(catalog, product),
-                roles == null ? List.of() : roles.stream().distinct().sorted().toList());
+                List.of(features == null ? TeamGrants.ALL_FEATURES : TeamGrants.LISTED_FEATURES));
+        putOrRemove(updated, TeamGrants.features(catalog, product),
+                features == null ? List.of() : features.stream().distinct().sorted().toList());
         putOrRemove(updated, TeamGrants.quota(catalog, product),
                 quota == null ? List.of() : List.of(quota.toString()));
         putOrRemove(updated, TeamGrants.quotaCycle(catalog, product),
@@ -102,7 +102,7 @@ public interface TeamMapper {
     default Map<String, List<String>> withoutProduct(Map<String, List<String>> attributes, String catalog, String product) {
         Map<String, List<String>> updated = new HashMap<>(attributes);
         updated.remove(TeamGrants.product(catalog, product));
-        updated.remove(TeamGrants.roles(catalog, product));
+        updated.remove(TeamGrants.features(catalog, product));
         updated.remove(TeamGrants.quota(catalog, product));
         updated.remove(TeamGrants.quotaCycle(catalog, product));
         updated.remove(CatalogRoles.quotasAttribute(catalog, product));
@@ -131,7 +131,7 @@ public interface TeamMapper {
                     .sorted()
                     .toList();
             Long quota = quota(attributes, catalog, product);
-            products.add(new TeamProduct(catalog, product, askedRoles(attributes, catalog, product), effective,
+            products.add(new TeamProduct(catalog, product, askedFeatures(attributes, catalog, product), effective,
                     quota, quota == null ? null : quotaCycle(attributes, catalog, product)));
         });
         products.sort(Comparator.comparing(TeamProduct::catalog).thenComparing(TeamProduct::product));
@@ -140,7 +140,7 @@ public interface TeamMapper {
 
     /**
      * The catalog roles given by a team, sorted by catalog then role: the roles of the catalog clients that are neither
-     * a product it gives nor a role of one ("shop-repository:scan").
+     * a product it gives nor a feature of one ("shop-repository:scan").
      *
      * @param clientRoles the client roles granted to its group, by clientId
      * @param catalogs    the names of the catalogs of the realm

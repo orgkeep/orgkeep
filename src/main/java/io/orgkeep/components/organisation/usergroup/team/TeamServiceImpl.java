@@ -12,10 +12,10 @@ import io.orgkeep.api.exceptions.UserGroupNotFoundException;
 import io.orgkeep.api.model.AvailableProduct;
 import io.orgkeep.api.model.CatalogRole;
 import io.orgkeep.api.model.CatalogRoles;
+import io.orgkeep.api.model.Feature;
 import io.orgkeep.api.model.GrantProductRequest;
 import io.orgkeep.api.model.OrgGroups;
 import io.orgkeep.api.model.OrgProduct;
-import io.orgkeep.api.model.ProductRole;
 import io.orgkeep.api.model.QuotaCycle;
 import io.orgkeep.api.model.TeamProduct;
 import io.orgkeep.components.catalog.CatalogSetup;
@@ -66,11 +66,15 @@ public class TeamServiceImpl implements TeamService {
                     catalog -> clients.listRoles(realm, catalogSetup.get(realm, catalog).clientUuid()).stream()
                             .collect(Collectors.toMap(RoleRepresentation::getName, Function.identity())));
             RoleRepresentation product = roles.get(orgProduct.product());
-            List<ProductRole> boughtRoles = orgProduct.boughtRoles().stream()
-                    .map(role -> new ProductRole(role, displayName(roles.get(CatalogRoles.productRole(orgProduct.product(), role)))))
+            List<Feature> boughtFeatures = orgProduct.boughtFeatures().stream()
+                    .map(feature -> {
+                        RoleRepresentation role = roles.get(CatalogRoles.feature(orgProduct.product(), feature));
+                        // a bought feature without its role was changed outside of Orgkeep: shown by its name only
+                        return role == null ? new Feature(feature, null) : productMapper.toFeature(orgProduct.product(), role);
+                    })
                     .toList();
             available.add(new AvailableProduct(orgProduct.catalog(), orgProduct.product(), displayName(product),
-                    orgProduct.quota(), orgProduct.cycle(), boughtRoles));
+                    orgProduct.quota(), orgProduct.cycle(), boughtFeatures));
         }
         return available;
     }
@@ -109,14 +113,14 @@ public class TeamServiceImpl implements TeamService {
         OrgProduct orgProduct = productMapper.toOrgProduct(catalog, assignment);
 
         // never more than the org bought
-        if (request.roles() != null) {
-            List<String> notBought = request.roles().stream()
-                    .filter(role -> !orgProduct.boughtRoles().contains(role))
+        if (request.features() != null) {
+            List<String> notBought = request.features().stream()
+                    .filter(feature -> !orgProduct.boughtFeatures().contains(feature))
                     .distinct()
                     .sorted()
                     .toList();
             if (!notBought.isEmpty()) {
-                throw new InvalidRequestException("Roles of the product '%s' the organisation '%s' did not buy: %s"
+                throw new InvalidRequestException("Features of the product '%s' the organisation '%s' did not buy: %s"
                         .formatted(product, orgName, notBought));
             }
         }
@@ -128,14 +132,14 @@ public class TeamServiceImpl implements TeamService {
                 : request.cycle() != null ? request.cycle() : orgProduct.cycle();
 
         groups.replaceAttributes(realm, teamId, teamMapper.withChoices(groups.attributes(realm, teamId),
-                catalog, product, request.roles(), request.quota(), cycle));
+                catalog, product, request.features(), request.quota(), cycle));
         alignment.align(realm, orgName, catalog, product);
         log.info("Product '{}' of catalog '{}' given by team '{}' of organisation '{}' in realm '{}'",
                 product, catalog, team, orgName, realm);
 
-        List<String> asked = request.roles() == null ? null : request.roles().stream().distinct().sorted().toList();
-        List<String> effective = orgProduct.boughtRoles().stream()
-                .filter(role -> asked == null || asked.contains(role))
+        List<String> asked = request.features() == null ? null : request.features().stream().distinct().sorted().toList();
+        List<String> effective = orgProduct.boughtFeatures().stream()
+                .filter(feature -> asked == null || asked.contains(feature))
                 .sorted()
                 .toList();
         return new TeamProduct(catalog, product, asked, effective, request.quota(), cycle);
@@ -185,7 +189,7 @@ public class TeamServiceImpl implements TeamService {
         orgs.getByName(realm, orgName);
         String teamId = teamId(realm, orgName, team);
         String clientUuid = catalogSetup.get(realm, catalog).clientUuid();
-        // only a catalog role: a product is taken away with its quota and roles (revokeProduct)
+        // only a catalog role: a product is taken away with its quota and features (revokeProduct)
         getCatalogRole(realm, clientUuid, catalog, role);
         clients.revokeFromGroup(realm, clientUuid, teamId, role);
     }

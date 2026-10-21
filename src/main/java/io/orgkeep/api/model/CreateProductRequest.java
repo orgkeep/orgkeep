@@ -9,10 +9,10 @@ import java.util.List;
 
 /**
  * @param name        role name in the catalog, group name under /{org}/catalogs/{catalog} and prefix of the product
- *                    roles, hence restricted to a lowercase slug
+ *                    features, hence restricted to a lowercase slug
  * @param displayName name shown to the realm owner and the org admins
  * @param description optional
- * @param roles       optional, the roles of the product
+ * @param features    optional, the features of the product
  * @param params      optional, the parameter schema besides the standard quota and cycle
  */
 public record CreateProductRequest(
@@ -25,15 +25,15 @@ public record CreateProductRequest(
     String displayName,
     @Size(max = 255)
     String description,
-    List<@Valid ProductRole> roles,
+    List<@Valid Feature> features,
     List<@Valid ParamDefinition> params){
 
     public CreateProductRequest {
-        roles = roles == null ? List.of() : List.copyOf(roles);
+        features = features == null ? List.of() : List.copyOf(features);
         params = params == null ? List.of() : List.copyOf(params);
     }
 
-    /** A product without roles nor parameters: the simplest case. */
+    /** A product without features nor parameters: the simplest case. */
     public CreateProductRequest(String name, String displayName, String description) {
         this(name, displayName, description, List.of(), List.of());
     }

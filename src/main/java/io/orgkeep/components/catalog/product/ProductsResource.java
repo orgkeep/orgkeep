@@ -3,8 +3,8 @@ package io.orgkeep.components.catalog.product;
 import io.orgkeep.api.ProductService;
 import io.orgkeep.api.model.CreateProductRequest;
 import io.orgkeep.api.model.Product;
+import io.orgkeep.api.model.UpdateFeatureRequest;
 import io.orgkeep.api.model.UpdateProductRequest;
-import io.orgkeep.api.model.UpdateProductRoleRequest;
 import io.orgkeep.web.CurrentRealm;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.validation.Valid;
@@ -31,7 +31,7 @@ import java.util.List;
  */
 @Path("/admin/catalogs/{catalog}/products")
 @RolesAllowed("realm-owner")
-@Tag(name = "Products", description = "Products of a catalog, with their roles and parameters, managed by the realm owner")
+@Tag(name = "Products", description = "Products of a catalog, with their features and parameters, managed by the realm owner")
 @RequiredArgsConstructor
 public class ProductsResource {
     private final ProductService productService;
@@ -40,7 +40,7 @@ public class ProductsResource {
     @POST
     @ResponseStatus(201)
     @Operation(summary = "Create a product",
-            description = "Adds the product and its roles to the catalog client, and the claims of its quotas and parameters to the scope of the catalog.")
+            description = "Adds the product and its features to the catalog client, and the claims of its quotas and parameters to the scope of the catalog.")
     @APIResponseSchema(value = Product.class, responseCode = "201", responseDescription = "Product created")
     @APIResponse(responseCode = "400", description = "Invalid request or inconsistent parameter schema")
     @APIResponse(responseCode = "404", description = "Unknown catalog")
@@ -80,7 +80,7 @@ public class ProductsResource {
 
     @DELETE
     @Path("/{product}")
-    @Operation(summary = "Delete a product", description = "With its roles. Refused while the product is assigned to an organisation.")
+    @Operation(summary = "Delete a product", description = "With its features. Refused while the product is assigned to an organisation.")
     @APIResponse(responseCode = "204", description = "Product deleted")
     @APIResponse(responseCode = "404", description = "Unknown catalog or product")
     @APIResponse(responseCode = "409", description = "The product is still assigned to an organisation")
@@ -88,26 +88,26 @@ public class ProductsResource {
         productService.delete(currentRealm.name(), catalog, product);
     }
 
-    // PUT: creates the role, or updates its display name
+    // PUT: creates the feature, or updates its display name
     @PUT
-    @Path("/{product}/roles/{role}")
-    @Operation(summary = "Add or update a role of the product",
-            description = "In the tokens: \"<product>:<role>\" in resource_access.<catalog>.roles, for the users of the organisations that bought it.")
-    @APIResponseSchema(value = Product.class, responseCode = "200", responseDescription = "The product, with its roles")
-    @APIResponse(responseCode = "400", description = "Invalid role name")
+    @Path("/{product}/features/{feature}")
+    @Operation(summary = "Add or update a feature of the product",
+            description = "In the tokens: \"<product>:<feature>\" in resource_access.<catalog>.roles, for the users of the organisations that bought it.")
+    @APIResponseSchema(value = Product.class, responseCode = "200", responseDescription = "The product, with its features")
+    @APIResponse(responseCode = "400", description = "Invalid feature name")
     @APIResponse(responseCode = "404", description = "Unknown catalog or product")
-    public Product putRole(@PathParam("catalog") String catalog, @PathParam("product") String product,
-                           @PathParam("role") String role, @Valid UpdateProductRoleRequest request){
-        return productService.putRole(currentRealm.name(), catalog, product, role, request);
+    public Product putFeature(@PathParam("catalog") String catalog, @PathParam("product") String product,
+                              @PathParam("feature") String feature, @Valid UpdateFeatureRequest request){
+        return productService.putFeature(currentRealm.name(), catalog, product, feature, request);
     }
 
     @DELETE
-    @Path("/{product}/roles/{role}")
-    @Operation(summary = "Remove a role of the product", description = "The organisations that bought it lose it.")
-    @APIResponseSchema(value = Product.class, responseCode = "200", responseDescription = "The product, with its roles")
-    @APIResponse(responseCode = "404", description = "Unknown catalog, product or role")
-    public Product deleteRole(@PathParam("catalog") String catalog, @PathParam("product") String product,
-                              @PathParam("role") String role){
-        return productService.deleteRole(currentRealm.name(), catalog, product, role);
+    @Path("/{product}/features/{feature}")
+    @Operation(summary = "Remove a feature of the product", description = "The organisations that bought it lose it.")
+    @APIResponseSchema(value = Product.class, responseCode = "200", responseDescription = "The product, with its features")
+    @APIResponse(responseCode = "404", description = "Unknown catalog, product or feature")
+    public Product deleteFeature(@PathParam("catalog") String catalog, @PathParam("product") String product,
+                                 @PathParam("feature") String feature){
+        return productService.deleteFeature(currentRealm.name(), catalog, product, feature);
     }
 }

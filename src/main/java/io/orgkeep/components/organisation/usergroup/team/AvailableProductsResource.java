@@ -30,7 +30,7 @@ public class AvailableProductsResource {
 
     @GET
     @Operation(summary = "List the products of the organisation",
-            description = "The products assigned to it, with the quota of the organisation and the roles it bought: "
+            description = "The products assigned to it, with the quota of the organisation and the features it bought: "
                     + "what its teams can give.")
     @APIResponse(responseCode = "404", description = "Unknown organisation")
     public List<AvailableProduct> list(@PathParam("org") String org){

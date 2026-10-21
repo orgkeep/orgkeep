@@ -9,8 +9,8 @@ import java.util.Map;
  * @param groupId     id of the group /{org}/catalogs/{catalog}/{product}
  * @param quota       null if the attribute is missing or not a number (group changed outside of Orgkeep)
  * @param cycle       null if the attribute is missing or unknown
- * @param boughtRoles roles of the product the org bought, sorted: the ceiling of what its teams can give
- * @param params      values of the parameters of the product, defaults applied
+ * @param boughtFeatures features of the product the org bought, sorted: the ceiling of what its teams can give
+ * @param params         values of the parameters of the product, defaults applied
  */
 public record OrgProduct(
     String catalog,
@@ -18,5 +18,5 @@ public record OrgProduct(
     String groupId,
     Long quota,
     QuotaCycle cycle,
-    List<String> boughtRoles,
+    List<String> boughtFeatures,
     Map<String, String> params){ }

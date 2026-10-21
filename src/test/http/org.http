@@ -112,7 +112,7 @@ Content-Type: application/json
 
 ### Products of a catalog (realm owner)
 
-### Create a product, with its roles and a parameter
+### Create a product, with its features and a parameter
 POST http://localhost:8282/api/admin/catalogs/products-sandbox/products
 Authorization: Bearer {{auth_token}}
 Content-Type: application/json
@@ -120,7 +120,7 @@ Content-Type: application/json
 {
   "name": "shop-repository",
   "displayName": "Shop repository",
-  "roles": [{"name": "scan", "displayName": "Scan engine"}, {"name": "flow"}],
+  "features": [{"name": "scan", "displayName": "Scan engine"}, {"name": "flow"}],
   "params": [{"name": "region", "type": "ENUM", "required": true, "defaultValue": "eu", "values": ["eu", "us"]}]
 }
 
@@ -128,8 +128,8 @@ Content-Type: application/json
 GET http://localhost:8282/api/admin/catalogs/products-sandbox/products
 Authorization: Bearer {{auth_token}}
 
-### Add a role to the product (or rename it)
-PUT http://localhost:8282/api/admin/catalogs/products-sandbox/products/shop-repository/roles/export
+### Add a feature to the product (or rename it)
+PUT http://localhost:8282/api/admin/catalogs/products-sandbox/products/shop-repository/features/export
 Authorization: Bearer {{auth_token}}
 Content-Type: application/json
 
@@ -137,8 +137,8 @@ Content-Type: application/json
   "displayName": "Export"
 }
 
-### Remove a role of the product (the orgs that bought it lose it)
-DELETE http://localhost:8282/api/admin/catalogs/products-sandbox/products/shop-repository/roles/export
+### Remove a feature of the product (the orgs that bought it lose it)
+DELETE http://localhost:8282/api/admin/catalogs/products-sandbox/products/shop-repository/features/export
 Authorization: Bearer {{auth_token}}
 
 ### Catalog roles (realm owner)
@@ -183,7 +183,7 @@ Content-Type: application/json
 {
   "quota": 1000,
   "cycle": "MONTHLY",
-  "boughtRoles": ["scan"],
+  "boughtFeatures": ["scan"],
   "params": {"region": "us"}
 }
 

@@ -36,11 +36,11 @@ public class TeamProductsResource {
     // PUT: giving the product again replaces what the team gives of it
     @PUT
     @Operation(summary = "Give a product of the organisation to a team",
-            description = "With the roles of the product given (absent: every role the organisation bought, also those "
-                    + "it buys later; empty: no role) and an optional quota of team, whose cycle defaults to the one "
+            description = "With the features of the product given (absent: every feature the organisation bought, also those "
+                    + "it buys later; empty: no feature) and an optional quota of team, whose cycle defaults to the one "
                     + "of the organisation. A member is in at most one team with a quota for a given product.")
     @APIResponseSchema(value = TeamProduct.class, responseCode = "200", responseDescription = "Product given")
-    @APIResponse(responseCode = "400", description = "Invalid request, role the organisation did not buy, or cycle without quota")
+    @APIResponse(responseCode = "400", description = "Invalid request, feature the organisation did not buy, or cycle without quota")
     @APIResponse(responseCode = "404", description = "Unknown organisation, user group or catalog, or product not assigned to the organisation")
     @APIResponse(responseCode = "409", description = "With a quota: a member of the team is in another team with a quota for this product")
     public TeamProduct grant(@PathParam("org") String org, @PathParam("group") String group,

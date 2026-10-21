@@ -5,15 +5,15 @@ import java.util.List;
 /**
  * A product given by a team.
  *
- * @param roles          roles asked for by the org admin, sorted. null: every role the org bought
- * @param effectiveRoles roles the members get: those asked for that the org bought, sorted
- * @param quota          quota of the team, null if the team has none (its members only use the pool of the org)
- * @param cycle          cycle of the quota of the team, null without quota
+ * @param features          features asked for by the org admin, sorted. null: every feature the org bought
+ * @param effectiveFeatures features the members get: those asked for that the org bought, sorted
+ * @param quota             quota of the team, null if the team has none (its members only use the pool of the org)
+ * @param cycle             cycle of the quota of the team, null without quota
  */
 public record TeamProduct(
     String catalog,
     String product,
-    List<String> roles,
-    List<String> effectiveRoles,
+    List<String> features,
+    List<String> effectiveFeatures,
     Long quota,
     QuotaCycle cycle){ }

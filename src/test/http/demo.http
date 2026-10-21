@@ -92,7 +92,7 @@ Authorization: Bearer {{org_owner_token}}
 Content-Type: application/json
 
 {
-  "roles": ["scan"],
+  "features": ["scan"],
   "quota": 200
 }
 

@@ -27,7 +27,7 @@ import java.util.Set;
  * Writes on the groups of the teams what their choices give, given what the org bought (the native engine: nothing is
  * computed when a token is issued). For a team giving a product P of the catalog C:
  * <ul>
- *   <li>role mappings of the catalog client: P, and P:r for each role r asked for (all if none listed) that the org
+ *   <li>role mappings of the catalog client: P, and P:f for each feature f asked for (all if none listed) that the org
  *       bought;</li>
  *   <li>{@code C.P.quotas}: the pool of the org, plus the pool of the team if it has a quota;</li>
  *   <li>{@code C.P.params}: the parameter values of the org.</li>
@@ -46,7 +46,7 @@ public class TeamAlignment {
     private final TeamMapper teamMapper;
 
     /**
-     * Realigns every team of the org giving the product with its assignment (quota, bought roles, parameters).
+     * Realigns every team of the org giving the product with its assignment (quota, bought features, parameters).
      * A product no longer assigned is taken away from them.
      */
     public void align(String realm, String orgName, String catalog, String product) {
@@ -130,15 +130,15 @@ public class TeamAlignment {
         log.info("Catalog role '{}' of catalog '{}' revoked from {} team(s) in realm '{}'", role, catalog, teams.size(), realm);
     }
 
-    /** The teams of the org that listed a deleted role of a product forget it. */
-    public void forgetProductRole(String realm, String orgName, String catalog, String product, String role) {
-        String rolesAttribute = TeamGrants.roles(catalog, product);
+    /** The teams of the org that listed a deleted feature of a product forget it. */
+    public void forgetFeature(String realm, String orgName, String catalog, String product, String feature) {
+        String featuresAttribute = TeamGrants.features(catalog, product);
         for (GroupRepresentation team : teams(realm, orgName)) {
             Map<String, List<String>> attributes = attributes(team);
-            List<String> roles = new ArrayList<>(attributes.getOrDefault(rolesAttribute, List.of()));
-            if (roles.remove(role)) {
+            List<String> features = new ArrayList<>(attributes.getOrDefault(featuresAttribute, List.of()));
+            if (features.remove(feature)) {
                 Map<String, List<String>> updated = new HashMap<>(attributes);
-                TeamMapper.putOrRemove(updated, rolesAttribute, roles);
+                TeamMapper.putOrRemove(updated, featuresAttribute, features);
                 groups.replaceAttributes(realm, team.getId(), updated);
             }
         }
@@ -167,8 +167,8 @@ public class TeamAlignment {
         // role mappings: only those of this product are touched
         Set<String> wanted = new HashSet<>();
         wanted.add(product);
-        teamMapper.givenRoles(attributes, catalog, product, orgProduct.boughtRoles())
-                .forEach(role -> wanted.add(CatalogRoles.productRole(product, role)));
+        teamMapper.givenFeatures(attributes, catalog, product, orgProduct.boughtFeatures())
+                .forEach(feature -> wanted.add(CatalogRoles.feature(product, feature)));
         List<RoleRepresentation> current = clients.rolesOfGroup(realm, clientUuid, team.getId()).stream()
                 .filter(role -> isOfProduct(role.getName(), product))
                 .toList();
@@ -205,7 +205,7 @@ public class TeamAlignment {
         }
     }
 
-    /** The product itself, or one of its roles ("shop-repository:scan"). */
+    /** The product itself, or one of its features ("shop-repository:scan"). */
     private static boolean isOfProduct(String roleName, String product) {
         return roleName.equals(product) || roleName.startsWith(product + CatalogRoles.SEPARATOR);
     }

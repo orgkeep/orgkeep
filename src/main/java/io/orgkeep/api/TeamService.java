@@ -9,13 +9,13 @@ import java.util.List;
 
 /**
  * What the teams of an organisation (its user groups) give, managed by its org admins: products of the org, with their
- * roles and a quota of team, and catalog roles. Written ahead on the group of the team (role mappings and attributes),
+ * features and a quota of team, and catalog roles. Written ahead on the group of the team (role mappings and attributes),
  * read by the native mappers of Keycloak when a token is issued: nothing is computed per user.
  */
 public interface TeamService {
 
     /**
-     * The products assigned to the org, with the roles it bought: what its teams can give.
+     * The products assigned to the org, with the features it bought: what its teams can give.
      *
      * @throws io.orgkeep.api.exceptions.OrgNotFoundException if no organisation has this name
      */
@@ -39,7 +39,7 @@ public interface TeamService {
      * Gives the product to the team, or replaces what the team gives of it.
      *
      * @throws io.orgkeep.api.exceptions.ProductNotAssignedException if the product is not assigned to the org
-     * @throws io.orgkeep.api.exceptions.InvalidRequestException for a role the org did not buy, or a cycle without quota
+     * @throws io.orgkeep.api.exceptions.InvalidRequestException for a feature the org did not buy, or a cycle without quota
      * @throws io.orgkeep.api.exceptions.OperationNotAllowedException with a quota, if a member of the team is already in
      *                                                               another team with a quota for this product
      */

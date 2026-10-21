@@ -12,8 +12,8 @@ import java.util.Map;
  * What an organisation negotiated for a product. Quota and cycle are required: an org never gets unlimited access
  * by mistake.
  *
- * @param boughtRoles optional, roles of the product the org bought (by name, without the product prefix)
- * @param params      optional, values of the parameters of the product, checked against its schema
+ * @param boughtFeatures optional, features of the product the org bought (by name, without the product prefix)
+ * @param params         optional, values of the parameters of the product, checked against its schema
  */
 public record AssignProductRequest(
     @NotNull
@@ -21,15 +21,15 @@ public record AssignProductRequest(
     Long quota,
     @NotNull
     QuotaCycle cycle,
-    List<@NotBlank String> boughtRoles,
+    List<@NotBlank String> boughtFeatures,
     Map<@NotBlank String, @NotNull @Size(max = 100) String> params){
 
     public AssignProductRequest {
-        boughtRoles = boughtRoles == null ? List.of() : List.copyOf(boughtRoles);
+        boughtFeatures = boughtFeatures == null ? List.of() : List.copyOf(boughtFeatures);
         params = params == null ? Map.of() : Map.copyOf(params);
     }
 
-    /** A product without roles nor parameters. */
+    /** A product without features nor parameters. */
     public AssignProductRequest(Long quota, QuotaCycle cycle) {
         this(quota, cycle, List.of(), Map.of());
     }

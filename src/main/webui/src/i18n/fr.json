@@ -23,6 +23,7 @@
     "realm": "Realm",
     "organisations": "Organisations",
     "catalogs": "Catalogues",
+    "loginClient": "Client de login",
     "organisation": "Organisation {{org}}",
     "members": "Membres",
     "teams": "Teams"
@@ -421,6 +422,33 @@
       "cycle": "Cycle",
       "poolHint": "Pool {{pool}} dans les tokens. Un membre est dans au plus une team avec quota par produit.",
       "submit": "Donner"
+    }
+  },
+  "loginClient": {
+    "title": "Client de login",
+    "subtitle": "Le client par lequel les users de toutes les organisations se connectent à vos applications.",
+    "loadError": "Impossible de charger le client de login",
+    "details": {
+      "title": "Pour vos développeurs",
+      "flow": "Un client public : vos applications utilisent le flow authorization code avec PKCE, sans secret.",
+      "clientId": "Client ID",
+      "issuer": "Issuer",
+      "discovery": "Configuration OpenID",
+      "console": "Le reste (thèmes, fournisseurs d'identité, sessions) est dans la console Keycloak de votre realm, avec votre propre compte :",
+      "consoleLink": "ouvrir la console Keycloak"
+    },
+    "settings": {
+      "title": "Vos applications",
+      "noRedirectUri": "Aucune redirect URI pour l'instant : personne ne peut se connecter par ce client.",
+      "redirectUris": "Redirect URIs",
+      "redirectUrisDescription": "Où les users reviennent après le login. https (http sur localhost seulement) ; un wildcard seulement à la fin : https://app.example.com/*. Entrée après chaque URI.",
+      "postLogoutRedirectUris": "Redirect URIs après logout",
+      "postLogoutRedirectUrisDescription": "Où les users reviennent après le logout. Mêmes règles.",
+      "webOrigins": "Web origins",
+      "webOriginsDescription": "Origines autorisées à appeler Keycloak depuis un navigateur (CORS) : https://app.example.com, ou + pour les origines des redirect URIs.",
+      "defaultCatalogs": "Catalogues par défaut",
+      "defaultCatalogsDescription": "Dans chaque token de ce client. Les autres catalogues ne sont dans un token que si l'application les demande (scope=<catalogue>).",
+      "saved": "Enregistré."
     }
   }
 }

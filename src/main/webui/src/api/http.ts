@@ -25,9 +25,14 @@ interface ErrorBody {
   violations?: { field?: string; message?: string }[];
 }
 
-// "create.request.name" (method.parameter.field) -> "name"
+// "create.request.name" (method.parameter.field) -> "name".
+// An element of a list is reported as "update.request.redirectUris[0].<list element>" -> "redirectUris[0]"
 function fieldName(path: string | undefined): string {
-  return path ? path.substring(path.lastIndexOf('.') + 1) : '';
+  if (!path) {
+    return '';
+  }
+  const withoutElement = path.replace(/\.<[^>]+>$/, '');
+  return withoutElement.substring(withoutElement.lastIndexOf('.') + 1);
 }
 
 async function errorOf(response: Response): Promise<Error> {

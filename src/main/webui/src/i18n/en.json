@@ -23,6 +23,7 @@
     "realm": "Realm",
     "organisations": "Organisations",
     "catalogs": "Catalogs",
+    "loginClient": "Login client",
     "organisation": "Organisation {{org}}",
     "members": "Members",
     "teams": "Teams"
@@ -421,6 +422,33 @@
       "cycle": "Cycle",
       "poolHint": "Pool {{pool}} in the tokens. A member is in at most one team with a quota per product.",
       "submit": "Give"
+    }
+  },
+  "loginClient": {
+    "title": "Login client",
+    "subtitle": "The client the users of every organisation log in through, to your applications.",
+    "loadError": "Could not load the login client",
+    "details": {
+      "title": "For your developers",
+      "flow": "A public client: your applications use the authorization code flow with PKCE, no secret.",
+      "clientId": "Client ID",
+      "issuer": "Issuer",
+      "discovery": "OpenID configuration",
+      "console": "Anything else (themes, identity providers, sessions) is in the Keycloak console of your realm, with your own account:",
+      "consoleLink": "open the Keycloak console"
+    },
+    "settings": {
+      "title": "Your applications",
+      "noRedirectUri": "No redirect URI yet: nobody can log in through this client.",
+      "redirectUris": "Redirect URIs",
+      "redirectUrisDescription": "Where users come back after login. https (http on localhost only); a wildcard only at the end: https://app.example.com/*. Press Enter after each URI.",
+      "postLogoutRedirectUris": "Post logout redirect URIs",
+      "postLogoutRedirectUrisDescription": "Where users come back after logout. Same rules.",
+      "webOrigins": "Web origins",
+      "webOriginsDescription": "Origins allowed to call Keycloak from a browser (CORS): https://app.example.com, or + for the origins of the redirect URIs.",
+      "defaultCatalogs": "Default catalogs",
+      "defaultCatalogsDescription": "In every token of this client. The other catalogs are only in a token when the application asks for them (scope=<catalog>).",
+      "saved": "Saved."
     }
   }
 }

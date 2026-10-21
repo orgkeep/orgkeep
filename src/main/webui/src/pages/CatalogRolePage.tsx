@@ -164,7 +164,7 @@ function HoldersSection({ catalog, role }: { catalog: string; role: string }) {
         <Text c="dimmed">{t('catalogRole.users.subtitle')}</Text>
       </div>
 
-      <GrantToUser catalog={catalog} role={role} />
+      <GrantToUser catalog={catalog} role={role} holderIds={(holders ?? []).map((holder) => holder.userId)} />
 
       {isPending && <Loader size="sm" />}
       {error && (
@@ -213,7 +213,14 @@ function HoldersSection({ catalog, role }: { catalog: string; role: string }) {
 }
 
 // Two steps: an organisation, then one of its members. The core only gives a catalog role to a member of an org
-function GrantToUser({ catalog, role }: { catalog: string; role: string }) {
+interface GrantProps {
+  catalog: string;
+  role: string;
+  // the users who already hold the role: not offered again
+  holderIds: string[];
+}
+
+function GrantToUser({ catalog, role, holderIds }: GrantProps) {
   const { t } = useTranslation();
   const [org, setOrg] = useState<string | null>(null);
   // all the organisations (first page of the core, 100 max), without filter
@@ -231,15 +238,16 @@ function GrantToUser({ catalog, role }: { catalog: string; role: string }) {
         w={240}
       />
       {/* the members are loaded once an organisation is chosen: the hook needs it */}
-      {org && <MemberPicker key={org} catalog={catalog} role={role} org={org} />}
+      {org && <MemberPicker key={org} catalog={catalog} role={role} holderIds={holderIds} org={org} />}
     </Group>
   );
 }
 
-function MemberPicker({ catalog, role, org }: { catalog: string; role: string; org: string }) {
+function MemberPicker({ catalog, role, holderIds, org }: GrantProps & { org: string }) {
   const { t } = useTranslation();
   const members = useOrgMembers(org);
   const grant = useGrantRoleToUser(catalog, role);
+  const candidates = (members.data ?? []).filter((member) => !holderIds.includes(member.id));
 
   return (
     <Stack gap={4}>
@@ -247,7 +255,7 @@ function MemberPicker({ catalog, role, org }: { catalog: string; role: string; o
       <Select
         label={t('catalogRole.users.member')}
         placeholder={t('catalogRole.users.memberPlaceholder')}
-        data={(members.data ?? []).map((member) => ({ value: member.id, label: personName(member) }))}
+        data={candidates.map((member) => ({ value: member.id, label: personName(member) }))}
         value={null}
         onChange={(userId) => userId && grant.mutate(userId)}
         searchable

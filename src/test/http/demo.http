@@ -1,6 +1,7 @@
 ### Demo data: mvn quarkus:dev
 ### or Docker: orgkeep-compose, docker compose -f docker-compose.yaml -f docker-compose.demo.yaml up -d
-### Accounts (realm "demo"): realm-owner / password, org-owner / password (owner of the organisation "acme")
+### Accounts (realm "demo"), password "password": realm-owner, org-owner (owner of the organisation "acme"),
+### org-user, paul (team sales) and emma (team accounting)
 ### Tokens: login client of the realm (clientId = realm name), password grant enabled for the demo by DemoSeeder
 
 ### Token of the realm owner
@@ -39,7 +40,8 @@ client_id=demo
     &password=password
     &grant_type=password
 
-### Token of paul, team ops, catalog prod only: resource_access.prod, pools acme and acme/ops in the claim "prod"
+### Token of paul, team sales, catalog prod only: resource_access.prod has billing:stats, billing:scan, shop:write,
+### shop:scan (no access role for a metered product), the claim "prod" a pool of acme for scan on each repository
 POST http://localhost:8280/realms/demo/protocol/openid-connect/token
 Content-Type: application/x-www-form-urlencoded
 
@@ -49,7 +51,17 @@ client_id=demo
     &grant_type=password
     &scope=openid prod
 
-### Token of paul, catalog sandbox only: the API of prod refuses it (prod is not in aud)
+### Token of emma, team accounting, catalog prod only: every feature of billing, a pool for scan and one for flow
+POST http://localhost:8280/realms/demo/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+client_id=demo
+    &username=emma
+    &password=password
+    &grant_type=password
+    &scope=openid prod
+
+### Token of paul, catalog sandbox only: larger quotas, and the API of prod refuses it (prod is not in aud)
 POST http://localhost:8280/realms/demo/protocol/openid-connect/token
 Content-Type: application/x-www-form-urlencoded
 
@@ -86,14 +98,13 @@ Authorization: Bearer {{org_owner_token}}
 GET http://localhost:8282/api/organisations/acme/products
 Authorization: Bearer {{org_owner_token}}
 
-### Org owner: the team analysts gives legal-repository in prod, scan only, with a quota of team (cycle of the org)
-PUT http://localhost:8282/api/organisations/acme/user-groups/analysts/products/prod/legal-repository
+### Org owner: the team sales also gets flow on billing in prod (a metered product: no quota of team)
+PUT http://localhost:8282/api/organisations/acme/user-groups/sales/products/prod/billing
 Authorization: Bearer {{org_owner_token}}
 Content-Type: application/json
 
 {
-  "features": ["scan"],
-  "quota": 200
+  "features": ["stats", "scan", "flow"]
 }
 
 ### Org owner: the catalog roles of prod the teams can give

@@ -18,6 +18,7 @@ import io.orgkeep.api.model.CreateOrgRequest;
 import io.orgkeep.api.model.CreateProductRequest;
 import io.orgkeep.api.model.CreateUserGroupRequest;
 import io.orgkeep.api.model.Feature;
+import io.orgkeep.api.model.FeatureQuota;
 import io.orgkeep.api.model.GrantProductRequest;
 import io.orgkeep.api.model.ParamDefinition;
 import io.orgkeep.api.model.ParamType;
@@ -73,6 +74,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class TeamTokenTest {
     private static final String ORG = "acme";
     private static final String PRODUCT = "shop-repository";
+    private static final String BILLING = "billing";
     private static final String PASSWORD = "password";
 
     @Inject Keycloak keycloak;
@@ -184,6 +186,78 @@ class TeamTokenTest {
         catalogRoleService.grant(testRealm.name(), "prod", "anonymous", paulId);
 
         assertTrue(strings(logIn("paul", "openid prod").at("/resource_access/prod/roles")).contains("anonymous"));
+    }
+
+    // --- a metered product: "billing" in prod (read, stats, scan and flow metered), acme bought stats and scan (200 a day).
+    // accounting gives every feature bought, sales gives stats and scan, readers gives stats only.
+    // Emma is in accounting and sales, Stan in readers
+
+    // no access role, the features as roles, one pool per metered feature with its feature, the org pool once
+    @Test
+    void aMeteredProduct() throws Exception {
+        setUpBilling();
+
+        JsonNode claims = logIn("emma", "openid prod");
+        log.info("Token of emma with scope=prod: {}", claims.toPrettyString());
+
+        Set<String> roles = strings(claims.at("/resource_access/prod/roles"));
+        assertEquals(Set.of("billing:stats", "billing:scan"), roles);
+        assertTrue(strings(claims.path("aud")).contains("prod"), claims.path("aud").toString());
+        // accounting and sales both carry the pool of the org for scan: Keycloak keeps it once
+        JsonNode quotas = claims.at("/prod/billing/quotas");
+        assertEquals(1, quotas.size(), quotas.toString());
+        assertEquals("scan", quotas.get(0).path("feature").asText());
+        assertEquals("acme", quotas.get(0).path("pool").asText());
+        assertEquals(200, quotas.get(0).path("limit").asInt());
+        assertEquals("daily", quotas.get(0).path("cycle").asText());
+    }
+
+    // only a feature without quota: the role, and no entry for the product in the claim of the catalog
+    @Test
+    void onlyAFeatureWithoutQuota() throws Exception {
+        setUpBilling();
+
+        JsonNode claims = logIn("stan", "openid prod");
+
+        assertEquals(Set.of("billing:stats"), strings(claims.at("/resource_access/prod/roles")));
+        assertTrue(claims.at("/prod/billing").isMissingNode(), claims.toString());
+    }
+
+    // a metered feature bought later reaches the token, with its pool, through a team giving every feature bought
+    @Test
+    void aMeteredFeatureBoughtLaterReachesTheToken() throws Exception {
+        setUpBilling();
+
+        productService.assign(testRealm.name(), ORG, "prod", BILLING, AssignProductRequest.metered(List.of("stats", "scan", "flow"),
+                Map.of("scan", new FeatureQuota(200L, QuotaCycle.DAILY), "flow", new FeatureQuota(100L, QuotaCycle.MONTHLY))));
+
+        JsonNode claims = logIn("emma", "openid prod");
+        assertTrue(strings(claims.at("/resource_access/prod/roles")).contains("billing:flow"), claims.toString());
+        assertEquals(Set.of("scan", "flow"), claims.at("/prod/billing/quotas").findValues("feature").stream()
+                .map(JsonNode::asText).collect(Collectors.toSet()));
+        // a team that listed its features does not get it: readers gives stats only
+        assertFalse(strings(logIn("stan", "openid prod").at("/resource_access/prod/roles")).contains("billing:flow"));
+    }
+
+    private void setUpBilling() {
+        String realm = testRealm.name();
+        productService.create(realm, "prod", new CreateProductRequest(BILLING, "Billing", null, List.of(
+                new Feature("read", null), new Feature("stats", null),
+                new Feature("scan", null, true), new Feature("flow", null, true)), List.of()));
+        productService.assign(realm, ORG, "prod", BILLING, AssignProductRequest.metered(List.of("stats", "scan"),
+                Map.of("scan", new FeatureQuota(200L, QuotaCycle.DAILY))));
+
+        String emmaId = member("emma");
+        String stanId = member("stan");
+        for (String team : List.of("accounting", "sales", "readers")) {
+            userGroupService.create(realm, ORG, new CreateUserGroupRequest(team));
+        }
+        teamService.grantProduct(realm, ORG, "accounting", "prod", BILLING, GrantProductRequest.allFeatures());
+        teamService.grantProduct(realm, ORG, "sales", "prod", BILLING, new GrantProductRequest(List.of("stats", "scan"), null, null));
+        teamService.grantProduct(realm, ORG, "readers", "prod", BILLING, new GrantProductRequest(List.of("stats"), null, null));
+        userGroupService.addMember(realm, ORG, "accounting", emmaId);
+        userGroupService.addMember(realm, ORG, "sales", emmaId);
+        userGroupService.addMember(realm, ORG, "readers", stanId);
     }
 
     private void assign(List<String> boughtFeatures) {

@@ -112,21 +112,36 @@ class DemoSeederTest {
     void orgUserGetsBillingThroughTheTeamUsers() throws Exception {
         JsonNode claims = logIn(DemoSeeder.ORG_USER);
 
-        assertTrue(contains(claims.at("/resource_access/products/roles"), DemoSeeder.PRODUCT), claims.toString());
+        assertTrue(contains(claims.at("/resource_access/products/roles"), DemoSeeder.BILLING), claims.toString());
         assertEquals("acme", claims.at("/products/billing/quotas/0/pool").asText(), claims.toString());
     }
 
-    // the example token of the spec: Paul, team ops, scopes prod and sandbox
+    // the example token of the spec: Paul, team sales, scope prod. Metered products: no access role, the features
+    // given as roles, a pool of the org per metered feature
     @Test
     void paulGetsTheExampleTokenOfTheSpec() throws Exception {
-        JsonNode claims = logIn(DemoSeeder.PAUL, "openid prod sandbox");
+        JsonNode claims = logIn(DemoSeeder.PAUL, "openid prod");
 
-        assertEquals(Set.of("scanner", "shop-repository", "shop-repository:scan"),
+        assertEquals(Set.of("billing:stats", "billing:scan", "shop:write", "shop:scan"),
                 strings(claims.at("/resource_access/prod/roles")));
-        assertEquals(Set.of("scanner", "shop-repository", "shop-repository:scan", "shop-repository:flow"),
-                strings(claims.at("/resource_access/sandbox/roles")));
-        assertEquals(Set.of("acme", "acme/ops"), pools(claims.at("/prod/shop-repository/quotas")));
-        assertEquals(Set.of("acme"), pools(claims.at("/sandbox/shop-repository/quotas")));
+        assertEquals(json("[{\"feature\":\"scan\",\"pool\":\"acme\",\"limit\":200,\"cycle\":\"daily\"}]"),
+                claims.at("/prod/billing/quotas"));
+        assertEquals(json("[{\"feature\":\"scan\",\"pool\":\"acme\",\"limit\":100,\"cycle\":\"daily\"}]"),
+                claims.at("/prod/shop/quotas"));
+        // without the scope of sandbox, nothing of it
+        assertTrue(claims.at("/resource_access/sandbox").isMissingNode(), claims.toString());
+    }
+
+    // Emma, team accounting: every feature of billing, a pool per engine; the sandbox has its own, larger quotas
+    @Test
+    void emmaGetsEveryFeatureOfBilling() throws Exception {
+        JsonNode claims = logIn(DemoSeeder.EMMA, "openid prod sandbox");
+
+        assertEquals(Set.of("billing:read", "billing:write", "billing:stats", "billing:scan", "billing:flow"),
+                strings(claims.at("/resource_access/prod/roles")));
+        assertEquals(Set.of("scan:200", "flow:100"), limits(claims.at("/prod/billing/quotas")));
+        assertEquals(Set.of("scan:1000", "flow:1000"), limits(claims.at("/sandbox/billing/quotas")));
+        assertTrue(claims.at("/prod/shop").isMissingNode(), claims.toString());
     }
 
     @Test
@@ -188,8 +203,15 @@ class DemoSeederTest {
         return values;
     }
 
-    private static Set<String> pools(JsonNode quotas) {
-        return quotas.findValues("pool").stream().map(JsonNode::asText).collect(Collectors.toSet());
+    /** "feature:limit" for each pool of the quotas of a metered product. */
+    private static Set<String> limits(JsonNode quotas) {
+        Set<String> limits = new HashSet<>();
+        quotas.forEach(pool -> limits.add(pool.path("feature").asText() + ":" + pool.path("limit").asInt()));
+        return limits;
+    }
+
+    private static JsonNode json(String value) throws Exception {
+        return new ObjectMapper().readTree(value);
     }
 
     private static boolean contains(JsonNode array, String value) {

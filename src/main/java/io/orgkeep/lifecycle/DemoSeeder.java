@@ -16,6 +16,7 @@ import io.orgkeep.api.model.CreateOrgRequest;
 import io.orgkeep.api.model.CreateProductRequest;
 import io.orgkeep.api.model.CreateUserGroupRequest;
 import io.orgkeep.api.model.Feature;
+import io.orgkeep.api.model.FeatureQuota;
 import io.orgkeep.api.model.GrantProductRequest;
 import io.orgkeep.api.model.OrgGroups;
 import io.orgkeep.api.model.QuotaCycle;
@@ -55,15 +56,17 @@ public class DemoSeeder {
     static final String ORG_USER = "org-user";
     static final String ORG_USER_EMAIL = "org-user@acme.test";
     static final String PASSWORD = "password";
-    static final String PRODUCT = "billing";
+    // a product only exists in its catalog: the same name in "products" (simple) and in prod / sandbox (metered)
+    static final String BILLING = "billing";
+    static final String SHOP = "shop";
     static final String PROD = "prod";
     static final String SANDBOX = "sandbox";
-    static final String SHOP_REPOSITORY = "shop-repository";
-    static final String LEGAL_REPOSITORY = "legal-repository";
-    static final String ANALYSTS = "analysts";
-    static final String OPS = "ops";
+    static final String ACCOUNTING = "accounting";
+    static final String SALES = "sales";
     static final String PAUL = "paul";
     static final String PAUL_EMAIL = "paul@acme.test";
+    static final String EMMA = "emma";
+    static final String EMMA_EMAIL = "emma@acme.test";
     // must match quarkus.oidc.client-id and the dev secret in the application.properties of orgkeep-dashboard
     static final String DASHBOARD_CLIENT_ID = "orgkeep-dashboard";
     static final String DASHBOARD_SECRET = "dashboard-dev-secret";
@@ -123,62 +126,79 @@ public class DemoSeeder {
         if (catalogService.list(realm).stream().noneMatch(catalog -> Catalogs.DEFAULT.equals(catalog.name()))) {
             return;
         }
-        if (productService.list(realm, Catalogs.DEFAULT).stream().noneMatch(product -> PRODUCT.equals(product.name()))) {
-            productService.create(realm, Catalogs.DEFAULT, new CreateProductRequest(PRODUCT, "Billing API", "Invoices"));
+        if (productService.list(realm, Catalogs.DEFAULT).stream().noneMatch(product -> BILLING.equals(product.name()))) {
+            productService.create(realm, Catalogs.DEFAULT, new CreateProductRequest(BILLING, "Billing API", "Invoices"));
         }
-        productService.assign(realm, ORG, Catalogs.DEFAULT, PRODUCT, new AssignProductRequest(1000L, QuotaCycle.MONTHLY));
-        teamService.grantProduct(realm, ORG, OrgGroups.USERS, Catalogs.DEFAULT, PRODUCT, GrantProductRequest.allFeatures());
+        productService.assign(realm, ORG, Catalogs.DEFAULT, BILLING, new AssignProductRequest(1000L, QuotaCycle.MONTHLY));
+        teamService.grantProduct(realm, ORG, OrgGroups.USERS, Catalogs.DEFAULT, BILLING, GrantProductRequest.allFeatures());
     }
 
     /**
-     * The case with several environments: catalogs prod and sandbox, products with features bought by
-     * the org, catalog roles, and two teams, one with a quota of its own. Paul is in the team ops.
+     * The case with several environments and metered features: catalogs prod and sandbox, repositories billing and
+     * shop, permissions (read, write, stats) and engines bought with a quota each (scan, flow). Two teams: accounting
+     * (Emma) and sales (Paul).
      * Checked on its own, not with the org: a realm seeded before this example existed gets it too.
      */
     private void ensureEnvironments(String realm) {
         if (catalogService.list(realm).stream().anyMatch(catalog -> PROD.equals(catalog.name()))) {
             return;
         }
-        List<Feature> engines = List.of(new Feature("scan", "Scan engine"), new Feature("flow", "Flow engine"));
+        Feature read = new Feature("read", "Read");
+        Feature write = new Feature("write", "Write");
+        Feature stats = new Feature("stats", "Statistics");
+        Feature scan = new Feature("scan", "Scan engine", true);
+        Feature flow = new Feature("flow", "Flow engine", true);
         for (String catalog : List.of(PROD, SANDBOX)) {
             catalogService.create(realm, new CreateCatalogRequest(catalog, PROD.equals(catalog) ? "Production" : "Sandbox", null));
-            productService.create(realm, catalog, new CreateProductRequest(SHOP_REPOSITORY, "Shop repository",
-                    "Repositories of the shops", engines, List.of()));
-            productService.create(realm, catalog, new CreateProductRequest(LEGAL_REPOSITORY, "Legal repository",
-                    "Legal documents", engines, List.of()));
-            catalogRoleService.create(realm, catalog, new CreateCatalogRoleRequest("scanner", "Scanner", null, true));
-            catalogRoleService.create(realm, catalog, new CreateCatalogRoleRequest("stats", "Statistics", null, true));
+            productService.create(realm, catalog, new CreateProductRequest(BILLING, "Billing repository",
+                    "Invoices and payments", List.of(read, write, stats, scan, flow), List.of()));
+            productService.create(realm, catalog, new CreateProductRequest(SHOP, "Shop repository",
+                    "Orders of the shops", List.of(read, write, stats, scan), List.of()));
             catalogRoleService.create(realm, catalog, new CreateCatalogRoleRequest("anonymous", "Test account",
                     "Excluded from the statistics", false));
         }
 
-        // what acme negotiated
-        productService.assign(realm, ORG, PROD, SHOP_REPOSITORY,
-                new AssignProductRequest(1000L, QuotaCycle.MONTHLY, List.of("scan"), Map.of()));
-        productService.assign(realm, ORG, PROD, LEGAL_REPOSITORY,
-                new AssignProductRequest(500L, QuotaCycle.MONTHLY, List.of("scan", "flow"), Map.of()));
-        productService.assign(realm, ORG, SANDBOX, SHOP_REPOSITORY,
-                new AssignProductRequest(100L, QuotaCycle.DAILY, List.of("scan", "flow"), Map.of()));
-
-        // analysts: both products of prod and the statistics; ops: shop-repository everywhere, with its own quota in prod
-        userGroupService.create(realm, ORG, new CreateUserGroupRequest(ANALYSTS));
-        teamService.grantProduct(realm, ORG, ANALYSTS, PROD, SHOP_REPOSITORY, GrantProductRequest.allFeatures());
-        teamService.grantProduct(realm, ORG, ANALYSTS, PROD, LEGAL_REPOSITORY, GrantProductRequest.allFeatures());
-        teamService.grantCatalogRole(realm, ORG, ANALYSTS, PROD, "stats");
-        userGroupService.create(realm, ORG, new CreateUserGroupRequest(OPS));
-        teamService.grantProduct(realm, ORG, OPS, PROD, SHOP_REPOSITORY, new GrantProductRequest(null, 300L, null));
-        teamService.grantProduct(realm, ORG, OPS, SANDBOX, SHOP_REPOSITORY, GrantProductRequest.allFeatures());
-        teamService.grantCatalogRole(realm, ORG, OPS, PROD, "scanner");
-        teamService.grantCatalogRole(realm, ORG, OPS, SANDBOX, "scanner");
-
-        String paulId = users.findIdByEmail(realm, PAUL_EMAIL)
-                .orElseGet(() -> users.create(realm, demoUser(PAUL, PAUL_EMAIL, "Paul", "Lefebvre")));
-        if (orgs.organisationsOf(realm, paulId).isEmpty()) {
-            memberService.add(realm, ORG, new AddMemberRequest(PAUL_EMAIL, null, null));
+        // what acme negotiated: the bundle of each repository, a quota per engine. Larger quotas in the sandbox
+        for (String catalog : List.of(PROD, SANDBOX)) {
+            boolean prod = PROD.equals(catalog);
+            productService.assign(realm, ORG, catalog, BILLING, AssignProductRequest.metered(
+                    List.of("read", "write", "stats", "scan", "flow"),
+                    Map.of("scan", daily(prod ? 200 : 1000), "flow", daily(prod ? 100 : 1000))));
+            productService.assign(realm, ORG, catalog, SHOP, AssignProductRequest.metered(
+                    List.of("write", "stats", "scan"), Map.of("scan", daily(prod ? 100 : 1000))));
         }
-        userGroupService.addMember(realm, ORG, OPS, paulId);
-        log.info("Demo catalogs '{}' and '{}' created in realm '{}', member '{}' / '{}' in the team '{}'",
-                PROD, SANDBOX, realm, PAUL, PASSWORD, OPS);
+
+        // accounting: everything on billing; sales: write and scan on shop, stats and scan on billing
+        userGroupService.create(realm, ORG, new CreateUserGroupRequest(ACCOUNTING));
+        userGroupService.create(realm, ORG, new CreateUserGroupRequest(SALES));
+        for (String catalog : List.of(PROD, SANDBOX)) {
+            teamService.grantProduct(realm, ORG, ACCOUNTING, catalog, BILLING, GrantProductRequest.allFeatures());
+            teamService.grantProduct(realm, ORG, SALES, catalog, SHOP, features("write", "scan"));
+            teamService.grantProduct(realm, ORG, SALES, catalog, BILLING, features("stats", "scan"));
+        }
+
+        addToTeam(realm, demoUser(PAUL, PAUL_EMAIL, "Paul", "Lefebvre"), SALES);
+        addToTeam(realm, demoUser(EMMA, EMMA_EMAIL, "Emma", "Roux"), ACCOUNTING);
+        log.info("Demo catalogs '{}' and '{}' created in realm '{}', members '{}' ({}) and '{}' ({}), password '{}'",
+                PROD, SANDBOX, realm, PAUL, SALES, EMMA, ACCOUNTING, PASSWORD);
+    }
+
+    /** Created first with a password, like the owner: OrgMemberService reuses the user and sends no invitation. */
+    private void addToTeam(String realm, UserRepresentation user, String team) {
+        String userId = users.findIdByEmail(realm, user.getEmail())
+                .orElseGet(() -> users.create(realm, user));
+        if (orgs.organisationsOf(realm, userId).isEmpty()) {
+            memberService.add(realm, ORG, new AddMemberRequest(user.getEmail(), null, null));
+        }
+        userGroupService.addMember(realm, ORG, team, userId);
+    }
+
+    private static FeatureQuota daily(long quota) {
+        return new FeatureQuota(quota, QuotaCycle.DAILY);
+    }
+
+    private static GrantProductRequest features(String... features) {
+        return new GrantProductRequest(List.of(features), null, null);
     }
 
     /**

@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.keycloak.admin.client.CreatedResponseUtil;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.RolesResource;
+import org.keycloak.representations.AccessToken;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.ClientScopeRepresentation;
 import org.keycloak.representations.idm.GroupRepresentation;
@@ -51,6 +52,18 @@ public class KeycloakClients {
             }
             return Optional.of(CreatedResponseUtil.getCreatedId(response));
         }
+    }
+
+    /**
+     * The access token the client would issue to the user, as Keycloak computes it for the "Client scopes > Evaluate"
+     * tab of the console: the claims only, never signed, so nothing usable as a bearer token. The user does not log in.
+     *
+     * @param scope the scope parameter an application would send, e.g. "openid prod"
+     */
+    public AccessToken exampleAccessToken(String realm, String clientUuid, String userId, String scope) {
+        // no audience: the token is not restricted to one, as when an application asks for it
+        return keycloak.realm(realm).clients().get(clientUuid).clientScopesEvaluate()
+                .generateAccessToken(scope, userId, null);
     }
 
     /** Full representation of the client. */

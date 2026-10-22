@@ -17,8 +17,16 @@ import {
 import { useDisclosure } from '@mantine/hooks';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router';
-import { type Catalog, useCatalog, useCatalogProducts, useCatalogRoles, useDeleteCatalog } from '../api/catalogs';
+import {
+  type Catalog,
+  useCatalog,
+  useCatalogProducts,
+  useCatalogRoles,
+  useDeleteCatalog,
+  useRegenerateSecret,
+} from '../api/catalogs';
 import ConfirmModal from '../components/ConfirmModal';
+import CopyValue from '../components/CopyValue';
 import CatalogModal from './CatalogModal';
 import CatalogRoleModal from './CatalogRoleModal';
 import ProductModal from './ProductModal';
@@ -59,6 +67,7 @@ export default function CatalogPage() {
       <ProductsSection catalog={catalog.name} />
       <RolesSection catalog={catalog.name} />
       <TokenHint catalog={catalog.name} />
+      <IntrospectionSection catalog={catalog.name} />
     </Stack>
   );
 }
@@ -323,6 +332,83 @@ export function ProductKindBadge({ metered }: { metered: boolean }) {
 }
 
 // What the API of the realm owner receives: makes the link between this screen and the tokens
+// The credentials the APIs of the catalog introspect the tokens with (lightweight tokens, see the login client).
+// The core never gives a secret back: the realm owner generates a new one, shown here until the page is left.
+function IntrospectionSection({ catalog }: { catalog: string }) {
+  const { t } = useTranslation();
+  const regenerate = useRegenerateSecret(catalog);
+  const [confirmOpened, { open: openConfirm, close: closeConfirm }] = useDisclosure();
+  const credentials = regenerate.data;
+
+  function closeConfirmModal() {
+    // keep the credentials of a previous success: only a failed attempt is cleared
+    if (regenerate.isError) {
+      regenerate.reset();
+    }
+    closeConfirm();
+  }
+
+  return (
+    <Paper withBorder p="md">
+      <Stack gap="xs">
+        <Group justify="space-between">
+          <Text fw={600}>{t('catalogDetail.introspection.title')}</Text>
+          <Button variant="default" onClick={openConfirm}>
+            {t('catalogDetail.introspection.generate')}
+          </Button>
+        </Group>
+        <Text size="sm" c="dimmed">
+          {t('catalogDetail.introspection.description')}
+        </Text>
+        <Text size="sm" c="dimmed">
+          {t('catalogDetail.introspection.audience')}
+        </Text>
+
+        {credentials && (
+          <>
+            <Alert color="yellow">{t('catalogDetail.introspection.shownOnce')}</Alert>
+            <Table>
+              <Table.Tbody>
+                {[
+                  { label: t('catalogDetail.introspection.clientId'), value: credentials.clientId },
+                  { label: t('catalogDetail.introspection.clientSecret'), value: credentials.clientSecret },
+                  { label: t('catalogDetail.introspection.url'), value: credentials.introspectionUrl },
+                ].map((row) => (
+                  <Table.Tr key={row.label}>
+                    <Table.Td w={180}>
+                      <Text size="sm" c="dimmed">
+                        {row.label}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Group gap="xs" wrap="nowrap">
+                        <Code>{row.value}</Code>
+                        <CopyValue value={row.value} />
+                      </Group>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </>
+        )}
+      </Stack>
+
+      <ConfirmModal
+        opened={confirmOpened}
+        title={t('catalogDetail.introspection.confirm.title', { catalog })}
+        message={t('catalogDetail.introspection.confirm.message')}
+        confirmLabel={t('catalogDetail.introspection.confirm.button')}
+        confirmColor="orange"
+        pending={regenerate.isPending}
+        error={regenerate.error}
+        onConfirm={() => regenerate.mutate(undefined, { onSuccess: closeConfirm })}
+        onClose={closeConfirmModal}
+      />
+    </Paper>
+  );
+}
+
 function TokenHint({ catalog }: { catalog: string }) {
   const { t } = useTranslation();
   // the token format of the core (rights in resource_access, quotas and parameters in the claim of the catalog),

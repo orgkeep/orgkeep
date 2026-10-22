@@ -250,6 +250,21 @@
       "kinds": "Here billing is a simple product (an access role, one quota), shop a product with metered features (no access role, one quota per metered feature, each entry says its feature).",
       "usage": "Orgkeep does not count the usage: your API compares its own counters with the limits of the token."
     },
+    "introspection": {
+      "title": "Introspection credentials for your APIs",
+      "generate": "Generate a secret",
+      "description": "With lightweight tokens (see the login client), your APIs read the content of the tokens by introspection (RFC 7662), authenticated with these credentials. It also works with full tokens: an API can switch before the tokens do.",
+      "audience": "These credentials only introspect the tokens of this catalog: a token without it, or of a user with no right in it, is answered \"active\": false.",
+      "shownOnce": "Copy the secret now: it is not shown again. Generating another one replaces it.",
+      "clientId": "Client ID",
+      "clientSecret": "Client secret",
+      "url": "Introspection URL",
+      "confirm": {
+        "title": "Generate a new secret for {{catalog}}?",
+        "message": "The previous secret stops working at once: every API of this catalog must get the new one.",
+        "button": "Generate"
+      }
+    },
     "roles": {
       "title": "Roles",
       "subtitle": "Valid for the whole catalog, not for one product: what a user may do in this environment (scanner, beta-tester...). Your API combines them with the products of the user.",
@@ -524,6 +539,20 @@
       "defaultCatalogs": "Default catalogs",
       "defaultCatalogsDescription": "In every token of this client. The other catalogs are only in a token when the application asks for them (scope=<catalog>).",
       "saved": "Saved."
+    },
+    "lightweight": {
+      "title": "Lightweight tokens",
+      "on": "On",
+      "off": "Off",
+      "description": "When the tokens get too big (many products and features), the tokens of this client can carry only who the user is: no roles, no catalogs, no profile, always the same small size. Your APIs then read the content by introspection, a standard call (RFC 7662) that Spring, Quarkus and the gateways know.",
+      "introspection": "Each API introspects with the credentials of its catalog, generated on the page of the catalog:",
+      "catalogsLink": "Catalogs",
+      "marker": "Each lightweight token carries the claim",
+      "confirm": {
+        "title": "Turn on the lightweight tokens?",
+        "message": "Every application of this client receives lightweight tokens at once. Each of your APIs must introspect the tokens first (it works with full tokens too), or it no longer sees the rights of the users. An application that reads roles in the access token in the browser no longer sees them either; the ID token does not change.",
+        "button": "Turn on"
+      }
     }
   }
 }

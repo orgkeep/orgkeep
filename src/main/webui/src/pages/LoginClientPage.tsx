@@ -4,21 +4,25 @@ import {
   Button,
   Center,
   Code,
-  CopyButton,
   Group,
   Loader,
   MultiSelect,
   Paper,
   Stack,
+  Switch,
   Table,
   TagsInput,
   Text,
   Title,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
+import { useDisclosure } from '@mantine/hooks';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router';
 import { useCatalogs } from '../api/catalogs';
 import { type LoginClient, type UpdateLoginClientRequest, useLoginClient, useUpdateLoginClient } from '../api/loginClient';
+import ConfirmModal from '../components/ConfirmModal';
+import CopyValue from '../components/CopyValue';
 
 // The login client of the realm (realm owner): what the developers of the realm owner put in their applications,
 // and the URIs Keycloak accepts for them. Without a redirect URI, nobody can log in through it.
@@ -49,6 +53,7 @@ export default function LoginClientPage() {
       </div>
       <ConnectionDetails client={client} />
       <SettingsForm client={client} />
+      <LightweightTokensSection client={client} />
     </Stack>
   );
 }
@@ -102,21 +107,75 @@ function ConnectionDetails({ client }: { client: LoginClient }) {
   );
 }
 
-// Mantine's CopyButton passes "copy" (the click handler) and "copied" (true for a moment after the click)
-// to the function inside it, which draws the button
-function CopyValue({ value }: { value: string }) {
+// The lightweight tokens: a switch saved on its own, with a confirmation when it is turned on.
+// Turned on, every API of the realm owner receives lightweight tokens at once: each must introspect them first.
+// Turned off, nothing breaks: an API that introspects works with full tokens too.
+function LightweightTokensSection({ client }: { client: LoginClient }) {
   const { t } = useTranslation();
+  const update = useUpdateLoginClient();
+  const [confirmOpened, { open: openConfirm, close: closeConfirm }] = useDisclosure();
+
+  // only the switch changes: the rest is sent as the core has it, not as the form below may have it (unsaved)
+  function save(lightweightTokens: boolean, onSuccess?: () => void) {
+    update.mutate({ ...toValues(client), lightweightTokens }, { onSuccess });
+  }
+
+  function closeConfirmModal() {
+    update.reset();
+    closeConfirm();
+  }
+
   return (
-    <CopyButton value={value}>
-      {({ copied, copy }) => (
-        <Button variant="subtle" size="compact-xs" color={copied ? 'green' : 'gray'} onClick={copy}>
-          {copied ? t('common.copied') : t('common.copy')}
-        </Button>
-      )}
-    </CopyButton>
+    <Paper withBorder p="md">
+      <Stack gap="xs">
+        <Group justify="space-between">
+          <Text fw={600}>{t('loginClient.lightweight.title')}</Text>
+          <Switch
+            checked={client.lightweightTokens}
+            disabled={update.isPending}
+            label={client.lightweightTokens ? t('loginClient.lightweight.on') : t('loginClient.lightweight.off')}
+            // on: confirm first; off: saved at once
+            onChange={(event) => (event.currentTarget.checked ? openConfirm() : save(false))}
+          />
+        </Group>
+        <Text size="sm" c="dimmed">
+          {t('loginClient.lightweight.description')}
+        </Text>
+        <Text size="sm" c="dimmed">
+          {t('loginClient.lightweight.introspection')}{' '}
+          <Anchor component={Link} to="/catalogs">
+            {t('loginClient.lightweight.catalogsLink')}
+          </Anchor>
+        </Text>
+        {client.lightweightTokens && (
+          <Text size="sm" c="dimmed">
+            {t('loginClient.lightweight.marker')} <Code>"lightweight": true</Code>
+          </Text>
+        )}
+        {update.error && !confirmOpened && (
+          <Alert color="red" title={t('common.failed')}>
+            {update.error.message}
+          </Alert>
+        )}
+      </Stack>
+
+      <ConfirmModal
+        opened={confirmOpened}
+        title={t('loginClient.lightweight.confirm.title')}
+        message={t('loginClient.lightweight.confirm.message')}
+        confirmLabel={t('loginClient.lightweight.confirm.button')}
+        confirmColor="orange"
+        pending={update.isPending}
+        error={update.error}
+        onConfirm={() => save(true, closeConfirm)}
+        onClose={closeConfirmModal}
+      />
+    </Paper>
   );
 }
 
+// The values of the form: without lightweightTokens, saved on its own by LightweightTokensSection (left out of
+// the request, the core keeps the mode)
 function toValues(client: LoginClient): UpdateLoginClientRequest {
   return {
     redirectUris: client.redirectUris,

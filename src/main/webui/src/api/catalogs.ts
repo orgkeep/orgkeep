@@ -14,6 +14,14 @@ export interface Catalog {
   productCount: number;
 }
 
+// What the APIs of a catalog introspect the tokens with (RFC 7662): the credentials of the catalog client.
+// The secret is only in the answer of useRegenerateSecret: the core never gives it back afterwards.
+export interface CatalogCredentials {
+  clientId: string;
+  clientSecret: string;
+  introspectionUrl: string;
+}
+
 export interface CreateCatalogRequest {
   name: string;
   displayName: string;
@@ -105,6 +113,15 @@ export function useDeleteCatalog() {
       queryClient.removeQueries({ queryKey: [CATALOGS_KEY, 'detail', catalog] });
       return refreshCatalogs(queryClient);
     },
+  });
+}
+
+// A new secret for the catalog client, the previous one stops working at once. Nothing to refresh in the cache:
+// the secret is kept only by the mutation (its "data"), never in a query, so it is gone once the page is left.
+export function useRegenerateSecret(catalog: string) {
+  return useMutation({
+    // no body: the endpoint takes nothing
+    mutationFn: () => postJson<CatalogCredentials>(`${catalogUrl(catalog)}/secret`, undefined),
   });
 }
 

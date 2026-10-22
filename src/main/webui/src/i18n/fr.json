@@ -250,6 +250,21 @@
       "kinds": "Ici billing est un produit simple (un rôle d'accès, un quota), shop un produit à features mesurées (pas de rôle d'accès, un quota par feature mesurée, chaque entrée dit sa feature).",
       "usage": "Orgkeep ne compte pas l'usage : votre API compare ses propres compteurs aux limites du token."
     },
+    "introspection": {
+      "title": "Identifiants d'introspection pour vos APIs",
+      "generate": "Générer un secret",
+      "description": "Avec les tokens légers (voir le client de login), vos APIs lisent le contenu des tokens par introspection (RFC 7662), authentifiées avec ces identifiants. Ça marche aussi avec les tokens complets : une API peut basculer avant les tokens.",
+      "audience": "Ces identifiants n'introspectent que les tokens de ce catalogue : un token sans lui, ou d'un user sans aucun droit dedans, reçoit \"active\": false.",
+      "shownOnce": "Copiez le secret maintenant : il ne sera plus affiché. En générer un autre le remplace.",
+      "clientId": "Client ID",
+      "clientSecret": "Client secret",
+      "url": "URL d'introspection",
+      "confirm": {
+        "title": "Générer un nouveau secret pour {{catalog}} ?",
+        "message": "L'ancien secret cesse de marcher aussitôt : chaque API de ce catalogue doit recevoir le nouveau.",
+        "button": "Générer"
+      }
+    },
     "roles": {
       "title": "Rôles",
       "subtitle": "Valables pour tout le catalogue, pas pour un produit : ce qu'un user peut faire dans cet environnement (scanner, beta-tester...). Votre API les combine avec les produits du user.",
@@ -524,6 +539,20 @@
       "defaultCatalogs": "Catalogues par défaut",
       "defaultCatalogsDescription": "Dans chaque token de ce client. Les autres catalogues ne sont dans un token que si l'application les demande (scope=<catalogue>).",
       "saved": "Enregistré."
+    },
+    "lightweight": {
+      "title": "Tokens légers",
+      "on": "Activés",
+      "off": "Désactivés",
+      "description": "Quand les tokens deviennent trop gros (beaucoup de produits et de features), les tokens de ce client peuvent ne porter que l'identité du user : ni rôles, ni catalogues, ni profil, toujours la même petite taille. Vos APIs lisent alors le contenu par introspection, un appel standard (RFC 7662) que Spring, Quarkus et les gateways savent faire.",
+      "introspection": "Chaque API introspecte avec les identifiants de son catalogue, générés sur la page du catalogue :",
+      "catalogsLink": "Catalogues",
+      "marker": "Chaque token léger porte le claim",
+      "confirm": {
+        "title": "Activer les tokens légers ?",
+        "message": "Toutes les applications de ce client reçoivent des tokens légers d'un coup. Chacune de vos APIs doit d'abord introspecter les tokens (ça marche aussi avec les tokens complets), sinon elle ne voit plus les droits des users. Une application qui lit des rôles dans l'access token dans le navigateur ne les voit plus non plus ; l'ID token ne change pas.",
+        "button": "Activer"
+      }
     }
   }
 }

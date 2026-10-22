@@ -17,6 +17,8 @@ export interface LoginClient {
   webOrigins: string[];
   // the catalogs in every token of the client, the other ones only when an app asks for them (scope=<catalog>)
   defaultCatalogs: string[];
+  // lightweight access tokens: the APIs of the realm owner read the roles and the catalogs by introspection
+  lightweightTokens: boolean;
 }
 
 // The three lists of URIs are replaced whole
@@ -25,6 +27,8 @@ export interface UpdateLoginClientRequest {
   postLogoutRedirectUris: string[];
   webOrigins: string[];
   defaultCatalogs: string[];
+  // optional: left out, the core keeps the current mode
+  lightweightTokens?: boolean;
 }
 
 const LOGIN_CLIENT_KEY = 'login-client';

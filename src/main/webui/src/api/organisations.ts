@@ -223,6 +223,27 @@ export function useOrgProducts(org: string) {
   });
 }
 
+// The claims the login client would put in the access token of a member, for an application asking for
+// scope=openid plus these catalogs (realm owner only). Computed by Keycloak: a JSON object, never a signed token.
+// Record<string, unknown>: the claims are only shown, the front does not read them.
+export function useTokenPreview(org: string, userId: string | null, catalogs: string[]) {
+  return useQuery({
+    // one cache entry per member and selection of catalogs: going back to a previous selection shows it at once
+    queryKey: [ORGANISATIONS_KEY, 'detail', org, 'tokenPreview', userId, catalogs],
+    queryFn: () => {
+      // a repeated parameter (?catalog=prod&catalog=sandbox), read as a list by the core (@QueryParam List<String>)
+      const params = new URLSearchParams();
+      catalogs.forEach((catalog) => params.append('catalog', catalog));
+      const query = params.size > 0 ? `?${params}` : '';
+      return getJson<Record<string, unknown>>(
+        `${orgUrl(org)}/members/${encodeURIComponent(userId!)}/token-preview${query}`,
+      );
+    },
+    // no call while no member is chosen (the modal is closed)
+    enabled: userId !== null,
+  });
+}
+
 export function useDeleteOrganisation() {
   const queryClient = useQueryClient();
   return useMutation({

@@ -389,6 +389,14 @@
       "meteredHint": "For a member of an organisation that bought every feature, with example quotas: no access role, one pool of the organisation per metered feature. Your API keys its counters by catalog, product, feature and pool."
     }
   },
+  "tokenPreview": {
+    "button": "Token preview",
+    "title": "Token of {{member}}",
+    "catalogs": "Catalogs",
+    "catalogsDescription": "Those an application asks for: by default, every catalog where the organisation has a product.",
+    "scope": "As an application asking for",
+    "hint": "The claims of the access token your APIs receive for this member, computed by Keycloak without the member logging in. Only the claims: nothing here can be used to call an API."
+  },
   "members": {
     "title": "Members of {{org}}",
     "loadError": "Could not load the members of {{org}}",

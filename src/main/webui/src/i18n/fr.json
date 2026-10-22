@@ -389,6 +389,14 @@
       "meteredHint": "Pour un membre d'une organisation qui a acheté toutes les features, avec des quotas d'exemple : pas de rôle d'accès, un pool de l'organisation par feature mesurée. Votre API clé ses compteurs par catalogue, produit, feature et pool."
     }
   },
+  "tokenPreview": {
+    "button": "Aperçu du token",
+    "title": "Token de {{member}}",
+    "catalogs": "Catalogues",
+    "catalogsDescription": "Ceux que demande une application : par défaut, tous les catalogues où l'organisation a un produit.",
+    "scope": "Comme une application qui demande",
+    "hint": "Les claims de l'access token que reçoivent vos APIs pour ce membre, calculés par Keycloak sans que le membre se connecte. Seulement les claims : rien ici ne permet d'appeler une API."
+  },
   "members": {
     "title": "Membres de {{org}}",
     "loadError": "Impossible de charger les membres de {{org}}",

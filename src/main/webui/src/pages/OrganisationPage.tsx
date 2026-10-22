@@ -32,6 +32,7 @@ import {
 import { type Product, productKey, useProducts } from '../api/products';
 import { type UserGroup, useUserGroups } from '../api/teams';
 import ConfirmModal from '../components/ConfirmModal';
+import TokenPreviewModal from '../components/TokenPreviewModal';
 import AssignProductModal from './AssignProductModal';
 import { ROLE_COLORS } from './orgRoles';
 import { personName } from './personName';
@@ -108,7 +109,7 @@ export default function OrganisationPage() {
         </Tabs.List>
 
         <Tabs.Panel value="members" pt="md">
-          <MembersTab members={members.data} isPending={members.isPending} error={members.error} />
+          <MembersTab org={org} members={members.data} isPending={members.isPending} error={members.error} />
         </Tabs.Panel>
         <Tabs.Panel value="products" pt="md">
           <ProductsTab org={org} products={products.data} isPending={products.isPending} error={products.error} />
@@ -295,15 +296,19 @@ function TeamsTab({ org, teams, isPending, error }: TeamsTabProps) {
 }
 
 interface MembersTabProps {
+  org: string;
   // undefined while loading
   members: OrgMember[] | undefined;
   isPending: boolean;
   error: Error | null;
 }
 
-// Read only: the org admins add and remove members on their own page (OrgMembersPage)
-function MembersTab({ members, isPending, error }: MembersTabProps) {
+// Read only: the org admins add and remove members on their own page (OrgMembersPage).
+// The realm owner can preview the token of a member: what its APIs receive
+function MembersTab({ org, members, isPending, error }: MembersTabProps) {
   const { t } = useTranslation();
+  // null = the preview modal is closed
+  const [previewTarget, setPreviewTarget] = useState<OrgMember | null>(null);
 
   if (isPending) {
     return <Loader size="sm" />;
@@ -327,6 +332,7 @@ function MembersTab({ members, isPending, error }: MembersTabProps) {
             <Table.Th>{t('orgDetail.members.columns.name')}</Table.Th>
             <Table.Th>{t('orgDetail.members.columns.email')}</Table.Th>
             <Table.Th>{t('orgDetail.members.columns.role')}</Table.Th>
+            <Table.Th />
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -339,10 +345,23 @@ function MembersTab({ members, isPending, error }: MembersTabProps) {
                   {t(`orgDetail.roles.${member.role}`)}
                 </Badge>
               </Table.Td>
+              <Table.Td ta="right">
+                <Button variant="subtle" size="xs" onClick={() => setPreviewTarget(member)}>
+                  {t('tokenPreview.button')}
+                </Button>
+              </Table.Td>
             </Table.Tr>
           ))}
         </Table.Tbody>
       </Table>
+
+      {/* key: a new modal per member, so the catalog selection starts again from every catalog of the org */}
+      <TokenPreviewModal
+        key={previewTarget?.id ?? 'closed'}
+        org={org}
+        member={previewTarget}
+        onClose={() => setPreviewTarget(null)}
+      />
     </Table.ScrollContainer>
   );
 }

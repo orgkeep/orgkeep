@@ -34,6 +34,7 @@ import {
   useUserGroups,
 } from '../api/teams';
 import ConfirmModal from '../components/ConfirmModal';
+import TokenPreviewModal from '../components/TokenPreviewModal';
 import GrantProductModal from './GrantProductModal';
 import { personName } from './personName';
 
@@ -125,6 +126,8 @@ function MembersSection({ org, team, readOnly }: SectionProps) {
   const addMember = useAddTeamMember(org, team.name);
   const removeMember = useRemoveTeamMember(org, team.name);
   const [removeTarget, setRemoveTarget] = useState<OrgMember | null>(null);
+  // the token preview is for the realm owner only, who sees this page read only (/organisations/:org/teams/:team)
+  const [previewTarget, setPreviewTarget] = useState<OrgMember | null>(null);
 
   const members = (orgMembers ?? []).filter((member) => team.memberIds.includes(member.id));
   const others = (orgMembers ?? []).filter((member) => !team.memberIds.includes(member.id));
@@ -174,6 +177,11 @@ function MembersSection({ org, team, readOnly }: SectionProps) {
                 <Table.Td c="dimmed">{member.email}</Table.Td>
                 <Table.Td>
                   <Group justify="flex-end">
+                    {readOnly && (
+                      <Button variant="subtle" size="xs" onClick={() => setPreviewTarget(member)}>
+                        {t('tokenPreview.button')}
+                      </Button>
+                    )}
                     {/* the core refuses it for users (409): every member of the org stays in it */}
                     {!readOnly && team.name !== 'users' && (
                       <Button variant="subtle" size="xs" color="red" onClick={() => setRemoveTarget(member)}>
@@ -198,6 +206,15 @@ function MembersSection({ org, team, readOnly }: SectionProps) {
         onConfirm={() => removeTarget && removeMember.mutate(removeTarget.id, { onSuccess: closeRemoveConfirm })}
         onClose={closeRemoveConfirm}
       />
+
+      {readOnly && (
+        <TokenPreviewModal
+          key={previewTarget?.id ?? 'closed'}
+          org={org}
+          member={previewTarget}
+          onClose={() => setPreviewTarget(null)}
+        />
+      )}
     </Stack>
   );
 }

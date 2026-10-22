@@ -132,6 +132,10 @@ class TokenPreviewTest {
         assertEquals("scan", preview.at("/prod/billing/quotas/0/feature").asText(), preview.toString());
         assertEquals(real.path("prod"), preview.path("prod"));
         assertTrue(strings(preview.path("aud")).contains("prod"), preview.path("aud").toString());
+        // no null claim: a real token has none (the Keycloak representation has one per standard claim)
+        assertTrue(preview.path("nonce").isMissingNode(), preview.toString());
+        assertTrue(preview.at("/resource_access/prod").has("roles")
+                && !preview.at("/resource_access/prod").has("verify_caller"), preview.toString());
     }
 
     // without a catalog, nothing of prod: like an application that does not ask for its scope

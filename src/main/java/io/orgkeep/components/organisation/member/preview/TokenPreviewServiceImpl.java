@@ -1,5 +1,6 @@
 package io.orgkeep.components.organisation.member.preview;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.orgkeep.api.TokenPreviewService;
@@ -47,7 +48,11 @@ public class TokenPreviewServiceImpl implements TokenPreviewService {
         AccessToken token = clients.exampleAccessToken(realm, loginClientUuid, userId, scope.toString());
 
         // a plain JSON object for the API: the Keycloak representation stays in the core (the api package does not
-        // depend on Keycloak). Its unknown claims (the claims of the catalogs) are kept by Jackson (otherClaims)
-        return objectMapper.convertValue(token, new TypeReference<>() { });
+        // depend on Keycloak). Its unknown claims (the claims of the catalogs) are kept by Jackson (otherClaims).
+        // Without null fields: the representation has one per standard claim (nonce, middle_name...), a real token
+        // has none of them, and the preview must look like what the APIs receive
+        return objectMapper.copy()
+                .setDefaultPropertyInclusion(JsonInclude.Include.NON_NULL)
+                .convertValue(token, new TypeReference<>() { });
     }
 }

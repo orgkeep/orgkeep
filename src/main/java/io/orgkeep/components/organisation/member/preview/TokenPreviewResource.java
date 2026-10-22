@@ -1,6 +1,7 @@
 package io.orgkeep.components.organisation.member.preview;
 
 import io.orgkeep.api.TokenPreviewService;
+import io.orgkeep.api.model.TokenPreview;
 import io.orgkeep.web.CurrentRealm;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.ws.rs.GET;
@@ -13,7 +14,6 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * The token a member of an organisation would get, for the realm owner only: it checks what its APIs receive.
@@ -33,12 +33,13 @@ public class TokenPreviewResource {
     @GET
     @Operation(summary = "Preview the access token of a member",
             description = "The claims the login client of the realm would put in the access token of the member, for an "
-                    + "application asking for scope=openid plus these catalogs. Computed by Keycloak without the member "
-                    + "logging in; the claims only, never a signed token.")
-    @APIResponse(responseCode = "200", description = "The claims of the token")
+                    + "application asking for scope=openid plus these catalogs, and the claims an API gets back by "
+                    + "introspecting it (the same, unless the login client issues lightweight tokens). Computed by "
+                    + "Keycloak without the member logging in; the claims only, never a signed token.")
+    @APIResponse(responseCode = "200", description = "The claims of the token and of its introspection")
     @APIResponse(responseCode = "400", description = "A name that is not a catalog of the realm")
     @APIResponse(responseCode = "404", description = "Unknown organisation, or the user is not one of its members")
-    public Map<String, Object> preview(@PathParam("org") String org, @PathParam("userId") String userId,
+    public TokenPreview preview(@PathParam("org") String org, @PathParam("userId") String userId,
                                        @QueryParam("catalog") List<String> catalogs){
         return tokenPreviewService.preview(currentRealm.name(), org, userId, catalogs == null ? List.of() : catalogs);
     }

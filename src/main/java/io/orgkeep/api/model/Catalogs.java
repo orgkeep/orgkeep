@@ -32,7 +32,9 @@ public final class Catalogs {
             "name", "email", "locale", "address", "groups", "roles", "organization", "allowed-origins",
             "picture", "profile", "website", "gender", "birthdate", "nickname", "zoneinfo", "cnf",
             // claim and client scope of Orgkeep
-            LightweightTokens.MARKER_CLAIM);
+            LightweightTokens.MARKER_CLAIM,
+            // not a claim, a client of Orgkeep that may be created after the catalogs
+            TokenPreview.CLIENT_ID);
 
     private Catalogs() {
     }

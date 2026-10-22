@@ -3,6 +3,7 @@ package io.orgkeep.components.organisation.member.preview;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.orgkeep.api.CatalogService;
+import io.orgkeep.api.LoginClientService;
 import io.orgkeep.api.OrgMemberService;
 import io.orgkeep.api.OrgService;
 import io.orgkeep.api.ProductService;
@@ -11,6 +12,7 @@ import io.orgkeep.api.TeamService;
 import io.orgkeep.api.UserGroupService;
 import io.orgkeep.api.model.AddMemberRequest;
 import io.orgkeep.api.model.AssignProductRequest;
+import io.orgkeep.api.model.CatalogCredentials;
 import io.orgkeep.api.model.CreateCatalogRequest;
 import io.orgkeep.api.model.CreateOrgRequest;
 import io.orgkeep.api.model.CreateProductRequest;
@@ -18,7 +20,9 @@ import io.orgkeep.api.model.CreateUserGroupRequest;
 import io.orgkeep.api.model.Feature;
 import io.orgkeep.api.model.FeatureQuota;
 import io.orgkeep.api.model.GrantProductRequest;
+import io.orgkeep.api.model.LightweightTokens;
 import io.orgkeep.api.model.QuotaCycle;
+import io.orgkeep.api.model.UpdateLoginClientRequest;
 import io.orgkeep.fixtures.TestRealm;
 import io.orgkeep.web.CurrentRealm;
 import io.quarkus.test.InjectMock;
@@ -50,6 +54,7 @@ import java.util.stream.Collectors;
 
 import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -74,6 +79,7 @@ class TokenPreviewTest {
     @Inject Keycloak keycloak;
     @Inject RealmProvisioner realmProvisioner;
     @Inject CatalogService catalogService;
+    @Inject LoginClientService loginClientService;
     @Inject ProductService productService;
     @Inject OrgService orgService;
     @Inject OrgMemberService memberService;
@@ -117,12 +123,17 @@ class TokenPreviewTest {
         testRealm.close();
     }
 
-    // the rights and the claim of the catalog are those of a real token; only the claims come back, not a JWT
+    // the rights and the claim of the catalog are those of a real token; only the claims come back, not a JWT.
+    // Without lightweight tokens, the introspection returns the same claims as the token
     @Test
     @TestSecurity(user = "owner", roles = "realm-owner")
     void previewMatchesARealToken() throws Exception {
-        JsonNode preview = preview(paulId, "prod");
-        JsonNode real = logIn("paul", "openid prod");
+        JsonNode response = previewResponse(paulId, "prod");
+        JsonNode preview = response.path("token");
+        JsonNode real = claims(logIn("paul", "openid prod"));
+
+        assertFalse(response.path("lightweight").asBoolean(), response.toString());
+        assertEquals(preview, response.path("introspection"));
 
         assertEquals(paulId, preview.path("sub").asText(), preview.toString());
         assertEquals(Set.of("billing:stats", "billing:scan"), strings(preview.at("/resource_access/prod/roles")));
@@ -142,10 +153,52 @@ class TokenPreviewTest {
     @Test
     @TestSecurity(user = "owner", roles = "realm-owner")
     void previewWithoutCatalog() throws Exception {
-        JsonNode preview = preview(paulId);
+        JsonNode preview = previewResponse(paulId).path("token");
 
         assertTrue(preview.at("/resource_access/prod").isMissingNode(), preview.toString());
         assertTrue(preview.path("prod").isMissingNode(), preview.toString());
+    }
+
+    // lightweight tokens: the token is the lightweight one, the introspection is what a real introspection returns,
+    // compared with the introspection of a real token by the API of the catalog
+    @Test
+    @TestSecurity(user = "owner", roles = "realm-owner")
+    void lightweightPreviewMatchesARealIntrospection() throws Exception {
+        setLightweightTokens(true);
+
+        JsonNode response = previewResponse(paulId, "prod");
+        JsonNode token = response.path("token");
+        JsonNode introspection = response.path("introspection");
+        JsonNode real = introspect("prod", logIn("paul", "openid prod"));
+
+        assertTrue(response.path("lightweight").asBoolean(), response.toString());
+        assertTrue(token.path(LightweightTokens.MARKER_CLAIM).asBoolean(), token.toString());
+        assertTrue(token.path("resource_access").isMissingNode(), token.toString());
+        assertTrue(real.path("active").asBoolean(), real.toString());
+        // checked present first: two missing claims would compare equal
+        assertEquals(Set.of("billing:stats", "billing:scan"), strings(introspection.at("/resource_access/prod/roles")));
+        assertEquals(real.path("resource_access"), introspection.path("resource_access"));
+        assertEquals(real.path("realm_access"), introspection.path("realm_access"));
+        assertEquals(real.path("prod"), introspection.path("prod"));
+        assertEquals(strings(real.path("aud")), strings(introspection.path("aud")));
+        assertEquals(Set.of(real.path("scope").asText().split(" ")), Set.of(introspection.path("scope").asText().split(" ")));
+        assertEquals(testRealm.name(), introspection.path("azp").asText());
+        assertTrue(introspection.path(LightweightTokens.MARKER_CLAIM).isMissingNode(), introspection.toString());
+    }
+
+    // the twin of the login client is aligned at each preview: a change of the login client after the first preview
+    // (here prod becomes a default catalog) shows at the next one
+    @Test
+    @TestSecurity(user = "owner", roles = "realm-owner")
+    void lightweightPreviewFollowsTheLoginClient() throws Exception {
+        setLightweightTokens(true);
+        assertTrue(previewResponse(paulId).at("/introspection/resource_access/prod").isMissingNode());
+
+        loginClientService.update(testRealm.name(),
+                new UpdateLoginClientRequest(List.of(), List.of(), List.of(), List.of("prod")));
+
+        JsonNode introspection = previewResponse(paulId).path("introspection");
+        assertEquals(Set.of("billing:stats", "billing:scan"), strings(introspection.at("/resource_access/prod/roles")));
     }
 
     @Test
@@ -171,7 +224,12 @@ class TokenPreviewTest {
                 .then().statusCode(403);
     }
 
-    private JsonNode preview(String userId, String... catalogs) throws Exception {
+    private void setLightweightTokens(boolean on) {
+        loginClientService.update(testRealm.name(), new UpdateLoginClientRequest(List.of(), List.of(), List.of(), null, on));
+    }
+
+    /** {lightweight, token, introspection}, as the REST API answers. */
+    private JsonNode previewResponse(String userId, String... catalogs) throws Exception {
         String body = given().queryParam("catalog", (Object[]) catalogs)
                 .when().get(PREVIEW, ORG, userId)
                 .then().statusCode(200)
@@ -207,29 +265,45 @@ class TokenPreviewTest {
                 new AddMemberRequest(user.getEmail(), user.getFirstName(), user.getLastName())).id();
     }
 
-    /** A real access token of the login client, decoded: what an API of the realm owner receives. */
-    private JsonNode logIn(String username, String scope) throws Exception {
-        String form = Map.of(
-                        "grant_type", "password",
-                        "client_id", testRealm.name(),
-                        "username", username,
-                        "password", PASSWORD,
-                        "scope", scope)
-                .entrySet().stream()
+    /** A real access token of the login client, as an API of the realm owner receives it. */
+    private String logIn(String username, String scope) throws Exception {
+        HttpResponse<String> response = post("/protocol/openid-connect/token", Map.of(
+                "grant_type", "password",
+                "client_id", testRealm.name(),
+                "username", username,
+                "password", PASSWORD,
+                "scope", scope), null);
+        assertEquals(200, response.statusCode(), response.body());
+        return new ObjectMapper().readTree(response.body()).path("access_token").asText();
+    }
+
+    /** The introspection of the token by the API of the catalog, with the credentials of the catalog. */
+    private JsonNode introspect(String catalog, String token) throws Exception {
+        CatalogCredentials credentials = catalogService.regenerateSecret(testRealm.name(), catalog);
+        String basic = Base64.getEncoder().encodeToString((credentials.clientId() + ":" + credentials.clientSecret())
+                .getBytes(StandardCharsets.UTF_8));
+        HttpResponse<String> response = post("/protocol/openid-connect/token/introspect", Map.of("token", token), basic);
+        assertEquals(200, response.statusCode(), response.body());
+        return new ObjectMapper().readTree(response.body());
+    }
+
+    private HttpResponse<String> post(String path, Map<String, String> form, String basicAuth) throws Exception {
+        String body = form.entrySet().stream()
                 .map(e -> e.getKey() + "=" + URLEncoder.encode(e.getValue(), StandardCharsets.UTF_8))
                 .collect(Collectors.joining("&"));
-        HttpRequest request = HttpRequest.newBuilder(
-                        URI.create(keycloakUrl + "/realms/" + testRealm.name() + "/protocol/openid-connect/token"))
+        HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(keycloakUrl + "/realms/" + testRealm.name() + path))
                 .header("Content-Type", "application/x-www-form-urlencoded")
-                .POST(HttpRequest.BodyPublishers.ofString(form))
-                .build();
-        HttpResponse<String> response;
-        try (HttpClient http = HttpClient.newHttpClient()) {
-            response = http.send(request, HttpResponse.BodyHandlers.ofString());
+                .POST(HttpRequest.BodyPublishers.ofString(body));
+        if (basicAuth != null) {
+            request.header("Authorization", "Basic " + basicAuth);
         }
-        assertEquals(200, response.statusCode(), response.body());
-        String token = new ObjectMapper().readTree(response.body()).path("access_token").asText();
-        // header.payload.signature: the payload is base64url encoded JSON
+        try (HttpClient http = HttpClient.newHttpClient()) {
+            return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
+        }
+    }
+
+    /** header.payload.signature: the payload is base64url encoded JSON. */
+    private static JsonNode claims(String token) throws Exception {
         return new ObjectMapper().readTree(Base64.getUrlDecoder().decode(token.split("\\.")[1]));
     }
 

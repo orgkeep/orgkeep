@@ -6,17 +6,22 @@ import jakarta.ws.rs.core.Response;
 import lombok.RequiredArgsConstructor;
 import org.keycloak.admin.client.CreatedResponseUtil;
 import org.keycloak.admin.client.Keycloak;
+import org.keycloak.admin.client.resource.RoleScopeResource;
 import org.keycloak.admin.client.resource.RolesResource;
 import org.keycloak.representations.AccessToken;
+import org.keycloak.representations.idm.ClientMappingsRepresentation;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.ClientScopeRepresentation;
 import org.keycloak.representations.idm.GroupRepresentation;
+import org.keycloak.representations.idm.MappingsRepresentation;
 import org.keycloak.representations.idm.RoleRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -135,6 +140,75 @@ public class KeycloakClients {
         if (optionalScopeIds(realm, clientUuid).contains(scopeId)) {
             client.removeOptionalClientScope(scopeId);
         }
+    }
+
+    /**
+     * Gives the target client the default and optional client scopes of the source client, except the excluded ones.
+     * Idempotent: only the differences are written.
+     */
+    public void copyScopes(String realm, String sourceUuid, String targetUuid, Set<String> excludedScopeIds) {
+        Set<String> wantedDefault = new HashSet<>(defaultScopeIds(realm, sourceUuid));
+        Set<String> wantedOptional = new HashSet<>(optionalScopeIds(realm, sourceUuid));
+        wantedDefault.removeAll(excludedScopeIds);
+        wantedOptional.removeAll(excludedScopeIds);
+        Set<String> currentDefault = defaultScopeIds(realm, targetUuid);
+        Set<String> currentOptional = optionalScopeIds(realm, targetUuid);
+
+        var target = keycloak.realm(realm).clients().get(targetUuid);
+        // removals first: Keycloak refuses a scope that is both default and optional
+        currentDefault.stream().filter(id -> !wantedDefault.contains(id)).forEach(target::removeDefaultClientScope);
+        currentOptional.stream().filter(id -> !wantedOptional.contains(id)).forEach(target::removeOptionalClientScope);
+        wantedDefault.stream().filter(id -> !currentDefault.contains(id)).forEach(target::addDefaultClientScope);
+        wantedOptional.stream().filter(id -> !currentOptional.contains(id)).forEach(target::addOptionalClientScope);
+    }
+
+    /**
+     * Gives the target client the scope mappings of the source client: its realm roles and the roles of every other
+     * client. Idempotent: only the differences are written.
+     */
+    public void copyScopeMappings(String realm, String sourceUuid, String targetUuid) {
+        MappingsRepresentation wanted = keycloak.realm(realm).clients().get(sourceUuid).getScopeMappings().getAll();
+        var target = keycloak.realm(realm).clients().get(targetUuid).getScopeMappings();
+        MappingsRepresentation current = target.getAll();
+
+        alignRoles(target.realmLevel(), orEmpty(wanted.getRealmMappings()), orEmpty(current.getRealmMappings()));
+
+        // keyed by the clientId of the client holding the roles; the representation carries its internal id
+        Map<String, ClientMappingsRepresentation> wantedClients = orEmpty(wanted.getClientMappings());
+        Map<String, ClientMappingsRepresentation> currentClients = orEmpty(current.getClientMappings());
+        Set<String> clientIds = new HashSet<>(wantedClients.keySet());
+        clientIds.addAll(currentClients.keySet());
+        for (String clientId : clientIds) {
+            ClientMappingsRepresentation wantedRoles = wantedClients.get(clientId);
+            ClientMappingsRepresentation currentRoles = currentClients.get(clientId);
+            String roleClientUuid = (wantedRoles != null ? wantedRoles : currentRoles).getId();
+            alignRoles(target.clientLevel(roleClientUuid),
+                    wantedRoles == null ? List.of() : orEmpty(wantedRoles.getMappings()),
+                    currentRoles == null ? List.of() : orEmpty(currentRoles.getMappings()));
+        }
+    }
+
+    /** Adds the missing roles to the scope mappings, removes the extra ones (compared by role id). */
+    private static void alignRoles(RoleScopeResource scope, List<RoleRepresentation> wanted, List<RoleRepresentation> current) {
+        Set<String> wantedIds = wanted.stream().map(RoleRepresentation::getId).collect(Collectors.toSet());
+        Set<String> currentIds = current.stream().map(RoleRepresentation::getId).collect(Collectors.toSet());
+        List<RoleRepresentation> extra = current.stream().filter(role -> !wantedIds.contains(role.getId())).toList();
+        List<RoleRepresentation> missing = wanted.stream().filter(role -> !currentIds.contains(role.getId())).toList();
+        if (!extra.isEmpty()) {
+            scope.remove(extra);
+        }
+        if (!missing.isEmpty()) {
+            scope.add(missing);
+        }
+    }
+
+    // the admin API sends null rather than an empty list or map
+    private static <T> List<T> orEmpty(List<T> list) {
+        return list == null ? List.of() : list;
+    }
+
+    private static <K, V> Map<K, V> orEmpty(Map<K, V> map) {
+        return map == null ? Map.of() : map;
     }
 
     /** Generates a new secret for the confidential client: the previous one stops working at once. */

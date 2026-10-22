@@ -2,6 +2,7 @@ package io.orgkeep.components.catalog;
 
 import io.orgkeep.api.CatalogService;
 import io.orgkeep.api.model.Catalog;
+import io.orgkeep.api.model.CatalogCredentials;
 import io.orgkeep.api.model.CreateCatalogRequest;
 import io.orgkeep.api.model.UpdateCatalogRequest;
 import io.orgkeep.web.CurrentRealm;
@@ -67,6 +68,18 @@ public class CatalogsResource {
     @APIResponse(responseCode = "404", description = "Unknown catalog")
     public Catalog update(@PathParam("catalog") String name, @Valid @NotNull UpdateCatalogRequest request){
         return catalogService.update(currentRealm.name(), name, request);
+    }
+
+    @POST
+    @Path("/{catalog}/secret")
+    @Operation(summary = "Regenerate the secret of a catalog",
+            description = "The credentials the APIs of the catalog introspect the tokens with (RFC 7662). The secret is "
+                    + "only shown in this response, and the previous one stops working at once: every API of the "
+                    + "catalog must get the new one.")
+    @APIResponseSchema(value = CatalogCredentials.class, responseCode = "200", responseDescription = "The new credentials")
+    @APIResponse(responseCode = "404", description = "Unknown catalog")
+    public CatalogCredentials regenerateSecret(@PathParam("catalog") String name){
+        return catalogService.regenerateSecret(currentRealm.name(), name);
     }
 
     @DELETE

@@ -10,6 +10,8 @@ import java.util.List;
  * Replaces the redirect URIs and web origins of the login client: these lists are required, an empty list removes them all.
  * defaultCatalogs is optional: absent, the default catalogs do not change; given, it replaces them (an empty list
  * leaves the client without default catalog, the applications then ask for scope=&lt;catalog&gt;).
+ * lightweightTokens is optional too: absent, the mode does not change (see {@link LightweightTokens}). Turned on, every
+ * API of the realm owner receives lightweight tokens at once: each must introspect first.
  * <p>
  * Keycloak accepts much more (a lone "*", any scheme), which would let an attacker receive the authorization code
  * on a site of their own. Only safe values are accepted here:
@@ -27,11 +29,18 @@ public record UpdateLoginClientRequest(
     List<@NotNull @Pattern(regexp = REDIRECT_URI, message = REDIRECT_URI_MESSAGE) String> postLogoutRedirectUris,
     @NotNull
     List<@NotNull @Pattern(regexp = WEB_ORIGIN, message = WEB_ORIGIN_MESSAGE) String> webOrigins,
-    List<@NotBlank String> defaultCatalogs){
+    List<@NotBlank String> defaultCatalogs,
+    Boolean lightweightTokens){
 
-    /** Without defaultCatalogs: the default catalogs of the client do not change. */
+    /** Without defaultCatalogs nor lightweightTokens: neither changes. */
     public UpdateLoginClientRequest(List<String> redirectUris, List<String> postLogoutRedirectUris, List<String> webOrigins) {
-        this(redirectUris, postLogoutRedirectUris, webOrigins, null);
+        this(redirectUris, postLogoutRedirectUris, webOrigins, null, null);
+    }
+
+    /** Without lightweightTokens: the mode does not change. */
+    public UpdateLoginClientRequest(List<String> redirectUris, List<String> postLogoutRedirectUris, List<String> webOrigins,
+                                    List<String> defaultCatalogs) {
+        this(redirectUris, postLogoutRedirectUris, webOrigins, defaultCatalogs, null);
     }
 
     /** Scheme and host (and port): https anywhere, http on the local machine only. */

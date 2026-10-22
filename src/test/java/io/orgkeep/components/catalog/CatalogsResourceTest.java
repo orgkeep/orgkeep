@@ -28,10 +28,12 @@ import java.util.stream.Collectors;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.empty;
+import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -128,7 +130,7 @@ class CatalogsResourceTest {
 
     // a slug, neither a claim of the token nor the prefix of the org clients
     @ParameterizedTest
-    @ValueSource(strings = {"Products", "products_eu", "sub", "scope", "org-acme", ""})
+    @ValueSource(strings = {"Products", "products_eu", "sub", "scope", "org-acme", "lightweight", ""})
     @TestSecurity(user = "owner", roles = "realm-owner")
     void createWithAnInvalidNameReturns400(String name) {
         given().contentType(ContentType.JSON).body(new CreateCatalogRequest(name, "Invalid", null))
@@ -191,6 +193,33 @@ class CatalogsResourceTest {
                 .body("productCount", equalTo(1));
         given().when().delete(BASE + "/{catalog}", SANDBOX)
                 .then().statusCode(409);
+    }
+
+    // the credentials of the APIs of the catalog: the secret Keycloak now holds, and a new one at each call
+    @Test
+    @TestSecurity(user = "owner", roles = "realm-owner")
+    void regenerateSecretReturnsTheNewCredentials() {
+        createCatalog(SANDBOX);
+
+        String secret = given().when().post(BASE + "/{catalog}/secret", SANDBOX)
+                .then().statusCode(200)
+                .body("clientId", equalTo(SANDBOX))
+                .body("introspectionUrl", endsWith("/realms/" + testRealm.name() + "/protocol/openid-connect/token/introspect"))
+                .extract().path("clientSecret");
+
+        String clientUuid = testRealm.resource().clients().findByClientId(SANDBOX).get(0).getId();
+        assertEquals(secret, testRealm.resource().clients().get(clientUuid).getSecret().getValue());
+        String next = given().when().post(BASE + "/{catalog}/secret", SANDBOX)
+                .then().statusCode(200)
+                .extract().path("clientSecret");
+        assertNotEquals(secret, next);
+    }
+
+    @Test
+    @TestSecurity(user = "owner", roles = "realm-owner")
+    void regenerateSecretOfAnUnknownCatalogReturns404() {
+        given().when().post(BASE + "/{catalog}/secret", "unknown")
+                .then().statusCode(404);
     }
 
     private void createCatalog(String name) {

@@ -1,5 +1,6 @@
 package io.orgkeep.components.realm.login;
 
+import io.orgkeep.api.model.LightweightTokens;
 import io.orgkeep.api.model.LoginClient;
 import io.orgkeep.api.model.UpdateLoginClientRequest;
 import org.junit.jupiter.api.Test;
@@ -9,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class LoginClientMapperTest {
@@ -45,7 +47,8 @@ public class LoginClientMapperTest {
         client.setAttributes(Map.of("post.logout.redirect.uris", "https://app.example.com/##https://app.example.com/bye"));
 
         assertEquals(new LoginClient("demo", ISSUER, CONSOLE, List.of("https://app.example.com/*"),
-                        List.of("https://app.example.com/", "https://app.example.com/bye"), List.of("+"), List.of("products")),
+                        List.of("https://app.example.com/", "https://app.example.com/bye"), List.of("+"), List.of("products"),
+                        false),
                 mapper.toLoginClient(client, ISSUER, CONSOLE, List.of("products")));
     }
 
@@ -55,6 +58,21 @@ public class LoginClientMapperTest {
         ClientRepresentation client = new ClientRepresentation();
         client.setClientId("demo");
 
-        assertEquals(List.of(), mapper.toLoginClient(client, ISSUER, null, List.of()).postLogoutRedirectUris());
+        LoginClient loginClient = mapper.toLoginClient(client, ISSUER, null, List.of());
+        assertEquals(List.of(), loginClient.postLogoutRedirectUris());
+        assertFalse(loginClient.lightweightTokens());
+    }
+
+    @Test
+    void lightweightTokensIsSetOnlyWhenGiven() {
+        ClientRepresentation client = new ClientRepresentation();
+        client.setAttributes(Map.of(LightweightTokens.CLIENT_ATTRIBUTE, "true"));
+
+        mapper.update(new UpdateLoginClientRequest(List.of(), List.of(), List.of()), client);
+        assertTrue(mapper.toLoginClient(client, ISSUER, null, List.of()).lightweightTokens());
+
+        mapper.update(new UpdateLoginClientRequest(List.of(), List.of(), List.of(), null, false), client);
+        assertEquals("false", client.getAttributes().get(LightweightTokens.CLIENT_ATTRIBUTE));
+        assertFalse(mapper.toLoginClient(client, ISSUER, null, List.of()).lightweightTokens());
     }
 }

@@ -1,6 +1,7 @@
 package io.orgkeep.api;
 
 import io.orgkeep.api.model.Catalog;
+import io.orgkeep.api.model.CatalogCredentials;
 import io.orgkeep.api.model.CreateCatalogRequest;
 import io.orgkeep.api.model.UpdateCatalogRequest;
 
@@ -25,6 +26,14 @@ public interface CatalogService {
 
     /** @throws io.orgkeep.api.exceptions.CatalogNotFoundException if no catalog has this name */
     Catalog update(String realm, String name, UpdateCatalogRequest request);
+
+    /**
+     * Generates a new secret for the catalog client, the credentials of its APIs to introspect the tokens.
+     * The previous secret stops working at once.
+     *
+     * @throws io.orgkeep.api.exceptions.CatalogNotFoundException if no catalog has this name
+     */
+    CatalogCredentials regenerateSecret(String realm, String name);
 
     /**
      * Deletes the catalog client and its client scope.

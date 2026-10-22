@@ -18,7 +18,8 @@ import java.util.Map;
 public interface CatalogMapper {
 
     /**
-     * The catalog client is only a container for the product roles: no login flow is enabled on it.
+     * The catalog client is a container for the product roles: no login flow is enabled on it. Confidential: its
+     * secret is what the APIs of the catalog introspect the tokens with (see CatalogService.regenerateSecret).
      */
     // ClientRepresentation has dozens of properties: only map the listed ones instead of warning on each
     @BeanMapping(ignoreByDefault = true)

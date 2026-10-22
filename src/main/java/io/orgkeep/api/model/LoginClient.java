@@ -15,6 +15,8 @@ import java.util.List;
  * @param webOrigins             origins allowed to call Keycloak from a browser (CORS), "+" = the origins of the redirect URIs
  * @param defaultCatalogs        catalogs in every token of the client, sorted by name. The other catalogs are only in
  *                               a token when the application asks for them (scope=&lt;catalog&gt;)
+ * @param lightweightTokens      the client issues lightweight access tokens (see {@link LightweightTokens}): the APIs of
+ *                               the realm owner read the roles and the catalogs by introspection
  */
 public record LoginClient(
     String clientId,
@@ -23,4 +25,5 @@ public record LoginClient(
     List<String> redirectUris,
     List<String> postLogoutRedirectUris,
     List<String> webOrigins,
-    List<String> defaultCatalogs){ }
+    List<String> defaultCatalogs,
+    boolean lightweightTokens){ }

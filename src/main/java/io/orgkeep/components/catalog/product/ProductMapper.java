@@ -157,7 +157,9 @@ public interface ProductMapper {
         config.put("aggregate.attrs", "true");
         config.put("access.token.claim", "true");
         config.put("introspection.token.claim", "true");
-        config.put("lightweight.claim", "true");
+        // like the native mapper of the client roles: a lightweight token carries neither the roles nor the quotas,
+        // the APIs read both at the introspection
+        config.put("lightweight.claim", "false");
         config.put("id.token.claim", "false");
         config.put("userinfo.token.claim", "false");
 

@@ -30,7 +30,9 @@ public final class Catalogs {
     private static final Set<String> RESERVED_CLAIMS = Set.of(
             "sub", "aud", "iss", "exp", "iat", "nbf", "jti", "azp", "typ", "sid", "acr", "amr", "scope", "nonce",
             "name", "email", "locale", "address", "groups", "roles", "organization", "allowed-origins",
-            "picture", "profile", "website", "gender", "birthdate", "nickname", "zoneinfo", "cnf");
+            "picture", "profile", "website", "gender", "birthdate", "nickname", "zoneinfo", "cnf",
+            // claim and client scope of Orgkeep
+            LightweightTokens.MARKER_CLAIM);
 
     private Catalogs() {
     }

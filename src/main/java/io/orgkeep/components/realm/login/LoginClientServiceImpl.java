@@ -3,11 +3,13 @@ package io.orgkeep.components.realm.login;
 import io.orgkeep.api.LoginClientService;
 import io.orgkeep.api.exceptions.InvalidRequestException;
 import io.orgkeep.api.exceptions.LoginClientNotFoundException;
+import io.orgkeep.api.model.LightweightTokens;
 import io.orgkeep.api.model.LoginClient;
 import io.orgkeep.api.model.UpdateLoginClientRequest;
 import io.orgkeep.components.catalog.CatalogSetup;
 import io.orgkeep.config.KeycloakUrls;
 import io.orgkeep.config.OrgkeepConfig;
+import io.orgkeep.repository.keycloak.KeycloakClientScopes;
 import io.orgkeep.repository.keycloak.KeycloakClients;
 import jakarta.enterprise.context.ApplicationScoped;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +18,7 @@ import org.keycloak.representations.idm.ClientRepresentation;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 @Slf4j
@@ -23,6 +26,7 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class LoginClientServiceImpl implements LoginClientService {
     private final KeycloakClients clients;
+    private final KeycloakClientScopes scopes;
     private final CatalogSetup catalogSetup;
     private final LoginClientMapper loginClientMapper;
     private final KeycloakUrls keycloakUrls;
@@ -58,10 +62,32 @@ public class LoginClientServiceImpl implements LoginClientService {
         if (request.defaultCatalogs() != null) {
             catalogSetup.setDefaultCatalogs(realm, clientUuid, catalogScopeIds, request.defaultCatalogs());
         }
+        if (request.lightweightTokens() != null) {
+            setMarker(realm, clientUuid, request.lightweightTokens());
+        }
 
-        log.info("Login client of realm '{}' updated: redirect URIs {}, web origins {}, default catalogs {}",
-                realm, request.redirectUris(), request.webOrigins(), request.defaultCatalogs());
+        log.info("Login client of realm '{}' updated: redirect URIs {}, web origins {}, default catalogs {}, lightweight tokens {}",
+                realm, request.redirectUris(), request.webOrigins(), request.defaultCatalogs(), request.lightweightTokens());
         return get(realm);
+    }
+
+    /**
+     * The scope of the marker follows the lightweight mode: a default scope of the client when it is on, removed when
+     * it is off (a full token must not carry the marker, the APIs would introspect it for nothing).
+     */
+    private void setMarker(String realm, String clientUuid, boolean lightweight) {
+        Optional<String> existing = scopes.findId(realm, LightweightTokens.MARKER_CLAIM);
+        if (!lightweight) {
+            existing.ifPresent(markerScopeId -> clients.removeScope(realm, clientUuid, markerScopeId));
+            return;
+        }
+        String markerScopeId = existing
+                // created the first time the mode is turned on, read back if a concurrent request just created it
+                .or(() -> scopes.create(realm, loginClientMapper.toMarkerScope()))
+                .or(() -> scopes.findId(realm, LightweightTokens.MARKER_CLAIM))
+                .orElseThrow(() -> new IllegalStateException("Client scope '%s' not found in realm '%s'"
+                        .formatted(LightweightTokens.MARKER_CLAIM, realm)));
+        clients.makeDefaultScope(realm, clientUuid, markerScopeId);
     }
 
     /** The default client scopes of the client that are catalogs. */

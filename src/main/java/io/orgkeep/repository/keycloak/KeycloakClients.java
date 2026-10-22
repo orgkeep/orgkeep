@@ -126,6 +126,22 @@ public class KeycloakClients {
         }
     }
 
+    /** Removes the client scope from the client, default or optional. Idempotent. */
+    public void removeScope(String realm, String clientUuid, String scopeId) {
+        var client = keycloak.realm(realm).clients().get(clientUuid);
+        if (defaultScopeIds(realm, clientUuid).contains(scopeId)) {
+            client.removeDefaultClientScope(scopeId);
+        }
+        if (optionalScopeIds(realm, clientUuid).contains(scopeId)) {
+            client.removeOptionalClientScope(scopeId);
+        }
+    }
+
+    /** Generates a new secret for the confidential client: the previous one stops working at once. */
+    public String regenerateSecret(String realm, String clientUuid) {
+        return keycloak.realm(realm).clients().get(clientUuid).generateNewSecret().getValue();
+    }
+
     /**
      * Scope mappings of the client for these realm roles: with fullScopeAllowed=false, only the roles in the scope of
      * the client (its own scope mappings and those of its client scopes) end up in its tokens. Idempotent.

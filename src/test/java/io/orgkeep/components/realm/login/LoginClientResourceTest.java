@@ -3,6 +3,7 @@ package io.orgkeep.components.realm.login;
 import io.orgkeep.api.CatalogService;
 import io.orgkeep.api.RealmProvisioner;
 import io.orgkeep.api.model.CreateCatalogRequest;
+import io.orgkeep.api.model.LightweightTokens;
 import io.orgkeep.api.model.UpdateLoginClientRequest;
 import io.orgkeep.fixtures.TestRealm;
 import io.orgkeep.web.CurrentRealm;
@@ -198,6 +199,52 @@ class LoginClientResourceTest {
     void defaultCatalogThatIsNotACatalogReturns400(String name) {
         put(new UpdateLoginClientRequest(List.of(), List.of(), List.of(), List.of(name)))
                 .then().statusCode(400);
+    }
+
+    // on: the Keycloak attribute, and the scope of the marker as a default scope; off: the scope is removed,
+    // a full token must not carry the marker
+    @Test
+    @TestSecurity(user = "owner", roles = "realm-owner")
+    void lightweightTokensSetsTheAttributeAndTheMarker() {
+        given().when().get(BASE)
+                .then().statusCode(200)
+                .body("lightweightTokens", equalTo(false));
+
+        put(new UpdateLoginClientRequest(List.of(), List.of(), List.of(), null, true))
+                .then().statusCode(200)
+                .body("lightweightTokens", equalTo(true));
+        assertEquals("true", loginClient().getAttributes().get(LightweightTokens.CLIENT_ATTRIBUTE));
+        assertEquals(Set.of(LightweightTokens.MARKER_CLAIM), markerScopes(true));
+
+        // absent: unchanged
+        put(new UpdateLoginClientRequest(List.of(), List.of(), List.of()))
+                .then().statusCode(200)
+                .body("lightweightTokens", equalTo(true));
+
+        put(new UpdateLoginClientRequest(List.of(), List.of(), List.of(), null, false))
+                .then().statusCode(200)
+                .body("lightweightTokens", equalTo(false));
+        assertEquals(Set.of(), markerScopes(true));
+        assertEquals(Set.of(), markerScopes(false));
+    }
+
+    // turned off before it was ever on: nothing to remove, no scope created
+    @Test
+    @TestSecurity(user = "owner", roles = "realm-owner")
+    void lightweightTokensOffWithoutMarker() {
+        put(new UpdateLoginClientRequest(List.of(), List.of(), List.of(), null, false))
+                .then().statusCode(200)
+                .body("lightweightTokens", equalTo(false));
+        assertEquals(List.of(), testRealm.resource().clientScopes().findAll().stream()
+                .filter(scope -> scope.getName().equals(LightweightTokens.MARKER_CLAIM))
+                .toList());
+    }
+
+    /** The marker scope among the default (or optional) scopes of the login client. */
+    private Set<String> markerScopes(boolean defaults) {
+        var client = testRealm.resource().clients().get(loginClient().getId());
+        return scopeNames(defaults ? client.getDefaultClientScopes() : client.getOptionalClientScopes(),
+                Set.of(LightweightTokens.MARKER_CLAIM));
     }
 
     private Response put(UpdateLoginClientRequest request) {

@@ -5,9 +5,11 @@ import io.orgkeep.api.exceptions.CatalogAlreadyExistsException;
 import io.orgkeep.api.exceptions.CatalogNotFoundException;
 import io.orgkeep.api.exceptions.OperationNotAllowedException;
 import io.orgkeep.api.model.Catalog;
+import io.orgkeep.api.model.CatalogCredentials;
 import io.orgkeep.api.model.CatalogRoles;
 import io.orgkeep.api.model.CreateCatalogRequest;
 import io.orgkeep.api.model.UpdateCatalogRequest;
+import io.orgkeep.config.KeycloakUrls;
 import io.orgkeep.repository.keycloak.KeycloakClientScopes;
 import io.orgkeep.repository.keycloak.KeycloakClients;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -27,6 +29,7 @@ public class CatalogServiceImpl implements CatalogService {
     private final KeycloakClientScopes scopes;
     private final CatalogSetup catalogSetup;
     private final CatalogMapper catalogMapper;
+    private final KeycloakUrls keycloakUrls;
 
     @Override
     public Catalog create(String realm, CreateCatalogRequest request) {
@@ -78,6 +81,15 @@ public class CatalogServiceImpl implements CatalogService {
         clients.update(realm, client.getId(), client);
         log.info("Catalog '{}' updated in realm '{}'", name, realm);
         return catalogMapper.toCatalog(client, productCount(realm, client.getId()));
+    }
+
+    @Override
+    public CatalogCredentials regenerateSecret(String realm, String name) {
+        ClientRepresentation client = getClient(realm, name);
+        String secret = clients.regenerateSecret(realm, client.getId());
+        // never log the secret itself
+        log.info("Secret of catalog '{}' regenerated in realm '{}'", name, realm);
+        return new CatalogCredentials(name, secret, keycloakUrls.introspection(realm));
     }
 
     @Override

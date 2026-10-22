@@ -33,6 +33,11 @@ public class KeycloakUrls {
         return publicUrl() + REALMS + realm;
     }
 
+    /** The token introspection endpoint of the realm (RFC 7662), called by the APIs of the realm owner. */
+    public String introspection(String realm) {
+        return issuer(realm) + "/protocol/openid-connect/token/introspect";
+    }
+
     /** The admin console of the realm: a realm owner logs in there with their own account. */
     public String console(String realm) {
         return publicUrl() + "/admin/" + realm + "/console/";

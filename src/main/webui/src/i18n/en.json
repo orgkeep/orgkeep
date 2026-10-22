@@ -410,7 +410,11 @@
     "catalogs": "Catalogs",
     "catalogsDescription": "Those an application asks for: by default, every catalog where the organisation has a product.",
     "scope": "As an application asking for",
-    "hint": "The claims of the access token your APIs receive for this member, computed by Keycloak without the member logging in. Only the claims: nothing here can be used to call an API."
+    "hint": "The claims of the access token your APIs receive for this member, computed by Keycloak without the member logging in. Only the claims: nothing here can be used to call an API.",
+    "lightweight": "The login client issues lightweight tokens: the token carries nothing but who the user is, your APIs read the rest by introspection.",
+    "introspectionTab": "Introspection (what your API reads)",
+    "tokenTab": "Lightweight token (what travels)",
+    "notInAudience": "Not in the audience of the token: {{catalogs}}. The APIs of these catalogs get \"active\": false when they introspect it (the member has no right in them)."
   },
   "members": {
     "title": "Members of {{org}}",

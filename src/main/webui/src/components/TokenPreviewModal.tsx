@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Alert, Code, Loader, Modal, MultiSelect, Stack, Text } from '@mantine/core';
+import { Alert, Code, Loader, Modal, MultiSelect, Stack, Tabs, Text } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
-import { type OrgMember, useOrgProducts, useTokenPreview } from '../api/organisations';
+import { type OrgMember, type TokenPreview, useOrgProducts, useTokenPreview } from '../api/organisations';
 import { personName } from '../pages/personName';
 
 interface TokenPreviewModalProps {
@@ -13,6 +13,7 @@ interface TokenPreviewModalProps {
 
 // What the APIs of the realm owner receive in the access token of a member (realm owner only): the claims Keycloak
 // computes for the login client, without the member logging in. Never a signed token: nothing here can call an API.
+// With lightweight tokens, two views: the lightweight token, and what an API reads back by introspection.
 export default function TokenPreviewModal({ org, member, onClose }: TokenPreviewModalProps) {
   const { t } = useTranslation();
   // the catalogs where the org has a product: the only ones that can put something in its tokens
@@ -51,17 +52,55 @@ export default function TokenPreviewModal({ org, member, onClose }: TokenPreview
             {preview.error.message}
           </Alert>
         )}
-        {/* null, 2: indented by 2 spaces, like a pretty printer */}
-        {preview.data && (
-          <Code block mah={480} style={{ overflow: 'auto' }}>
-            {JSON.stringify(preview.data, null, 2)}
-          </Code>
-        )}
+        {preview.data && !preview.data.lightweight && <Claims claims={preview.data.token} />}
+        {preview.data && preview.data.lightweight && <LightweightViews preview={preview.data} catalogs={catalogs} />}
 
         <Text size="sm" c="dimmed">
           {t('tokenPreview.hint')}
         </Text>
       </Stack>
     </Modal>
+  );
+}
+
+// Two tabs: the introspection first, it holds the rights; then the lightweight token, what travels
+function LightweightViews({ preview, catalogs }: { preview: TokenPreview; catalogs: string[] }) {
+  const { t } = useTranslation();
+  // "aud" is a list, or a single string with one audience. The API of a catalog may only introspect the tokens
+  // whose audience it is in: Keycloak answers "active": false otherwise
+  const aud = preview.introspection.aud;
+  const audience = Array.isArray(aud) ? aud : typeof aud === 'string' ? [aud] : [];
+  const refused = catalogs.filter((catalog) => !audience.includes(catalog));
+
+  return (
+    <Stack gap="xs">
+      <Text size="sm" c="dimmed">
+        {t('tokenPreview.lightweight')}
+      </Text>
+      {refused.length > 0 && (
+        <Alert color="yellow">{t('tokenPreview.notInAudience', { catalogs: refused.join(', ') })}</Alert>
+      )}
+      <Tabs defaultValue="introspection">
+        <Tabs.List>
+          <Tabs.Tab value="introspection">{t('tokenPreview.introspectionTab')}</Tabs.Tab>
+          <Tabs.Tab value="token">{t('tokenPreview.tokenTab')}</Tabs.Tab>
+        </Tabs.List>
+        <Tabs.Panel value="introspection" pt="xs">
+          <Claims claims={preview.introspection} />
+        </Tabs.Panel>
+        <Tabs.Panel value="token" pt="xs">
+          <Claims claims={preview.token} />
+        </Tabs.Panel>
+      </Tabs>
+    </Stack>
+  );
+}
+
+// null, 2: indented by 2 spaces, like a pretty printer
+function Claims({ claims }: { claims: Record<string, unknown> }) {
+  return (
+    <Code block mah={480} style={{ overflow: 'auto' }}>
+      {JSON.stringify(claims, null, 2)}
+    </Code>
   );
 }

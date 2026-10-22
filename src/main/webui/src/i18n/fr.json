@@ -410,7 +410,11 @@
     "catalogs": "Catalogues",
     "catalogsDescription": "Ceux que demande une application : par défaut, tous les catalogues où l'organisation a un produit.",
     "scope": "Comme une application qui demande",
-    "hint": "Les claims de l'access token que reçoivent vos APIs pour ce membre, calculés par Keycloak sans que le membre se connecte. Seulement les claims : rien ici ne permet d'appeler une API."
+    "hint": "Les claims de l'access token que reçoivent vos APIs pour ce membre, calculés par Keycloak sans que le membre se connecte. Seulement les claims : rien ici ne permet d'appeler une API.",
+    "lightweight": "Le client de login émet des tokens légers : le token ne porte que l'identité du user, vos APIs lisent le reste par introspection.",
+    "introspectionTab": "Introspection (ce que lit votre API)",
+    "tokenTab": "Token léger (ce qui circule)",
+    "notInAudience": "Pas dans l'audience du token : {{catalogs}}. Les APIs de ces catalogues reçoivent \"active\": false quand elles l'introspectent (le membre n'y a aucun droit)."
   },
   "members": {
     "title": "Membres de {{org}}",

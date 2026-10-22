@@ -226,6 +226,16 @@ export function useOrgProducts(org: string) {
 // The claims the login client would put in the access token of a member, for an application asking for
 // scope=openid plus these catalogs (realm owner only). Computed by Keycloak: a JSON object, never a signed token.
 // Record<string, unknown>: the claims are only shown, the front does not read them.
+// The token of a member and its introspection (TokenPreview in the core): claims only, never a signed token.
+// Without lightweight tokens, both are the same claims.
+export interface TokenPreview {
+  lightweight: boolean;
+  // what an application receives: the lightweight token in lightweight mode
+  token: Record<string, unknown>;
+  // what an API reads back by introspecting it
+  introspection: Record<string, unknown>;
+}
+
 export function useTokenPreview(org: string, userId: string | null, catalogs: string[]) {
   return useQuery({
     // one cache entry per member and selection of catalogs: going back to a previous selection shows it at once
@@ -235,7 +245,7 @@ export function useTokenPreview(org: string, userId: string | null, catalogs: st
       const params = new URLSearchParams();
       catalogs.forEach((catalog) => params.append('catalog', catalog));
       const query = params.size > 0 ? `?${params}` : '';
-      return getJson<Record<string, unknown>>(
+      return getJson<TokenPreview>(
         `${orgUrl(org)}/members/${encodeURIComponent(userId!)}/token-preview${query}`,
       );
     },

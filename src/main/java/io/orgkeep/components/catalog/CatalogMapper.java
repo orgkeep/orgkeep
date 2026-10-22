@@ -46,8 +46,8 @@ public interface CatalogMapper {
     }
 
     /**
-     * Neither shown on a consent screen nor listed in the "scope" claim: an implementation detail of the realm.
-     * Marked as the scope of a catalog (see {@link Catalogs}).
+     * Not shown on a consent screen, but listed in the "scope" claim. Marked as the scope of a catalog
+     * (see {@link Catalogs}).
      */
     default ClientScopeRepresentation toScope(CreateCatalogRequest request) {
         ClientScopeRepresentation scope = new ClientScopeRepresentation();
@@ -55,7 +55,9 @@ public interface CatalogMapper {
         scope.setDescription("Products of the catalog " + request.name());
         scope.setProtocol("openid-connect");
         scope.setAttributes(Map.of(
-                "include.in.token.scope", "false",
+                // must stay true: the introspection recomputes the claims from the scopes listed in the "scope" claim
+                // of the token. Unlisted, the catalog is lost, even for a full token (see LightweightTokenTest)
+                "include.in.token.scope", "true",
                 "display.on.consent.screen", "false"));
         markAsCatalog(scope);
         return scope;

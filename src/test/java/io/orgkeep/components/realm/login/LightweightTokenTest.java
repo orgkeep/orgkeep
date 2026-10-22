@@ -71,7 +71,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *   <li>a client may only introspect a token whose audience it is in ("Client 'x' is not in the token audience"):
  *       an API client gets an audience mapper on the login client;</li>
  *   <li>the introspection recomputes the claims from the scopes listed in the "scope" claim: a catalog scope must be
- *       listed there (include.in.token.scope=true), or its claims are lost.</li>
+ *       listed there, or its claims are lost. Orgkeep creates them with include.in.token.scope=true (CatalogMapper).</li>
  * </ul>
  * Setup: the model of TeamTokenTest, reduced to one product. "shop-repository" in prod (features scan and flow,
  * parameter region), assigned to acme (1000 a month, scan bought); Paul is in "ops", which gives the product with a
@@ -235,38 +235,15 @@ class LightweightTokenTest {
 
     // --- what the introspection returns
 
-    // the claims are recomputed from the scopes of the "scope" claim: a catalog scope that is not listed there
-    // (include.in.token.scope=false, as Orgkeep creates it today) is lost
+    // the introspection recomputes the claims from the scopes of the "scope" claim: the catalog must be listed there
     @Test
-    void theIntrospectionNeedsTheCatalogInTheScopeClaim() throws Exception {
-        updateLoginClient(client -> setAttribute(client, LIGHTWEIGHT, "true"));
-        createApiClient("shop-api");
-
-        JsonNode introspection = introspect("shop-api", logIn("paul", "openid prod"));
-
-        assertTrue(introspection.path("active").asBoolean(), introspection.toString());
-        assertTrue(introspection.at("/resource_access/prod").isMissingNode(), introspection.toString());
-        assertTrue(introspection.path("prod").isMissingNode(), introspection.toString());
-    }
-
-    // the same for a full token: the introspection does not return the claims of the token, it recomputes them
-    @Test
-    void theIntrospectionOfAFullTokenNeedsTheCatalogInTheScopeClaimToo() throws Exception {
-        createApiClient("shop-api");
-        String token = logIn("paul", "openid prod");
-
-        JsonNode introspection = introspect("shop-api", token);
-
-        assertTrue(introspection.path("active").asBoolean(), introspection.toString());
-        assertFalse(claims(token).at("/resource_access/prod").isMissingNode());
-        log.info("Full token, catalog not in the scope claim: resource_access.prod in the introspection: {}",
-                !introspection.at("/resource_access/prod").isMissingNode());
+    void theCatalogIsListedInTheScopeClaim() throws Exception {
+        assertTrue(Set.of(claims(logIn("paul", "openid prod")).path("scope").asText().split(" ")).contains("prod"));
     }
 
     // before the switch, the APIs introspect full tokens: the same claims as the token itself
     @Test
     void anApiClientIntrospectsAFullToken() throws Exception {
-        includeCatalogInScopeClaim();
         createApiClient("shop-api");
         String token = logIn("paul", "openid prod");
 
@@ -350,14 +327,13 @@ class LightweightTokenTest {
     }
 
     // --- what Orgkeep will do: the toggle on the login client, the marker scope, the mappers out of the light token,
-    // the catalogs in the scope claim, the API clients in the audience
+    // the API clients in the audience
 
     private void enableLightweightMode() {
         updateLoginClient(client -> setAttribute(client, LIGHTWEIGHT, "true"));
         createMarkerScope();
         testRealm.resource().clients().get(loginClientUuid()).addDefaultClientScope(markerScopeId());
         excludeProductMappersFromLightweightToken();
-        includeCatalogInScopeClaim();
     }
 
     /** A client scope with a hardcoded claim "lightweight": true, in the lightweight token only. */
@@ -398,15 +374,6 @@ class LightweightTokenTest {
             mapper.setConfig(config);
             mappers.update(mapper.getId(), mapper);
         });
-    }
-
-    /** include.in.token.scope=true on the scope of prod (Orgkeep sets false today). */
-    private void includeCatalogInScopeClaim() {
-        ClientScopeRepresentation prod = scope("prod");
-        Map<String, String> attributes = new HashMap<>(prod.getAttributes());
-        attributes.put("include.in.token.scope", "true");
-        prod.setAttributes(attributes);
-        testRealm.resource().clientScopes().get(prod.getId()).update(prod);
     }
 
     /** An API client, in the audience of the tokens of the login client. */

@@ -147,6 +147,12 @@
             <artifactId>quarkus-test-security</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- @OidcSecurity: with @TestSecurity, the identity carries a JWT with the given claims -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-test-security-oidc</artifactId>
+            <scope>test</scope>
+        </dependency>
         <!-- waits for asynchronous results (event bus consumers), version managed by the Quarkus BOM -->
         <dependency>
             <groupId>org.awaitility</groupId>

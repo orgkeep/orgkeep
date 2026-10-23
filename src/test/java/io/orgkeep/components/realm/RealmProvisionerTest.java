@@ -9,6 +9,8 @@ import io.orgkeep.api.model.CreateRealmRequest;
 import io.orgkeep.api.model.CreateRealmResponse;
 import io.orgkeep.api.OrgService;
 import io.orgkeep.api.model.CreateOrgRequest;
+import io.orgkeep.api.model.CreateCatalogRequest;
+import io.orgkeep.api.model.OrgkeepApiClient;
 import io.orgkeep.api.model.RealmRole;
 import io.orgkeep.api.model.SmtpSettings;
 import io.quarkus.test.junit.QuarkusTest;
@@ -25,6 +27,7 @@ import org.keycloak.representations.idm.RoleRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -142,6 +145,33 @@ class RealmProvisionerTest {
         assertFalse(loginClient.isFullScopeAllowed());
         assertTrue(realmRolesInScope(loginClient.getId()).containsAll(Set.of("realm-owner", "default-roles-" + realmName)));
         assertEquals(Set.of("org-owner", "org-admin", "org-user"), orgRolesInScope(loginClient.getId(), "acme"));
+    }
+
+    // the client of the API of Orgkeep: public with PKCE, the roles Orgkeep reads (realm and orgs), and no catalog,
+    // neither the default one nor one created afterwards
+    @Test
+    void createsTheOrgkeepApiClientWithoutCatalog() {
+        service.create(new CreateRealmRequest(realmName, "owner@acme.test", "s3cret"));
+        service.ensureDefaults(realmName);
+        orgService.create(realmName, new CreateOrgRequest("acme", Set.of(), null, null));
+        catalogService.create(realmName, new CreateCatalogRequest("prod", "Production", null));
+
+        List<ClientRepresentation> clients = keycloak.realm(realmName).clients().findByClientId(OrgkeepApiClient.CLIENT_ID);
+        assertEquals(1, clients.size());
+        ClientRepresentation apiClient = clients.get(0);
+        assertTrue(apiClient.isPublicClient());
+        assertEquals("S256", apiClient.getAttributes().get("pkce.code.challenge.method"));
+        assertFalse(apiClient.isDirectAccessGrantsEnabled());
+        assertFalse(apiClient.isFullScopeAllowed());
+        assertTrue(realmRolesInScope(apiClient.getId()).containsAll(Set.of("realm-owner", "default-roles-" + realmName)));
+        assertEquals(Set.of("org-owner", "org-admin", "org-user"), orgRolesInScope(apiClient.getId(), "acme"));
+
+        var apiClientResource = keycloak.realm(realmName).clients().get(apiClient.getId());
+        Set<String> scopes = new HashSet<>();
+        apiClientResource.getDefaultClientScopes().forEach(scope -> scopes.add(scope.getName()));
+        apiClientResource.getOptionalClientScopes().forEach(scope -> scopes.add(scope.getName()));
+        assertFalse(scopes.contains(Catalogs.DEFAULT), scopes.toString());
+        assertFalse(scopes.contains("prod"), scopes.toString());
     }
 
     // a login client older than this rule: the orgs created before it get their mappings when it switches

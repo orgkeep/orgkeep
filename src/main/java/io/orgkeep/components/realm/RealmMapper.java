@@ -1,6 +1,7 @@
 package io.orgkeep.components.realm;
 
 import io.orgkeep.api.model.CreateRealmRequest;
+import io.orgkeep.api.model.OrgkeepApiClient;
 import io.orgkeep.api.model.SmtpSettings;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.CredentialRepresentation;
@@ -49,6 +50,26 @@ public interface RealmMapper {
         client.setImplicitFlowEnabled(false);
         client.setDirectAccessGrantsEnabled(false);
         client.setServiceAccountsEnabled(false);
+        client.setAttributes(Map.of("pkce.code.challenge.method", "S256"));
+        return client;
+    }
+
+    /**
+     * Client to call the API of Orgkeep with (see {@link OrgkeepApiClient}). Public client, authorization code flow
+     * with PKCE, like the login client: the redirect URIs are left to the integrator. Only the roles of its scope
+     * (realm roles and org roles), no catalog.
+     */
+    default ClientRepresentation toOrgkeepApiClient() {
+        ClientRepresentation client = new ClientRepresentation();
+        client.setClientId(OrgkeepApiClient.CLIENT_ID);
+        client.setName("Orgkeep API");
+        client.setEnabled(true);
+        client.setPublicClient(true);
+        client.setStandardFlowEnabled(true);
+        client.setImplicitFlowEnabled(false);
+        client.setDirectAccessGrantsEnabled(false);
+        client.setServiceAccountsEnabled(false);
+        client.setFullScopeAllowed(false);
         client.setAttributes(Map.of("pkce.code.challenge.method", "S256"));
         return client;
     }

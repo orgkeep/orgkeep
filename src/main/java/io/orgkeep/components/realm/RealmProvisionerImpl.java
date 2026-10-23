@@ -6,6 +6,7 @@ import io.orgkeep.api.exceptions.RealmAlreadyExistsException;
 import io.orgkeep.api.model.CreateRealmRequest;
 import io.orgkeep.api.model.CreateRealmResponse;
 import io.orgkeep.api.model.OrgClients;
+import io.orgkeep.api.model.OrgkeepApiClient;
 import io.orgkeep.api.model.RealmRole;
 import io.orgkeep.api.model.SmtpSettings;
 import io.orgkeep.repository.keycloak.KeycloakClients;
@@ -91,33 +92,49 @@ public class RealmProvisionerImpl implements RealmProvisioner {
                 .or(() -> clients.create(name, realmMapper.toLoginClient(name)))
                 .or(() -> clients.findUuid(name, name))
                 .orElseThrow(() -> new IllegalStateException("Login client not found in realm '%s'".formatted(name)));
-        restrictLoginClientScope(name, loginClientUuid, existing.isEmpty());
+        restrictScope(name, loginClientUuid, existing.isEmpty());
+
+        // the client of the API of Orgkeep, for the screens of an integrator: the roles Orgkeep reads, no catalog
+        Optional<String> existingApiClient = clients.findUuid(name, OrgkeepApiClient.CLIENT_ID);
+        String apiClientUuid = existingApiClient
+                .or(() -> clients.create(name, realmMapper.toOrgkeepApiClient()))
+                .or(() -> clients.findUuid(name, OrgkeepApiClient.CLIENT_ID))
+                .orElseThrow(() -> new IllegalStateException("Client '%s' not found in realm '%s'"
+                        .formatted(OrgkeepApiClient.CLIENT_ID, name)));
+        if (existingApiClient.isEmpty()) {
+            // Keycloak gives a new client the optional scopes of the realm, the catalogs among them
+            catalogSetup.catalogScopeIds(name).values()
+                    .forEach(scopeId -> clients.removeScope(name, apiClientUuid, scopeId));
+        }
+        restrictScope(name, apiClientUuid, existingApiClient.isEmpty());
     }
 
     /**
-     * fullScopeAllowed=false: the roles of a catalog only reach a token of the login client when the scope of the
+     * fullScopeAllowed=false: the roles of a catalog only reach a token of the client when the scope of the
      * catalog is in it. Every other role the core API reads must then be mapped explicitly: the realm roles
      * (realm_access) and the roles of every org (resource_access.org-{org}, mapped when an org is created).
+     * For the login client and the client of the API of Orgkeep.
      *
-     * @param created the login client was just created: like a client switching to fullScopeAllowed=false, it has
+     * @param created the client was just created: like a client switching to fullScopeAllowed=false, it has
      *                none of the org mappings yet
      */
-    private void restrictLoginClientScope(String realm, String loginClientUuid, boolean created) {
+    private void restrictScope(String realm, String clientUuid, boolean created) {
         List<String> realmRoles = new ArrayList<>(Arrays.stream(RealmRole.values()).map(RealmRole::getRoleName).toList());
         // composite of offline_access, uma_authorization and the roles of the account client
         realmRoles.add(realms.defaultRoleName(realm));
-        clients.addRealmRolesToScope(realm, loginClientUuid, realmRoles);
+        clients.addRealmRolesToScope(realm, clientUuid, realmRoles);
 
-        ClientRepresentation client = clients.get(realm, loginClientUuid);
+        ClientRepresentation client = clients.get(realm, clientUuid);
         if (created || client.isFullScopeAllowed()) {
             // once, not at every start: one call per org
             orgs.names(realm).forEach(org -> clients.findUuid(realm, OrgClients.clientId(org))
-                    .ifPresent(orgClientUuid -> clients.addClientRolesToScope(realm, loginClientUuid, orgClientUuid)));
+                    .ifPresent(orgClientUuid -> clients.addClientRolesToScope(realm, clientUuid, orgClientUuid)));
         }
         if (client.isFullScopeAllowed()) {
             client.setFullScopeAllowed(false);
-            clients.update(realm, loginClientUuid, client);
-            log.info("Login client of realm '{}' restricted to the roles of its scope (fullScopeAllowed=false)", realm);
+            clients.update(realm, clientUuid, client);
+            log.info("Client '{}' of realm '{}' restricted to the roles of its scope (fullScopeAllowed=false)",
+                    client.getClientId(), realm);
         }
     }
 

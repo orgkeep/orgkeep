@@ -8,6 +8,7 @@ import io.orgkeep.api.exceptions.OrgAlreadyExistsException;
 import io.orgkeep.api.model.CreateOrgRequest;
 import io.orgkeep.api.model.CreateOrgResponse;
 import io.orgkeep.api.model.OrgClients;
+import io.orgkeep.api.model.OrgkeepApiClient;
 import io.orgkeep.api.model.OrgDetails;
 import io.orgkeep.api.model.OrgGroups;
 import io.orgkeep.api.model.OrgMember;
@@ -276,10 +277,13 @@ public class OrgServiceImpl implements OrgService {
         // so a security check only ever needs the lowest role it requires
         clients.addComposite(realm, clientUuid, OrgRole.ORG_OWNER.getRoleName(), OrgRole.ORG_ADMIN.getRoleName());
         clients.addComposite(realm, clientUuid, OrgRole.ORG_ADMIN.getRoleName(), OrgRole.ORG_USER.getRoleName());
-        // the login client only puts the roles of its scope in its tokens (fullScopeAllowed=false, see
-        // RealmProvisioner.ensureDefaults): the core API reads these roles. Deleting the org client removes the mapping
-        clients.findUuid(realm, realm)
-                .ifPresent(loginClientUuid -> clients.addClientRolesToScope(realm, loginClientUuid, clientUuid));
+        // the login client and the client of the API of Orgkeep only put the roles of their scope in their tokens
+        // (fullScopeAllowed=false, see RealmProvisioner.ensureDefaults): the core API reads these roles. Deleting the
+        // org client removes the mappings
+        for (String clientId : List.of(realm, OrgkeepApiClient.CLIENT_ID)) {
+            clients.findUuid(realm, clientId)
+                    .ifPresent(scopedClientUuid -> clients.addClientRolesToScope(realm, scopedClientUuid, clientUuid));
+        }
         return clientUuid;
     }
 

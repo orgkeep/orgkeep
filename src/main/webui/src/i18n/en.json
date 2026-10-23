@@ -544,6 +544,11 @@
       "defaultCatalogsDescription": "In every token of this client. The other catalogs are only in a token when the application asks for them (scope=<catalog>).",
       "saved": "Saved."
     },
+    "orgkeepApi": {
+      "title": "Your own admin screens (Orgkeep API)",
+      "description": "To build your own screens on the API of Orgkeep instead of this dashboard, they log in with this client: same login page, no catalog in its tokens, never lightweight. Set the URIs of those screens here, with the same rules.",
+      "loadError": "Could not load the client of the Orgkeep API"
+    },
     "lightweight": {
       "title": "Lightweight tokens",
       "on": "On",

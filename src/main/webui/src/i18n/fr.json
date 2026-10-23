@@ -544,6 +544,11 @@
       "defaultCatalogsDescription": "Dans chaque token de ce client. Les autres catalogues ne sont dans un token que si l'application les demande (scope=<catalogue>).",
       "saved": "Enregistré."
     },
+    "orgkeepApi": {
+      "title": "Vos propres écrans d'administration (API Orgkeep)",
+      "description": "Pour construire vos propres écrans sur l'API d'Orgkeep au lieu de ce dashboard, ils se connectent avec ce client : même page de login, aucun catalogue dans ses tokens, jamais en mode léger. Réglez ici les URIs de ces écrans, avec les mêmes règles.",
+      "loadError": "Impossible de charger le client de l'API Orgkeep"
+    },
     "lightweight": {
       "title": "Tokens légers",
       "on": "Activés",

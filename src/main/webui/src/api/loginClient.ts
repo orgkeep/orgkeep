@@ -31,6 +31,42 @@ export interface UpdateLoginClientRequest {
   lightweightTokens?: boolean;
 }
 
+// The client orgkeep-api (OrgkeepApiClientResource in orgkeep-core): the login client of the screens an integrator
+// builds on the API of Orgkeep. No catalog in its tokens, never lightweight: only its URIs are set here.
+export interface OrgkeepApiClient {
+  clientId: string;
+  issuer: string;
+  redirectUris: string[];
+  postLogoutRedirectUris: string[];
+  webOrigins: string[];
+}
+
+// The three lists are replaced whole
+export interface UpdateOrgkeepApiClientRequest {
+  redirectUris: string[];
+  postLogoutRedirectUris: string[];
+  webOrigins: string[];
+}
+
+const ORGKEEP_API_CLIENT_KEY = 'orgkeep-api-client';
+const ORGKEEP_API_CLIENT_URL = '/api/admin/orgkeep-api-client';
+
+export function useOrgkeepApiClient() {
+  return useQuery({
+    queryKey: [ORGKEEP_API_CLIENT_KEY],
+    queryFn: () => getJson<OrgkeepApiClient>(ORGKEEP_API_CLIENT_URL),
+  });
+}
+
+export function useUpdateOrgkeepApiClient() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (request: UpdateOrgkeepApiClientRequest) =>
+      putJson<OrgkeepApiClient>(ORGKEEP_API_CLIENT_URL, request),
+    onSuccess: (saved) => queryClient.setQueryData([ORGKEEP_API_CLIENT_KEY], saved),
+  });
+}
+
 const LOGIN_CLIENT_KEY = 'login-client';
 const LOGIN_CLIENT_URL = '/api/admin/login-client';
 

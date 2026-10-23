@@ -20,7 +20,16 @@ import { useDisclosure } from '@mantine/hooks';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { useCatalogs } from '../api/catalogs';
-import { type LoginClient, type UpdateLoginClientRequest, useLoginClient, useUpdateLoginClient } from '../api/loginClient';
+import {
+  type LoginClient,
+  type OrgkeepApiClient,
+  type UpdateLoginClientRequest,
+  type UpdateOrgkeepApiClientRequest,
+  useLoginClient,
+  useOrgkeepApiClient,
+  useUpdateLoginClient,
+  useUpdateOrgkeepApiClient,
+} from '../api/loginClient';
 import ConfirmModal from '../components/ConfirmModal';
 import CopyValue from '../components/CopyValue';
 
@@ -54,6 +63,7 @@ export default function LoginClientPage() {
       <ConnectionDetails client={client} />
       <SettingsForm client={client} />
       <LightweightTokensSection client={client} />
+      <OrgkeepApiClientSection />
     </Stack>
   );
 }
@@ -104,6 +114,107 @@ function ConnectionDetails({ client }: { client: LoginClient }) {
         )}
       </Stack>
     </Paper>
+  );
+}
+
+// The client orgkeep-api, for an integrator who builds its own screens on the API of Orgkeep instead of this
+// dashboard: its client ID, and the URIs of those screens. Loaded on its own: the page works without it.
+function OrgkeepApiClientSection() {
+  const { t } = useTranslation();
+  const { data: apiClient, error } = useOrgkeepApiClient();
+
+  return (
+    <Paper withBorder p="md">
+      <Stack gap="xs">
+        <Text fw={600}>{t('loginClient.orgkeepApi.title')}</Text>
+        <Text size="sm" c="dimmed">
+          {t('loginClient.orgkeepApi.description')}
+        </Text>
+        {error && (
+          <Alert color="red" title={t('loginClient.orgkeepApi.loadError')}>
+            {error.message}
+          </Alert>
+        )}
+        {apiClient && (
+          <>
+            <Group gap="xs" wrap="nowrap">
+              <Text size="sm" c="dimmed">
+                {t('loginClient.details.clientId')}
+              </Text>
+              <Code>{apiClient.clientId}</Code>
+              <CopyValue value={apiClient.clientId} />
+            </Group>
+            {/* key: the form reads its initial values once */}
+            <OrgkeepApiClientForm key={apiClient.clientId} apiClient={apiClient} />
+          </>
+        )}
+      </Stack>
+    </Paper>
+  );
+}
+
+function toApiClientValues(apiClient: OrgkeepApiClient): UpdateOrgkeepApiClientRequest {
+  return {
+    redirectUris: apiClient.redirectUris,
+    postLogoutRedirectUris: apiClient.postLogoutRedirectUris,
+    webOrigins: apiClient.webOrigins,
+  };
+}
+
+// The same three lists as the login client, with the same rules (checked by the core, its message shown as is)
+function OrgkeepApiClientForm({ apiClient }: { apiClient: OrgkeepApiClient }) {
+  const { t } = useTranslation();
+  const update = useUpdateOrgkeepApiClient();
+  const form = useForm<UpdateOrgkeepApiClientRequest>({ initialValues: toApiClientValues(apiClient) });
+
+  const submit = form.onSubmit((values) =>
+    update.mutate(values, {
+      onSuccess: (saved) => {
+        form.setValues(toApiClientValues(saved));
+        form.resetDirty(toApiClientValues(saved));
+      },
+    }),
+  );
+
+  return (
+    <form onSubmit={submit}>
+      <Stack>
+        <TagsInput
+          label={t('loginClient.settings.redirectUris')}
+          description={t('loginClient.settings.redirectUrisDescription')}
+          placeholder="https://admin.example.com/*"
+          {...form.getInputProps('redirectUris')}
+        />
+        <TagsInput
+          label={t('loginClient.settings.postLogoutRedirectUris')}
+          description={t('loginClient.settings.postLogoutRedirectUrisDescription')}
+          placeholder="https://admin.example.com/"
+          {...form.getInputProps('postLogoutRedirectUris')}
+        />
+        <TagsInput
+          label={t('loginClient.settings.webOrigins')}
+          description={t('loginClient.settings.webOriginsDescription')}
+          placeholder="+"
+          {...form.getInputProps('webOrigins')}
+        />
+
+        {update.error && (
+          <Alert color="red" title={t('common.failed')}>
+            {update.error.message}
+          </Alert>
+        )}
+        {update.isSuccess && !form.isDirty() && <Alert color="green">{t('loginClient.settings.saved')}</Alert>}
+
+        <Group justify="flex-end">
+          <Button variant="default" onClick={form.reset} disabled={!form.isDirty()}>
+            {t('common.cancel')}
+          </Button>
+          <Button type="submit" loading={update.isPending} disabled={!form.isDirty()}>
+            {t('common.save')}
+          </Button>
+        </Group>
+      </Stack>
+    </form>
   );
 }
 

@@ -3,9 +3,12 @@ package io.orgkeep.components.realm.login;
 import io.orgkeep.api.LoginClientService;
 import io.orgkeep.api.exceptions.InvalidRequestException;
 import io.orgkeep.api.exceptions.LoginClientNotFoundException;
+import io.orgkeep.api.exceptions.OrgkeepApiClientNotFoundException;
 import io.orgkeep.api.model.LightweightTokens;
 import io.orgkeep.api.model.LoginClient;
+import io.orgkeep.api.model.OrgkeepApiClient;
 import io.orgkeep.api.model.UpdateLoginClientRequest;
+import io.orgkeep.api.model.UpdateOrgkeepApiClientRequest;
 import io.orgkeep.components.catalog.CatalogSetup;
 import io.orgkeep.config.KeycloakUrls;
 import io.orgkeep.config.OrgkeepConfig;
@@ -69,6 +72,29 @@ public class LoginClientServiceImpl implements LoginClientService {
         log.info("Login client of realm '{}' updated: redirect URIs {}, web origins {}, default catalogs {}, lightweight tokens {}",
                 realm, request.redirectUris(), request.webOrigins(), request.defaultCatalogs(), request.lightweightTokens());
         return get(realm);
+    }
+
+    @Override
+    public OrgkeepApiClient getOrgkeepApiClient(String realm) {
+        return loginClientMapper.toOrgkeepApiClient(clients.get(realm, orgkeepApiClientUuid(realm)), keycloakUrls.issuer(realm));
+    }
+
+    @Override
+    public OrgkeepApiClient updateOrgkeepApiClient(String realm, UpdateOrgkeepApiClientRequest request) {
+        String clientUuid = orgkeepApiClientUuid(realm);
+        // read, modify, write back: the admin API replaces the client with what it receives
+        ClientRepresentation client = clients.get(realm, clientUuid);
+        loginClientMapper.update(request, client);
+        clients.update(realm, clientUuid, client);
+        log.info("Client '{}' of realm '{}' updated: redirect URIs {}, web origins {}",
+                OrgkeepApiClient.CLIENT_ID, realm, request.redirectUris(), request.webOrigins());
+        return getOrgkeepApiClient(realm);
+    }
+
+    /** Created with the realm (see RealmProvisioner.ensureDefaults). */
+    private String orgkeepApiClientUuid(String realm) {
+        return clients.findUuid(realm, OrgkeepApiClient.CLIENT_ID)
+                .orElseThrow(() -> new OrgkeepApiClientNotFoundException(realm));
     }
 
     /**

@@ -2,7 +2,9 @@ package io.orgkeep.components.realm.login;
 
 import io.orgkeep.api.model.LightweightTokens;
 import io.orgkeep.api.model.LoginClient;
+import io.orgkeep.api.model.OrgkeepApiClient;
 import io.orgkeep.api.model.UpdateLoginClientRequest;
+import io.orgkeep.api.model.UpdateOrgkeepApiClientRequest;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.ClientScopeRepresentation;
 import org.keycloak.representations.idm.ProtocolMapperRepresentation;
@@ -45,15 +47,39 @@ public interface LoginClientMapper {
     @Mapping(target = "webOrigins", source = "webOrigins")
     void update(UpdateLoginClientRequest request, @MappingTarget ClientRepresentation client);
 
+    @Mapping(target = "clientId", source = "client.clientId")
+    @Mapping(target = "redirectUris", source = "client.redirectUris")
+    @Mapping(target = "webOrigins", source = "client.webOrigins")
+    @Mapping(target = "postLogoutRedirectUris", source = "client.attributes", qualifiedByName = "postLogoutRedirectUris")
+    OrgkeepApiClient toOrgkeepApiClient(ClientRepresentation client, String issuer);
+
+    /** Like {@link #update(UpdateLoginClientRequest, ClientRepresentation)}, for the client of the API of Orgkeep. */
+    @BeanMapping(ignoreByDefault = true)
+    @Mapping(target = "redirectUris", source = "redirectUris")
+    @Mapping(target = "webOrigins", source = "webOrigins")
+    void update(UpdateOrgkeepApiClientRequest request, @MappingTarget ClientRepresentation client);
+
+    // MapStruct calls an @AfterMapping whose source type matches: this one for the client of the API of Orgkeep
+    @AfterMapping
+    default void updatePostLogoutRedirectUris(UpdateOrgkeepApiClientRequest request, @MappingTarget ClientRepresentation client) {
+        client.setAttributes(withPostLogoutRedirectUris(client, request.postLogoutRedirectUris()));
+    }
+
     @AfterMapping
     default void updatePostLogoutRedirectUris(UpdateLoginClientRequest request, @MappingTarget ClientRepresentation client) {
-        Map<String, String> attributes = client.getAttributes() == null ? new HashMap<>() : new HashMap<>(client.getAttributes());
-        attributes.put(POST_LOGOUT_REDIRECT_URIS, String.join(SEPARATOR, request.postLogoutRedirectUris()));
+        Map<String, String> attributes = withPostLogoutRedirectUris(client, request.postLogoutRedirectUris());
         // absent: the mode does not change
         if (request.lightweightTokens() != null) {
             attributes.put(LightweightTokens.CLIENT_ATTRIBUTE, request.lightweightTokens().toString());
         }
         client.setAttributes(attributes);
+    }
+
+    /** A copy of the attributes of the client, with these post logout redirect URIs (Keycloak has no dedicated field). */
+    private static Map<String, String> withPostLogoutRedirectUris(ClientRepresentation client, List<String> uris) {
+        Map<String, String> attributes = client.getAttributes() == null ? new HashMap<>() : new HashMap<>(client.getAttributes());
+        attributes.put(POST_LOGOUT_REDIRECT_URIS, String.join(SEPARATOR, uris));
+        return attributes;
     }
 
     @Named("lightweightTokens")

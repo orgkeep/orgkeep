@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react';
-import { AppShell, Burger, Button, Group, NavLink, Text, Title } from '@mantine/core';
+import {AppShell, Burger, Button, Group, NavLink, Text, Image, Center} from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation } from 'react-router';
 import type { CurrentUser } from '../api/currentUser';
 import { buildMenu } from './menu';
+import banner from '../assets/orgkeep-banner.png';
+import {useServerInfo} from "../api/serverInfo";
 
 interface AppLayoutProps {
   user: CurrentUser;
@@ -30,17 +32,22 @@ export default function AppLayout({ user, children }: AppLayoutProps) {
   const { t } = useTranslation();
   const menu = buildMenu(user, t);
 
+  const { data: serverInfo } = useServerInfo();
+
   return (
     <AppShell
       header={{ height: 56 }}
       navbar={{ width: 240, breakpoint: 'sm', collapsed: { mobile: !menuOpened } }}
       padding="md"
+      footer={{height: 56}}
     >
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between">
           <Group>
             <Burger opened={menuOpened} onClick={toggleMenu} hiddenFrom="sm" size="sm" />
-            <Title order={3}>Orgkeep</Title>
+            <Link to="/">
+              <Image src={banner} alt="Orgkeep" h={44} w="auto"/>
+            </Link>
           </Group>
           <Group>
             <Text size="sm">{user.fullName ?? user.username}</Text>
@@ -76,6 +83,15 @@ export default function AppLayout({ user, children }: AppLayoutProps) {
       </AppShell.Navbar>
 
       <AppShell.Main>{children}</AppShell.Main>
+      <AppShell.Footer>
+        <Center h="100%">
+        {serverInfo && (
+            <Text size="xs" c="dimmed">
+              {serverInfo.application} {serverInfo.version}
+            </Text>
+        )}
+        </Center>
+      </AppShell.Footer>
     </AppShell>
   );
 }

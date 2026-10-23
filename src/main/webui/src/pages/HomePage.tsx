@@ -1,11 +1,9 @@
 import { Badge, Group, Stack, Text, Title } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
 import type { CurrentUser } from '../api/currentUser';
-import { useServerInfo } from '../api/serverInfo';
 
 export default function HomePage({ user }: { user: CurrentUser }) {
   const { t } = useTranslation();
-  const { data: serverInfo } = useServerInfo();
 
   return (
     <Stack>
@@ -33,12 +31,6 @@ export default function HomePage({ user }: { user: CurrentUser }) {
           ))}
         </Group>
       ))}
-
-      {serverInfo && (
-        <Text size="xs" c="dimmed">
-          {serverInfo.application} {serverInfo.version}
-        </Text>
-      )}
     </Stack>
   );
 }

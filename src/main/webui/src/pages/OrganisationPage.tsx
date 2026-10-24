@@ -36,6 +36,7 @@ import TokenPreviewModal from '../components/TokenPreviewModal';
 import AssignProductModal from './AssignProductModal';
 import { ROLE_COLORS } from './orgRoles';
 import { personName } from './personName';
+import MemberName from "../components/MemberName";
 
 // The tabs of the page. The selected one is in the URL (?tab=products) like the product filter of the list:
 // the product count of the list links straight to the products tab.
@@ -337,8 +338,10 @@ function MembersTab({ org, members, isPending, error }: MembersTabProps) {
         </Table.Thead>
         <Table.Tbody>
           {members.map((member) => (
-            <Table.Tr key={member.id}>
-              <Table.Td fw={500}>{personName(member)}</Table.Td>
+            <Table.Tr key={member.id} opacity={member.enabled === false ? 0.6 : undefined}>
+              <Table.Td fw={500}>
+                <MemberName member={member}/>
+              </Table.Td>
               <Table.Td c="dimmed">{member.email}</Table.Td>
               <Table.Td>
                 <Badge color={ROLE_COLORS[member.role]} variant="light">

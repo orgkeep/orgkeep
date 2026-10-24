@@ -8,6 +8,7 @@ import ConfirmModal from '../components/ConfirmModal';
 import AddMemberModal from './AddMemberModal';
 import { ROLE_COLORS } from './orgRoles';
 import { personName } from './personName';
+import MemberName from "../components/MemberName";
 
 // The members of an org, managed by its org admins: add (the core sends the invitation) and remove.
 export default function OrgMembersPage() {
@@ -68,7 +69,9 @@ export default function OrgMembersPage() {
             <Table.Tbody>
               {members.map((member) => (
                 <Table.Tr key={member.id}>
-                  <Table.Td fw={500}>{personName(member)}</Table.Td>
+                  <Table.Td fw={500}>
+                    <MemberName member={member}/>
+                  </Table.Td>
                   <Table.Td c="dimmed">{member.email}</Table.Td>
                   <Table.Td>
                     <Badge color={ROLE_COLORS[member.role]} variant="light">

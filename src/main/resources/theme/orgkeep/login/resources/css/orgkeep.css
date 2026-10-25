@@ -1,0 +1,159 @@
+/*
+ * Orgkeep look on top of keycloak.v2 (PatternFly 5): the login card of the dashboard (white page, centered card,
+ * logo on top, Mantine colors). Only CSS, the templates of Keycloak are kept: nothing to port at each upgrade.
+ */
+
+:root {
+    /* default colors of Mantine, the UI library of the dashboard */
+    --orgkeep-primary: #228be6;
+    --orgkeep-primary-hover: #1c7ed6;
+    --orgkeep-text: #000000;
+    --orgkeep-dimmed: #868e96;
+    --orgkeep-border: #dee2e6;
+    --orgkeep-input-border: #ced4da;
+    --orgkeep-error: #fa5252;
+    --orgkeep-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+    /* PatternFly reads its colors from these variables */
+    --pf-v5-global--primary-color--100: var(--orgkeep-primary);
+    --pf-v5-global--primary-color--200: var(--orgkeep-primary-hover);
+    --pf-v5-global--link--Color: var(--orgkeep-primary);
+    --pf-v5-global--link--Color--hover: var(--orgkeep-primary-hover);
+    --pf-v5-global--FontFamily--text: var(--orgkeep-font);
+    --pf-v5-global--FontFamily--heading: var(--orgkeep-font);
+}
+
+/* --- Page: white, the card in the middle (Center h="100vh" in the dashboard) --- */
+
+.login-pf body {
+    background: #ffffff;
+    font-family: var(--orgkeep-font);
+}
+
+.pf-v5-c-login {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+
+.pf-v5-c-login__container {
+    display: block;
+    width: 100%;
+    /* w={360} of the dashboard card */
+    max-width: 360px;
+    padding: 0;
+}
+
+/* the realm name above the card: the logo replaces it, inside the card */
+#kc-header {
+    display: none;
+}
+
+/* --- Card (Paper withBorder shadow="sm" radius="md" p="xl") --- */
+
+.pf-v5-c-login__main {
+    background: #ffffff;
+    border: 1px solid var(--orgkeep-border);
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.1);
+    padding: 32px;
+    margin: 0;
+}
+
+/* the logo, at the top of the card */
+.pf-v5-c-login__main::before {
+    content: "";
+    display: block;
+    height: 150px;
+    background: url("../img/logo.png") no-repeat center / contain;
+    margin-bottom: 16px;
+}
+
+.pf-v5-c-login__main-header {
+    border-top: none;
+    padding: 0;
+    margin-bottom: 16px;
+}
+
+/* "Sign in to your account": the dimmed subtitle of the dashboard card */
+#kc-page-title {
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1.55;
+    color: var(--orgkeep-dimmed);
+}
+
+.pf-v5-c-login__main-body,
+.pf-v5-c-login__main-footer {
+    padding: 0;
+}
+
+/* keycloak.v2 leaves an empty group in the form (remember me and forgot password, both off): without this, it
+   doubles the gap above the button */
+.pf-v5-c-form__group:not(:has(*)) {
+    display: none;
+}
+
+/* --- The fields appear: the card is the one of the dashboard, the form fades in under the logo --- */
+
+.pf-v5-c-login__main-body {
+    animation: orgkeep-appear 0.35s ease-out both;
+}
+
+@keyframes orgkeep-appear {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .pf-v5-c-login__main-body {
+        animation: none;
+    }
+}
+
+/* --- Inputs and buttons (Mantine sizes: 36px high, 4px radius) --- */
+
+.pf-v5-c-form__label-text {
+    font-size: 14px;
+    font-weight: 500;
+}
+
+/* PatternFly draws the border of a field with two pseudo-elements (::before for the sides, ::after for the
+   underline): one plain border around the field instead, like Mantine */
+.pf-v5-c-form-control::before {
+    border: 1px solid var(--orgkeep-input-border);
+    border-radius: 4px;
+}
+
+.pf-v5-c-form-control::after {
+    border: none;
+}
+
+.pf-v5-c-form-control:focus-within::before {
+    border-color: var(--orgkeep-primary);
+}
+
+.pf-v5-c-form-control.pf-m-error::before {
+    border-color: var(--orgkeep-error);
+}
+
+.pf-v5-c-button {
+    --pf-v5-c-button--BorderRadius: 4px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.pf-v5-c-button.pf-m-primary {
+    --pf-v5-c-button--m-primary--BackgroundColor: var(--orgkeep-primary);
+    --pf-v5-c-button--m-primary--hover--BackgroundColor: var(--orgkeep-primary-hover);
+    --pf-v5-c-button--m-primary--focus--BackgroundColor: var(--orgkeep-primary-hover);
+    --pf-v5-c-button--m-primary--active--BackgroundColor: var(--orgkeep-primary-hover);
+}

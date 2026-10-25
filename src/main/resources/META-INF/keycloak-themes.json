@@ -2,7 +2,7 @@
   "themes": [
     {
       "name": "orgkeep",
-      "types": ["login"]
+      "types": ["login", "email", "account"]
     }
   ]
 }

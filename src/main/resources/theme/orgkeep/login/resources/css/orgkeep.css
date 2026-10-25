@@ -77,12 +77,12 @@
     margin-bottom: 16px;
 }
 
-/* "Sign in to your account": the dimmed subtitle of the dashboard card */
+/* "Sign in to your account", "Update password"...: under the logo, it says what the page is for */
 #kc-page-title {
-    font-size: 14px;
-    font-weight: 400;
+    font-size: 16px;
+    font-weight: 600;
     line-height: 1.55;
-    color: var(--orgkeep-dimmed);
+    color: var(--orgkeep-text);
 }
 
 .pf-v5-c-login__main-body,
@@ -117,6 +117,26 @@
     .pf-v5-c-login__main-body {
         animation: none;
     }
+}
+
+/* --- Info pages (info.ftl: "account updated", "perform the following actions"): the link to go on is the action
+   of the page, shown as the primary button --- */
+
+#kc-info-message p:not(.instruction) a {
+    display: block;
+    margin-top: 16px;
+    padding: 8px 16px;
+    border-radius: 4px;
+    background: var(--orgkeep-primary);
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 600;
+    text-align: center;
+    text-decoration: none;
+}
+
+#kc-info-message p:not(.instruction) a:hover {
+    background: var(--orgkeep-primary-hover);
 }
 
 /* --- Inputs and buttons (Mantine sizes: 36px high, 4px radius) --- */

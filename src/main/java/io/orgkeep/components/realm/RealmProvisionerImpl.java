@@ -88,6 +88,12 @@ public class RealmProvisionerImpl implements RealmProvisioner {
     }
 
     @Override
+    public void setLoginTheme(String name, String theme) {
+        realms.setLoginTheme(name, theme);
+        log.info("Login theme '{}' set on realm '{}'", theme, name);
+    }
+
+    @Override
     public void ensureDefaults(String name) {
         // the scopes of the catalogs are realm optional scopes: a new login client gets them, and a catalog created
         // afterwards adds its scope to the existing login client

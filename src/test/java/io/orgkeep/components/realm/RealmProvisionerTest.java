@@ -23,6 +23,7 @@ import org.keycloak.admin.client.Keycloak;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.ClientScopeRepresentation;
 import org.keycloak.representations.idm.CredentialRepresentation;
+import org.keycloak.representations.idm.RealmRepresentation;
 import org.keycloak.representations.idm.RoleRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 
@@ -133,6 +134,20 @@ class RealmProvisionerTest {
                 .map(RoleRepresentation::getName)
                 .collect(Collectors.toSet());
         assertEquals(Set.of("realm-admin"), composites);
+    }
+
+    // white label: a new realm keeps the login pages of Keycloak, the theme of Orgkeep is only set by configuration
+    @Test
+    void setsTheLoginThemeOnly() {
+        service.create(new CreateRealmRequest(realmName, "owner@acme.test", "s3cret"));
+        assertNull(keycloak.realm(realmName).toRepresentation().getLoginTheme());
+
+        service.setLoginTheme(realmName, "orgkeep");
+
+        RealmRepresentation realm = keycloak.realm(realmName).toRepresentation();
+        assertEquals("orgkeep", realm.getLoginTheme());
+        // partial update: the rest of the realm is left as it was
+        assertTrue(realm.isOrganizationsEnabled());
     }
 
     // white label: the users of the orgs log in through a client named after the realm, which carries the quota claims

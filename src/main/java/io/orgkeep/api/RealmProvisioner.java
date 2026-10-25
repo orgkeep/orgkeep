@@ -18,6 +18,12 @@ public interface RealmProvisioner {
     void configureSmtp(String name, SmtpSettings smtp);
 
     /**
+     * Sets the theme of the login pages of the realm. The theme must be deployed in Keycloak: an unknown theme is
+     * not refused, Keycloak falls back to its default one.
+     */
+    void setLoginTheme(String name, String theme);
+
+    /**
      * Creates what Orgkeep expects in the realm when it is missing: the login client of the realm owner's
      * applications, whose clientId is the realm name. Not the default catalog, which the realm owner may delete.
      * Idempotent: also run at each startup on an existing realm.

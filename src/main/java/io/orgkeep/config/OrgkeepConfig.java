@@ -28,6 +28,12 @@ public interface OrgkeepConfig {
     /** SMTP server of the realm, set at each startup in ON_PREM mode. Absent: the realm keeps its own settings. */
     Optional<Smtp> smtp();
 
+    /**
+     * Login theme of the realm (e.g. orgkeep, see the orgkeep-theme module), set at each startup in ON_PREM mode.
+     * Absent: the realm keeps its own, Keycloak's by default (white label: nothing on the login page reveals Orgkeep).
+     */
+    Optional<String> loginTheme();
+
     Invitation invitation();
 
     enum Mode { ON_PREM, SAAS }

@@ -48,6 +48,7 @@ public class OnPremiseBootstrap {
 
         // the configuration wins at each startup, a change made in the Keycloak console is overwritten
         config.smtp().ifPresent(smtp -> realmService.configureSmtp(realmName, toSmtpSettings(smtp)));
+        config.loginTheme().ifPresent(theme -> realmService.setLoginTheme(realmName, theme));
     }
 
     private static SmtpSettings toSmtpSettings(OrgkeepConfig.Smtp smtp) {

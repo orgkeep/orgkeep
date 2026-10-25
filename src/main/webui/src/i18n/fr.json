@@ -28,10 +28,6 @@
     "members": "Membres",
     "teams": "Teams"
   },
-  "login": {
-    "subtitle": "Connectez-vous pour gérer vos organisations.",
-    "signIn": "Se connecter"
-  },
   "home": {
     "welcome": "Bienvenue {{name}}",
     "realmRoles": "Rôles du realm",

@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Alert, Center, Container, Loader } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
 import { Route, Routes } from 'react-router';
@@ -9,7 +10,6 @@ import CatalogRolePage from './pages/CatalogRolePage';
 import CatalogsPage from './pages/CatalogsPage';
 import HomePage from './pages/HomePage';
 import LoginClientPage from './pages/LoginClientPage';
-import LoginPage from './pages/LoginPage';
 import NotFoundPage from './pages/NotFoundPage';
 import OrganisationPage from './pages/OrganisationPage';
 import OrganisationsPage from './pages/OrganisationsPage';
@@ -17,6 +17,22 @@ import OrgMembersPage from './pages/OrgMembersPage';
 import OrgTeamsPage from './pages/OrgTeamsPage';
 import ProductPage from './pages/ProductPage';
 import TeamPage from './pages/TeamPage';
+
+// Nobody is logged in: straight to the Keycloak login page (its theme looks like the dashboard), no page of our own.
+// A full page navigation, not a fetch: the backend redirects the browser to Keycloak, which sends it back to / once
+// logged in (see AuthResource). After a logout, the browser comes back to / and lands here again.
+function RedirectToLogin() {
+  // useEffect runs after the render: a render must not have side effects (React may render twice in dev)
+  useEffect(() => {
+    window.location.assign('/api/auth/login');
+  }, []);
+
+  return (
+    <Center h="100vh">
+      <Loader />
+    </Center>
+  );
+}
 
 export default function App() {
   // t(key) returns the text of the current language, like a Spring MessageSource.getMessage(key)
@@ -41,7 +57,7 @@ export default function App() {
     );
   }
   if (!user.authenticated) {
-    return <LoginPage />;
+    return <RedirectToLogin />;
   }
 
   // The routes: URL path -> page, like the @Path of JAX-RS resources but on the browser side.

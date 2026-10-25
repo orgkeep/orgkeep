@@ -10,7 +10,8 @@ import jakarta.ws.rs.core.UriInfo;
 import java.net.URI;
 
 /**
- * Login entry point of the front: the "Sign in" button navigates the browser here (a full page load, not a fetch).
+ * Login entry point of the front: when nobody is logged in, the front navigates the browser here at once (a full
+ * page load, not a fetch).
  * <p>
  * An anonymous call never reaches the method: @Authenticated fails, and the OIDC web-app mechanism answers with a
  * redirect to the Keycloak login page. Keycloak then sends the browser back to this same path with an authorization

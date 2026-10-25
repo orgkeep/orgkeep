@@ -98,6 +98,26 @@ class RealmProvisionerTest {
         assertTrue(assigned.containsAll(expected));
     }
 
+    // like any user of the realm: the Account console of Keycloak needs the roles of the account client they hold
+    @Test
+    void ownerHasTheDefaultRolesOfTheRealm() {
+        CreateRealmResponse response = service.create(new CreateRealmRequest(realmName, "owner@acme.test", "s3cret"));
+
+        String defaultRole = keycloak.realm(realmName).toRepresentation().getDefaultRole().getName();
+        Set<String> assigned = keycloak.realm(realmName).users().get(response.ownerId())
+                .roles().realmLevel().listAll().stream()
+                .map(RoleRepresentation::getName)
+                .collect(Collectors.toSet());
+        assertTrue(assigned.contains(defaultRole), assigned.toString());
+
+        String accountClient = keycloak.realm(realmName).clients().findByClientId("account").get(0).getId();
+        Set<String> accountRoles = keycloak.realm(realmName).users().get(response.ownerId())
+                .roles().clientLevel(accountClient).listEffective().stream()
+                .map(RoleRepresentation::getName)
+                .collect(Collectors.toSet());
+        assertTrue(accountRoles.contains("manage-account"), accountRoles.toString());
+    }
+
     // ON_PREM: the realm owner manages their realm in the Keycloak console, which checks the realm-management roles
     @Test
     void grantConsoleAccessMakesRealmOwnerIncludeRealmAdmin() {

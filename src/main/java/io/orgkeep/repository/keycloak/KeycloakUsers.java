@@ -6,6 +6,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.RequiredArgsConstructor;
 import org.keycloak.admin.client.CreatedResponseUtil;
 import org.keycloak.admin.client.Keycloak;
+import org.keycloak.representations.idm.RoleRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 
 import java.time.Duration;
@@ -53,6 +54,12 @@ public class KeycloakUsers {
         UserRepresentation user = get(realm, userId);
         user.setEnabled(enabled);
         keycloak.realm(realm).users().get(userId).update(user);
+    }
+
+    /** Idempotent: Keycloak ignores a role the user already has. */
+    public void addRealmRole(String realm, String userId, String roleName) {
+        RoleRepresentation role = keycloak.realm(realm).roles().get(roleName).toRepresentation();
+        keycloak.realm(realm).users().get(userId).roles().realmLevel().add(List.of(role));
     }
 
     /** Ends all the sessions of the user: their refresh tokens stop working. */

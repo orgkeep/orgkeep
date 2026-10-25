@@ -73,6 +73,10 @@ public class RealmProvisionerImpl implements RealmProvisioner {
         // the realm and its owner are created in a single call: read back the ids Keycloak generated
         String ownerId = users.findIdByEmail(realm.getRealm(), request.adminEmail())
                 .orElseThrow(() -> new IllegalStateException("Owner of realm '%s' not found after creation".formatted(realm.getRealm())));
+        // a user imported with the realm only gets the roles listed in its representation, not the default roles of
+        // the realm that a user created afterwards gets: without the roles of the account client they hold, the
+        // Account console of Keycloak answers 401 to the owner
+        users.addRealmRole(realm.getRealm(), ownerId, realms.defaultRoleName(realm.getRealm()));
         eventBus.publish(UserCreated.ADDRESS, new UserCreated(realm.getRealm(), null, ownerId, passwordSet));
         return new CreateRealmResponse(realms.id(realm.getRealm()), realm.getRealm(), ownerId);
     }

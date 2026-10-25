@@ -88,9 +88,13 @@ public class RealmProvisionerImpl implements RealmProvisioner {
     }
 
     @Override
-    public void setLoginTheme(String name, String theme) {
-        realms.setLoginTheme(name, theme);
-        log.info("Login theme '{}' set on realm '{}'", theme, name);
+    public boolean setLoginTheme(String name, String clientId, String theme) {
+        Optional<String> clientUuid = clients.findUuid(name, clientId);
+        clientUuid.ifPresent(uuid -> {
+            clients.setLoginTheme(name, uuid, theme);
+            log.info("Login theme '{}' set on client '{}' of realm '{}'", theme, clientId, name);
+        });
+        return clientUuid.isPresent();
     }
 
     @Override

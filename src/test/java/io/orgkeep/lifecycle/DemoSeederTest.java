@@ -29,6 +29,7 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -55,7 +56,9 @@ class DemoSeederTest {
                     Map.entry("orgkeep.owner.temporary-password", "false"),
                     Map.entry("orgkeep.owner.first-name", "Alice"),
                     Map.entry("orgkeep.owner.last-name", "Martin"),
-                    Map.entry("orgkeep.demo.enabled", "true"));
+                    Map.entry("orgkeep.demo.enabled", "true"),
+                    // the theme is not deployed in the Keycloak of the tests: only the attribute of the client is checked
+                    Map.entry("orgkeep.dashboard.login-theme", "orgkeep"));
         }
     }
 
@@ -154,6 +157,11 @@ class DemoSeederTest {
         assertEquals(List.of("http://localhost:8284/*"), client.getRedirectUris());
         assertEquals(DemoSeeder.DASHBOARD_SECRET,
                 keycloak.realm(REALM).clients().get(client.getId()).getSecret().getValue());
+        // set by the seeder: OnPremiseBootstrap ran before the client existed
+        assertEquals("orgkeep", client.getAttributes().get("login_theme"));
+        // white label: the login client of the users of the orgs keeps the pages of Keycloak
+        ClientRepresentation loginClient = keycloak.realm(REALM).clients().findByClientId(REALM).get(0);
+        assertNull(loginClient.getAttributes().get("login_theme"));
     }
 
     /**

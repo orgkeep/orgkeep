@@ -5,6 +5,7 @@ import io.orgkeep.api.CatalogService;
 import io.orgkeep.api.OrgMemberService;
 import io.orgkeep.api.OrgService;
 import io.orgkeep.api.ProductService;
+import io.orgkeep.api.RealmProvisioner;
 import io.orgkeep.api.TeamService;
 import io.orgkeep.api.UserGroupService;
 import io.orgkeep.api.model.AddMemberRequest;
@@ -67,7 +68,8 @@ public class DemoSeeder {
     static final String PAUL_EMAIL = "paul@acme.test";
     static final String EMMA = "emma";
     static final String EMMA_EMAIL = "emma@acme.test";
-    // must match quarkus.oidc.client-id and the dev secret in the application.properties of orgkeep-dashboard
+    // must match quarkus.oidc.client-id and the dev secret in the application.properties of orgkeep-dashboard,
+    // and orgkeep.dashboard.client-id (its default)
     static final String DASHBOARD_CLIENT_ID = "orgkeep-dashboard";
     static final String DASHBOARD_SECRET = "dashboard-dev-secret";
     static final String DASHBOARD_URL = "http://localhost:8284";
@@ -80,6 +82,7 @@ public class DemoSeeder {
     private final CatalogRoleService catalogRoleService;
     private final UserGroupService userGroupService;
     private final TeamService teamService;
+    private final RealmProvisioner realmProvisioner;
     private final KeycloakOrgs orgs;
     private final KeycloakUsers users;
     private final KeycloakClients clients;
@@ -244,6 +247,13 @@ public class DemoSeeder {
         if (clients.findUuid(realm, DASHBOARD_CLIENT_ID).isPresent()) {
             return;
         }
+        createDashboardClient(realm);
+        // OnPremiseBootstrap, which sets it at each startup, ran before the client existed
+        config.dashboard().loginTheme()
+                .ifPresent(theme -> realmProvisioner.setLoginTheme(realm, DASHBOARD_CLIENT_ID, theme));
+    }
+
+    private void createDashboardClient(String realm) {
         ClientRepresentation client = new ClientRepresentation();
         client.setClientId(DASHBOARD_CLIENT_ID);
         client.setName("Dashboard (demo)");

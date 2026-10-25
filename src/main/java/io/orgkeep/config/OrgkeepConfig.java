@@ -28,11 +28,7 @@ public interface OrgkeepConfig {
     /** SMTP server of the realm, set at each startup in ON_PREM mode. Absent: the realm keeps its own settings. */
     Optional<Smtp> smtp();
 
-    /**
-     * Login theme of the realm (e.g. orgkeep, see the orgkeep-theme module), set at each startup in ON_PREM mode.
-     * Absent: the realm keeps its own, Keycloak's by default (white label: nothing on the login page reveals Orgkeep).
-     */
-    Optional<String> loginTheme();
+    Dashboard dashboard();
 
     Invitation invitation();
 
@@ -80,6 +76,20 @@ public interface OrgkeepConfig {
 
         @WithDefault("false")
         boolean ssl();
+    }
+
+    /** The Keycloak client of orgkeep-dashboard, created by the operator (by DemoSeeder in the demo). */
+    interface Dashboard {
+        /** Must match quarkus.oidc.dashboard.client-id of orgkeep-dashboard. */
+        @WithDefault("orgkeep-dashboard")
+        String clientId();
+
+        /**
+         * Login theme of the dashboard client only (e.g. orgkeep, see the orgkeep-theme module), set at each startup
+         * in ON_PREM mode. The other clients keep the theme of the realm, Keycloak's by default (white label: the
+         * login page of the users of the orgs does not reveal Orgkeep). Absent: the client keeps its own.
+         */
+        Optional<String> loginTheme();
     }
 
     interface Invitation {

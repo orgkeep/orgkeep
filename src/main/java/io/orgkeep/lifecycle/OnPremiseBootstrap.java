@@ -48,7 +48,15 @@ public class OnPremiseBootstrap {
 
         // the configuration wins at each startup, a change made in the Keycloak console is overwritten
         config.smtp().ifPresent(smtp -> realmService.configureSmtp(realmName, toSmtpSettings(smtp)));
-        config.loginTheme().ifPresent(theme -> realmService.setLoginTheme(realmName, theme));
+        config.dashboard().loginTheme().ifPresent(theme -> setDashboardLoginTheme(realmName, theme));
+    }
+
+    private void setDashboardLoginTheme(String realmName, String theme) {
+        String clientId = config.dashboard().clientId();
+        if (!realmService.setLoginTheme(realmName, clientId, theme)) {
+            // created by the operator after the first startup (by DemoSeeder in the demo, which sets the theme itself)
+            log.info("No client '{}' in realm '{}' yet: login theme '{}' set at the next startup", clientId, realmName, theme);
+        }
     }
 
     private static SmtpSettings toSmtpSettings(OrgkeepConfig.Smtp smtp) {

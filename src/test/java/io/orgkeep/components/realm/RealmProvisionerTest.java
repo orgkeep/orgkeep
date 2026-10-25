@@ -23,7 +23,6 @@ import org.keycloak.admin.client.Keycloak;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.ClientScopeRepresentation;
 import org.keycloak.representations.idm.CredentialRepresentation;
-import org.keycloak.representations.idm.RealmRepresentation;
 import org.keycloak.representations.idm.RoleRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 
@@ -136,18 +135,31 @@ class RealmProvisionerTest {
         assertEquals(Set.of("realm-admin"), composites);
     }
 
-    // white label: a new realm keeps the login pages of Keycloak, the theme of Orgkeep is only set by configuration
+    // white label: the theme of Orgkeep goes on one client (the dashboard), the realm keeps the login pages of Keycloak
     @Test
-    void setsTheLoginThemeOnly() {
+    void setsTheLoginThemeOfOneClientOnly() {
         service.create(new CreateRealmRequest(realmName, "owner@acme.test", "s3cret"));
+        String clientUuid = keycloak.realm(realmName).clients().findByClientId(OrgkeepApiClient.CLIENT_ID).get(0).getId();
+
+        assertTrue(service.setLoginTheme(realmName, OrgkeepApiClient.CLIENT_ID, "orgkeep"));
+        // idempotent: run at each startup
+        assertTrue(service.setLoginTheme(realmName, OrgkeepApiClient.CLIENT_ID, "orgkeep"));
+
+        ClientRepresentation client = keycloak.realm(realmName).clients().get(clientUuid).toRepresentation();
+        assertEquals("orgkeep", client.getAttributes().get("login_theme"));
+        // the other attributes are kept
+        assertEquals("S256", client.getAttributes().get("pkce.code.challenge.method"));
         assertNull(keycloak.realm(realmName).toRepresentation().getLoginTheme());
+        ClientRepresentation loginClient = keycloak.realm(realmName).clients().findByClientId(realmName).get(0);
+        assertNull(loginClient.getAttributes().get("login_theme"));
+    }
 
-        service.setLoginTheme(realmName, "orgkeep");
+    // the dashboard client is created by the operator, maybe after the first startup
+    @Test
+    void setLoginThemeOfAMissingClientDoesNothing() {
+        service.create(new CreateRealmRequest(realmName, "owner@acme.test", "s3cret"));
 
-        RealmRepresentation realm = keycloak.realm(realmName).toRepresentation();
-        assertEquals("orgkeep", realm.getLoginTheme());
-        // partial update: the rest of the realm is left as it was
-        assertTrue(realm.isOrganizationsEnabled());
+        assertFalse(service.setLoginTheme(realmName, "orgkeep-dashboard", "orgkeep"));
     }
 
     // white label: the users of the orgs log in through a client named after the realm, which carries the quota claims

@@ -19,6 +19,7 @@ import org.keycloak.representations.idm.UserRepresentation;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +35,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class KeycloakClients {
     private static final int PAGE_SIZE = 100;
+    /** Attribute of a client read by the theme selector of Keycloak, before the login theme of the realm. */
+    private static final String LOGIN_THEME = "login_theme";
 
     private final Keycloak keycloak;
 
@@ -79,6 +82,15 @@ public class KeycloakClients {
     /** Replaces the client with this representation, read with {@link #get} and modified. */
     public void update(String realm, String clientUuid, ClientRepresentation client) {
         keycloak.realm(realm).clients().get(clientUuid).update(client);
+    }
+
+    /** "Login theme" of the settings of the client in the console: replaces the theme of the realm for its logins. */
+    public void setLoginTheme(String realm, String clientUuid, String theme) {
+        ClientRepresentation client = get(realm, clientUuid);
+        Map<String, String> attributes = client.getAttributes() == null ? new HashMap<>() : new HashMap<>(client.getAttributes());
+        attributes.put(LOGIN_THEME, theme);
+        client.setAttributes(attributes);
+        update(realm, clientUuid, client);
     }
 
     public void delete(String realm, String clientUuid) {

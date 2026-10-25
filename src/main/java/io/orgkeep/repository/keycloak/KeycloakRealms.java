@@ -73,13 +73,6 @@ public class KeycloakRealms {
         keycloak.realm(realm).update(update);
     }
 
-    public void setLoginTheme(String realm, String theme) {
-        // partial update, like setSmtpServer
-        RealmRepresentation update = new RealmRepresentation();
-        update.setLoginTheme(theme);
-        keycloak.realm(realm).update(update);
-    }
-
     /** Without an SMTP host, Keycloak cannot send any email of the realm. */
     public boolean hasSmtpServer(String realm) {
         Map<String, String> smtpServer = keycloak.realm(realm).toRepresentation().getSmtpServer();

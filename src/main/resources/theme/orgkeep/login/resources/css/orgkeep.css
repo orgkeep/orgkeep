@@ -77,12 +77,23 @@
     margin-bottom: 16px;
 }
 
-/* "Sign in to your account", "Update password"...: under the logo, it says what the page is for */
+/* "Update password", "Mobile Authenticator Setup"...: under the logo, it says what the page is for */
 #kc-page-title {
     font-size: 16px;
     font-weight: 600;
     line-height: 1.55;
     color: var(--orgkeep-text);
+}
+
+/* "Sign in to your account" on the sign-in pages (login.ftl, or identity-first: login-username.ftl then
+   login-password.ftl): the dimmed subtitle of the former home page of the dashboard. Keycloak puts the page on the
+   body: data-page-id="login-<template name>" */
+[data-page-id="login-login"] #kc-page-title,
+[data-page-id="login-login-username"] #kc-page-title,
+[data-page-id="login-login-password"] #kc-page-title {
+    font-size: 14px;
+    font-weight: 400;
+    color: var(--orgkeep-dimmed);
 }
 
 .pf-v5-c-login__main-body,

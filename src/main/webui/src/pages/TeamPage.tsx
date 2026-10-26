@@ -39,20 +39,20 @@ import GrantProductModal from './GrantProductModal';
 import { personName } from './personName';
 
 interface TeamPageProps {
-  // true for the realm owner (/organisations/:org/teams/:team): the org admins manage their teams, the realm owner
-  // only looks (e.g. to answer "why does Paul not have scan?"). The actions are hidden
-  readOnly?: boolean;
+  // true for the realm owner (/organisations/:org/teams/:team): the realm owner manages the team like an org admin
+  // (the core allows it), so that a demo needs no switch of account, and also gets the token preview of the members
+  realmOwner?: boolean;
 }
 
 // The detail of a team: its members, the products it gives and its catalog roles.
 // Three sections on one page: a team has few of each, and the org admin configures them together.
-export default function TeamPage({ readOnly = false }: TeamPageProps) {
+export default function TeamPage({ realmOwner = false }: TeamPageProps) {
   const { t } = useTranslation();
   // the :org and :team parts of the route /orgs/:org/teams/:team (or /organisations/:org/teams/:team)
   const org = useParams().org!;
   const teamName = useParams().team!;
   // where the list of the teams is: the page of the org admins, or the Teams tab of the org for the realm owner
-  const teamsPath = readOnly ? `/organisations/${org}?tab=teams` : `/orgs/${org}/teams`;
+  const teamsPath = realmOwner ? `/organisations/${org}?tab=teams` : `/orgs/${org}/teams`;
   // the core lists the groups of the org, not one group: the team is picked from the list
   const { data: teams, isPending, error } = useUserGroups(org);
 
@@ -102,12 +102,12 @@ export default function TeamPage({ readOnly = false }: TeamPageProps) {
           )}
         </Group>
         <Text c="dimmed">{t(team.name === 'users' ? 'team.usersHint' : 'team.hint')}</Text>
-        {readOnly && <Alert color="gray">{t('team.readOnly')}</Alert>}
+        {realmOwner && <Alert color="gray">{t('team.realmOwnerHint', { org })}</Alert>}
       </Stack>
 
-      <MembersSection org={org} team={team} readOnly={readOnly} />
-      <ProductsSection org={org} team={team} readOnly={readOnly} />
-      <CatalogRolesSection org={org} team={team} readOnly={readOnly} />
+      <MembersSection org={org} team={team} realmOwner={realmOwner} />
+      <ProductsSection org={org} team={team} />
+      <CatalogRolesSection org={org} team={team} />
     </Stack>
   );
 }
@@ -115,18 +115,16 @@ export default function TeamPage({ readOnly = false }: TeamPageProps) {
 interface SectionProps {
   org: string;
   team: UserGroup;
-  // hides the buttons and pickers: what the team gives is shown, nothing can be changed
-  readOnly: boolean;
 }
 
 // The members of the team, among those of the org
-function MembersSection({ org, team, readOnly }: SectionProps) {
+function MembersSection({ org, team, realmOwner }: SectionProps & { realmOwner: boolean }) {
   const { t } = useTranslation();
   const { data: orgMembers } = useOrgMembers(org);
   const addMember = useAddTeamMember(org, team.name);
   const removeMember = useRemoveTeamMember(org, team.name);
   const [removeTarget, setRemoveTarget] = useState<OrgMember | null>(null);
-  // the token preview is for the realm owner only, who sees this page read only (/organisations/:org/teams/:team)
+  // the token preview is for the realm owner only (/organisations/:org/teams/:team)
   const [previewTarget, setPreviewTarget] = useState<OrgMember | null>(null);
 
   const members = (orgMembers ?? []).filter((member) => team.memberIds.includes(member.id));
@@ -148,7 +146,7 @@ function MembersSection({ org, team, readOnly }: SectionProps) {
       <Group justify="space-between">
         <Title order={3}>{t('team.members.title', { count: members.length })}</Title>
         {/* every member stays in users: nobody to add there */}
-        {!readOnly && others.length > 0 && (
+        {others.length > 0 && (
           <Select
             placeholder={t('team.members.add')}
             data={others.map((member) => ({ value: member.id, label: personName(member) }))}
@@ -177,13 +175,13 @@ function MembersSection({ org, team, readOnly }: SectionProps) {
                 <Table.Td c="dimmed">{member.email}</Table.Td>
                 <Table.Td>
                   <Group justify="flex-end">
-                    {readOnly && (
+                    {realmOwner && (
                       <Button variant="subtle" size="xs" onClick={() => setPreviewTarget(member)}>
                         {t('tokenPreview.button')}
                       </Button>
                     )}
                     {/* the core refuses it for users (409): every member of the org stays in it */}
-                    {!readOnly && team.name !== 'users' && (
+                    {team.name !== 'users' && (
                       <Button variant="subtle" size="xs" color="red" onClick={() => setRemoveTarget(member)}>
                         {t('common.remove')}
                       </Button>
@@ -207,7 +205,7 @@ function MembersSection({ org, team, readOnly }: SectionProps) {
         onClose={closeRemoveConfirm}
       />
 
-      {readOnly && (
+      {realmOwner && (
         <TokenPreviewModal
           key={previewTarget?.id ?? 'closed'}
           org={org}
@@ -220,7 +218,7 @@ function MembersSection({ org, team, readOnly }: SectionProps) {
 }
 
 // The products the team gives, with their features and quota of team
-function ProductsSection({ org, team, readOnly }: SectionProps) {
+function ProductsSection({ org, team }: SectionProps) {
   const { t, i18n } = useTranslation();
   const { data: available } = useAvailableProducts(org);
   const revokeProduct = useRevokeProduct(org, team.name);
@@ -249,11 +247,9 @@ function ProductsSection({ org, team, readOnly }: SectionProps) {
     <Stack>
       <Group justify="space-between">
         <Title order={3}>{t('team.products.title', { count: team.products.length })}</Title>
-        {!readOnly && (
-          <Button onClick={() => setGrantTarget('new')} disabled={left.length === 0}>
-            {t('team.products.give')}
-          </Button>
-        )}
+        <Button onClick={() => setGrantTarget('new')} disabled={left.length === 0}>
+          {t('team.products.give')}
+        </Button>
       </Group>
       {available && available.length === 0 && <Text c="dimmed">{t('team.products.noneAssigned')}</Text>}
 
@@ -294,27 +290,40 @@ function ProductsSection({ org, team, readOnly }: SectionProps) {
                         ))}
                   </Table.Td>
                   <Table.Td ta="right">
-                    {/* a metered product has no quota of team: the members share the pool of the org of each feature */}
-                    {offer(given)?.metered
-                      ? t('team.products.orgPoolPerFeature')
-                      : given.quota === null || given.cycle === null
-                      ? t('team.products.orgPoolOnly')
-                      : t('team.products.quota', {
-                          quota: numberFormat.format(given.quota),
-                          cycle: t(`orgDetail.cycles.${given.cycle}`),
-                        })}
+                    {offer(given)?.metered ? (
+                      // a metered product: one short line per metered feature with a quota of team, the other
+                      // features only use the pool of the org
+                      Object.keys(given.featureQuotas).length === 0 ? (
+                        t('team.products.orgPoolPerFeature')
+                      ) : (
+                        Object.entries(given.featureQuotas).map(([feature, quota]) => (
+                          <Text key={feature} size="sm">
+                            {t('team.products.featureQuota', {
+                              feature,
+                              quota: numberFormat.format(quota.quota),
+                              cycle: t(`orgDetail.cycles.${quota.cycle}`),
+                            })}
+                          </Text>
+                        ))
+                      )
+                    ) : given.quota === null || given.cycle === null ? (
+                      t('team.products.orgPoolOnly')
+                    ) : (
+                      t('team.products.quota', {
+                        quota: numberFormat.format(given.quota),
+                        cycle: t(`orgDetail.cycles.${given.cycle}`),
+                      })
+                    )}
                   </Table.Td>
                   <Table.Td>
-                    {!readOnly && (
-                      <Group gap="xs" justify="flex-end" wrap="nowrap">
-                        <Button variant="subtle" size="xs" onClick={() => setGrantTarget(given)}>
-                          {t('common.edit')}
-                        </Button>
-                        <Button variant="subtle" size="xs" color="red" onClick={() => setRemoveTarget(given)}>
-                          {t('common.remove')}
-                        </Button>
-                      </Group>
-                    )}
+                    <Group gap="xs" justify="flex-end" wrap="nowrap">
+                      <Button variant="subtle" size="xs" onClick={() => setGrantTarget(given)}>
+                        {t('common.edit')}
+                      </Button>
+                      <Button variant="subtle" size="xs" color="red" onClick={() => setRemoveTarget(given)}>
+                        {t('common.remove')}
+                      </Button>
+                    </Group>
                   </Table.Td>
                 </Table.Tr>
               ))}
@@ -355,7 +364,7 @@ function ProductsSection({ org, team, readOnly }: SectionProps) {
 }
 
 // The catalog roles the team gives: those the realm owner made grantable, in the catalogs of the org
-function CatalogRolesSection({ org, team, readOnly }: SectionProps) {
+function CatalogRolesSection({ org, team }: SectionProps) {
   const { t } = useTranslation();
   const { data: grantable } = useGrantableRoles(org);
   const grantRole = useGrantCatalogRole(org, team.name);
@@ -387,7 +396,7 @@ function CatalogRolesSection({ org, team, readOnly }: SectionProps) {
     <Stack>
       <Group justify="space-between">
         <Title order={3}>{t('team.catalogRoles.title', { count: team.catalogRoles.length })}</Title>
-        {!readOnly && left.length > 0 && (
+        {left.length > 0 && (
           <Select
             placeholder={t('team.catalogRoles.add')}
             // grouped by catalog, like the products: [{ group: 'prod', items: [...] }]
@@ -432,19 +441,17 @@ function CatalogRolesSection({ org, team, readOnly }: SectionProps) {
                   resource_access.{given.catalog}: {given.role}
                 </Table.Td>
                 <Table.Td>
-                  {!readOnly && (
-                    <Group justify="flex-end">
-                      <Button
-                        variant="subtle"
-                        size="xs"
-                        color="red"
-                        loading={revokeRole.isPending && revokeRole.variables?.role === given.role}
-                        onClick={() => revokeRole.mutate({ catalog: given.catalog, role: given.role })}
-                      >
-                        {t('common.remove')}
-                      </Button>
-                    </Group>
-                  )}
+                  <Group justify="flex-end">
+                    <Button
+                      variant="subtle"
+                      size="xs"
+                      color="red"
+                      loading={revokeRole.isPending && revokeRole.variables?.role === given.role}
+                      onClick={() => revokeRole.mutate({ catalog: given.catalog, role: given.role })}
+                    >
+                      {t('common.remove')}
+                    </Button>
+                  </Group>
                 </Table.Td>
               </Table.Tr>
             ))}

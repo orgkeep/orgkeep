@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deleteRequest, getJson, postJson, putJson, putRequest } from './http';
-import type { QuotaCycle } from './organisations';
+import type { FeatureQuota, QuotaCycle } from './organisations';
 
 // The teams of an organisation, managed by its org admins (UserGroupsResource, TeamProductsResource,
 // TeamCatalogRolesResource, AvailableProductsResource and AvailableCatalogsResource in orgkeep-core).
@@ -18,6 +18,8 @@ export interface TeamProduct {
   // null: no quota of team, the members only use the pool of the org (always null for a metered product)
   quota: number | null;
   cycle: QuotaCycle | null;
+  // metered product: the quotas of team by metered feature. A feature missing here only uses the pool of the org
+  featureQuotas: Record<string, FeatureQuota>;
 }
 
 export interface TeamCatalogRole {
@@ -75,6 +77,9 @@ export interface GrantProductRequest {
   quota: number | null;
   // null: the cycle of the org
   cycle: QuotaCycle | null;
+  // metered product only: quotas of team by metered feature given (TeamFeatureQuota in the core). Cycle null: the
+  // cycle of the org for the feature
+  featureQuotas: Record<string, { quota: number; cycle: QuotaCycle | null }>;
 }
 
 // Every query of this file starts with this key and the org: invalidating them refreshes the whole team screens

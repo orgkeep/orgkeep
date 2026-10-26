@@ -69,8 +69,8 @@ export default function App() {
         {isRealmOwner(user) && <Route path="/organisations" element={<OrganisationsPage />} />}
         {/* :org is a path parameter, read by the page with useParams() */}
         {isRealmOwner(user) && <Route path="/organisations/:org" element={<OrganisationPage />} />}
-        {/* the same page as the org admins, without the actions: the realm owner looks, the org admins manage */}
-        {isRealmOwner(user) && <Route path="/organisations/:org/teams/:team" element={<TeamPage readOnly />} />}
+        {/* the same page as the org admins: the realm owner manages the teams too (no switch of account in a demo) */}
+        {isRealmOwner(user) && <Route path="/organisations/:org/teams/:team" element={<TeamPage realmOwner />} />}
         {isRealmOwner(user) && <Route path="/catalogs" element={<CatalogsPage />} />}
         {isRealmOwner(user) && <Route path="/catalogs/:catalog" element={<CatalogPage />} />}
         {isRealmOwner(user) && <Route path="/catalogs/:catalog/products/:product" element={<ProductPage />} />}

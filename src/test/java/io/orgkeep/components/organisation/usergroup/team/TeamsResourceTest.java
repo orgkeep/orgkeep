@@ -12,6 +12,7 @@ import io.orgkeep.api.model.CreateOrgRequest;
 import io.orgkeep.api.model.CreateProductRequest;
 import io.orgkeep.api.model.CreateUserGroupRequest;
 import io.orgkeep.api.model.Feature;
+import io.orgkeep.api.model.FeatureQuota;
 import io.orgkeep.api.model.QuotaCycle;
 import io.orgkeep.fixtures.TestRealm;
 import io.orgkeep.web.CurrentRealm;
@@ -107,6 +108,32 @@ class TeamsResourceTest {
 
         given().when().delete(TEAM_PRODUCT, ORG, "ops", "prod", "billing")
                 .then().statusCode(204);
+    }
+
+    // the realm owner manages the teams like an org admin (no switch of account during a demo); a quota of team by
+    // metered feature, its cycle defaulting to the one of the org for the feature
+    @Test
+    @TestSecurity(user = "realm-owner", roles = "realm-owner")
+    void realmOwnerGivesAMeteredProductWithAQuotaOfFeature() {
+        productService.create(testRealm.name(), "prod", new CreateProductRequest("shop", "Shop", null,
+                List.of(new Feature("scan", null, true)), List.of()));
+        productService.assign(testRealm.name(), ORG, "prod", "shop",
+                AssignProductRequest.metered(List.of("scan"), Map.of("scan", new FeatureQuota(200L, QuotaCycle.DAILY))));
+
+        given().contentType(ContentType.JSON).body("{\"featureQuotas\": {\"scan\": {\"quota\": 50}}}")
+                .when().put(TEAM_PRODUCT, ORG, "ops", "prod", "shop")
+                .then().statusCode(200)
+                .body("featureQuotas.scan.quota", equalTo(50))
+                .body("featureQuotas.scan.cycle", equalTo("DAILY"));
+
+        given().when().get("/api/organisations/{org}/user-groups", ORG)
+                .then().statusCode(200)
+                .body("find { it.name == 'ops' }.products[0].featureQuotas.scan.quota", equalTo(50));
+
+        // the quota is required with a quota of feature
+        given().contentType(ContentType.JSON).body("{\"featureQuotas\": {\"scan\": {\"cycle\": \"DAILY\"}}}")
+                .when().put(TEAM_PRODUCT, ORG, "ops", "prod", "shop")
+                .then().statusCode(400);
     }
 
     @Test

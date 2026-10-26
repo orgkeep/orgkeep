@@ -38,14 +38,17 @@ public class TeamProductsResource {
     @Operation(summary = "Give a product of the organisation to a team",
             description = "With the features of the product given (absent: every feature the organisation bought, also those "
                     + "it buys later; empty: no feature) and an optional quota of team, whose cycle defaults to the one "
-                    + "of the organisation. A member is in at most one team with a quota for a given product. "
-                    + "A product with metered features takes no quota of team (its members use the quotas of the "
-                    + "organisation), and at least one feature.")
+                    + "of the organisation. A product with metered features takes at least one feature, and optional "
+                    + "quotas of team by metered feature given (featureQuotas, cycle defaulting to the one of the "
+                    + "organisation for the feature) instead of a quota of product. A member is in at most one team "
+                    + "with a quota for a given product, or a given metered feature.")
     @APIResponseSchema(value = TeamProduct.class, responseCode = "200", responseDescription = "Product given")
     @APIResponse(responseCode = "400", description = "Invalid request, feature the organisation did not buy, cycle without quota, "
-            + "or a quota of team or no feature for a metered product")
+            + "quota of product or no feature for a metered product, quota of feature for a simple product or for a "
+            + "feature that is not a metered feature given by the team")
     @APIResponse(responseCode = "404", description = "Unknown organisation, user group or catalog, or product not assigned to the organisation")
-    @APIResponse(responseCode = "409", description = "With a quota: a member of the team is in another team with a quota for this product")
+    @APIResponse(responseCode = "409", description = "With a quota: a member of the team is in another team with a quota "
+            + "for this product, or for one of these features")
     public TeamProduct grant(@PathParam("org") String org, @PathParam("group") String group,
                              @PathParam("catalog") String catalog, @PathParam("product") String product,
                              @Valid @NotNull GrantProductRequest request){

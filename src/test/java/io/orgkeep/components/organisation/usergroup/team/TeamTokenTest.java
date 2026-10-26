@@ -23,6 +23,7 @@ import io.orgkeep.api.model.GrantProductRequest;
 import io.orgkeep.api.model.ParamDefinition;
 import io.orgkeep.api.model.ParamType;
 import io.orgkeep.api.model.QuotaCycle;
+import io.orgkeep.api.model.TeamFeatureQuota;
 import io.orgkeep.fixtures.TestRealm;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -43,6 +44,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -210,6 +212,25 @@ class TeamTokenTest {
         assertEquals("acme", quotas.get(0).path("pool").asText());
         assertEquals(200, quotas.get(0).path("limit").asInt());
         assertEquals("daily", quotas.get(0).path("cycle").asText());
+    }
+
+    // a quota of team for scan: the pool of the team next to the pool of the org, both with the feature
+    @Test
+    void aQuotaOfTeamForAMeteredFeature() throws Exception {
+        setUpBilling();
+        teamService.grantProduct(testRealm.name(), ORG, "sales", "prod", BILLING, new GrantProductRequest(
+                List.of("stats", "scan"), null, null, Map.of("scan", new TeamFeatureQuota(50L, null))));
+
+        JsonNode quotas = logIn("emma", "openid prod").at("/prod/billing/quotas");
+
+        assertEquals(2, quotas.size(), quotas.toString());
+        Map<String, Integer> limits = new HashMap<>();
+        quotas.forEach(quota -> {
+            assertEquals("scan", quota.path("feature").asText());
+            assertEquals("daily", quota.path("cycle").asText());
+            limits.put(quota.path("pool").asText(), quota.path("limit").asInt());
+        });
+        assertEquals(Map.of("acme", 200, "acme/sales", 50), limits);
     }
 
     // only a feature without quota: the role, and no entry for the product in the claim of the catalog

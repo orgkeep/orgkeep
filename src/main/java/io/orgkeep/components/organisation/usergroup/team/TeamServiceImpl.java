@@ -23,6 +23,7 @@ import io.orgkeep.api.model.TeamProduct;
 import io.orgkeep.components.catalog.CatalogSetup;
 import io.orgkeep.components.catalog.product.ProductMapper;
 import io.orgkeep.components.catalog.role.CatalogRoleMapper;
+import io.orgkeep.components.organisation.usergroup.team.TeamMapper.QuotaScope;
 import io.orgkeep.repository.keycloak.KeycloakClients;
 import io.orgkeep.repository.keycloak.KeycloakGroups;
 import io.orgkeep.repository.keycloak.KeycloakOrgs;
@@ -34,8 +35,11 @@ import org.keycloak.representations.idm.RoleRepresentation;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -115,18 +119,21 @@ public class TeamServiceImpl implements TeamService {
                 .orElseThrow(() -> new ProductNotAssignedException(orgName, catalog, product));
         OrgProduct orgProduct = productMapper.toOrgProduct(catalog, assignment);
 
-        if (productMapper.isMetered(clients.listRoles(realm, clientUuid), product)) {
-            // no quota of team per metered feature yet: only the pools of the org reach the tokens
+        boolean metered = productMapper.isMetered(clients.listRoles(realm, clientUuid), product);
+        if (metered) {
+            // a metered product has no quota of product: the quotas of team are by metered feature
             if (request.quota() != null || request.cycle() != null) {
-                throw new InvalidRequestException(
-                        "Product '%s' has metered features: no quota of team, the members use the quotas of the organisation"
-                                .formatted(product));
+                throw new InvalidRequestException(("Product '%s' has metered features: no quota of team for the product, "
+                        + "only by metered feature (featureQuotas)").formatted(product));
             }
             // without an access role, a metered product without any feature would give nothing
             if (request.features() != null && request.features().isEmpty()) {
                 throw new InvalidRequestException(
                         "Product '%s' has metered features: a team gives at least one of them".formatted(product));
             }
+        } else if (!request.featureQuotas().isEmpty()) {
+            throw new InvalidRequestException(
+                    "Product '%s' has no metered feature: its quota of team is the quota of the product".formatted(product));
         }
         if (request.cycle() != null && request.quota() == null) {
             throw new InvalidRequestException("A cycle is only given with a quota of team");
@@ -144,25 +151,42 @@ public class TeamServiceImpl implements TeamService {
                         .formatted(product, orgName, notBought));
             }
         }
-        if (request.quota() != null) {
-            teamQuotas.checkQuota(realm, orgName, teamId, catalog, product);
-        }
-        // the form proposes the cycle of the org: also the default of the API. Copied, it does not follow it afterwards
-        QuotaCycle cycle = request.quota() == null ? null
-                : request.cycle() != null ? request.cycle() : orgProduct.cycle();
-
-        groups.replaceAttributes(realm, teamId, teamMapper.withChoices(groups.attributes(realm, teamId),
-                catalog, product, request.features(), request.quota(), cycle));
-        alignment.align(realm, orgName, catalog, product);
-        log.info("Product '{}' of catalog '{}' given by team '{}' of organisation '{}' in realm '{}'",
-                product, catalog, team, orgName, realm);
-
         List<String> asked = request.features() == null ? null : request.features().stream().distinct().sorted().toList();
         List<String> effective = orgProduct.boughtFeatures().stream()
                 .filter(feature -> asked == null || asked.contains(feature))
                 .sorted()
                 .toList();
-        return new TeamProduct(catalog, product, asked, effective, request.quota(), cycle);
+        // a quota of team only for a metered feature the team gives: the org has a quota for each one it bought
+        List<String> withoutPool = request.featureQuotas().keySet().stream()
+                .filter(feature -> !effective.contains(feature) || !orgProduct.featureQuotas().containsKey(feature))
+                .sorted()
+                .toList();
+        if (!withoutPool.isEmpty()) {
+            throw new InvalidRequestException("Quotas of team for features of the product '%s' that are not metered "
+                    + "features given by the team: %s".formatted(product, withoutPool));
+        }
+
+        Set<QuotaScope> newQuotas = new HashSet<>();
+        if (request.quota() != null) {
+            newQuotas.add(new QuotaScope(catalog, product, null));
+        }
+        request.featureQuotas().keySet().forEach(feature -> newQuotas.add(new QuotaScope(catalog, product, feature)));
+        teamQuotas.checkQuotas(realm, orgName, teamId, newQuotas);
+
+        // the form proposes the cycle of the org: also the default of the API. Copied, it does not follow it afterwards
+        QuotaCycle cycle = request.quota() == null ? null
+                : request.cycle() != null ? request.cycle() : orgProduct.cycle();
+        Map<String, FeatureQuota> featureQuotas = new TreeMap<>();
+        request.featureQuotas().forEach((feature, quota) -> featureQuotas.put(feature, new FeatureQuota(quota.quota(),
+                quota.cycle() != null ? quota.cycle() : orgProduct.featureQuotas().get(feature).cycle())));
+
+        groups.replaceAttributes(realm, teamId, teamMapper.withChoices(groups.attributes(realm, teamId),
+                catalog, product, request.features(), request.quota(), cycle, featureQuotas));
+        alignment.align(realm, orgName, catalog, product);
+        log.info("Product '{}' of catalog '{}' given by team '{}' of organisation '{}' in realm '{}'",
+                product, catalog, team, orgName, realm);
+
+        return new TeamProduct(catalog, product, asked, effective, request.quota(), cycle, featureQuotas);
     }
 
     @Override

@@ -15,6 +15,8 @@ package io.orgkeep.api.model;
  * grant:prod:shop-repository:features     = scan, ...      if listed: the features asked for (absent: none)
  * grant:prod:shop-repository:quota        = 300            optional quota of the team
  * grant:prod:shop-repository:quota-cycle  = monthly        its cycle
+ * grant:prod:billing:quota:scan           = 50             metered product: optional quota of the team for a feature
+ * grant:prod:billing:quota-cycle:scan     = daily          its cycle
  * </pre>
  * The separator ":" is never in a slug: a choice never clashes with a derived attribute ("prod.shop-repository.quotas"),
  * whatever the names of the catalogs and products.
@@ -47,6 +49,24 @@ public final class TeamGrants {
 
     public static String quotaCycle(String catalog, String product) {
         return product(catalog, product) + SEPARATOR + "quota-cycle";
+    }
+
+    /** Quota of the team for a metered feature of the product, e.g. "grant:prod:billing:quota:scan". */
+    public static String featureQuota(String catalog, String product, String feature) {
+        return quota(catalog, product) + SEPARATOR + feature;
+    }
+
+    public static String featureQuotaCycle(String catalog, String product, String feature) {
+        return quotaCycle(catalog, product) + SEPARATOR + feature;
+    }
+
+    /**
+     * The feature of a {@link #featureQuota} attribute of the product ("grant:prod:billing:quota:scan" gives "scan"),
+     * null for another attribute.
+     */
+    public static String featureOfQuota(String attribute, String catalog, String product) {
+        String prefix = quota(catalog, product) + SEPARATOR;
+        return attribute.startsWith(prefix) ? attribute.substring(prefix.length()) : null;
     }
 
     /**

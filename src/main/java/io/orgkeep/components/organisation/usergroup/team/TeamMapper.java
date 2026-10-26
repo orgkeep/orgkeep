@@ -1,6 +1,7 @@
 package io.orgkeep.components.organisation.usergroup.team;
 
 import io.orgkeep.api.model.CatalogRoles;
+import io.orgkeep.api.model.FeatureQuota;
 import io.orgkeep.api.model.QuotaCycle;
 import io.orgkeep.api.model.TeamCatalogRole;
 import io.orgkeep.api.model.TeamGrants;
@@ -15,6 +16,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 
 import static io.orgkeep.api.model.CatalogRoles.firstValue;
 
@@ -24,6 +26,9 @@ import static io.orgkeep.api.model.CatalogRoles.firstValue;
  */
 @Mapper(componentModel = "cdi", unmappedTargetPolicy = ReportingPolicy.WARN)
 public interface TeamMapper {
+
+    /** What a quota of team is for: a simple product (feature null), or a metered feature of a product. */
+    record QuotaScope(String catalog, String product, String feature) { }
 
     /** True if the team gives the product (choice of an org admin). */
     default boolean gives(Map<String, List<String>> attributes, String catalog, String product) {
@@ -66,26 +71,58 @@ public interface TeamMapper {
         return cycle == null ? null : QuotaCycle.fromValue(cycle).orElse(null);
     }
 
-    /** The products for which the team has a quota, as their {@link TeamGrants#product} attribute. */
-    default Set<String> productsWithQuota(Map<String, List<String>> attributes) {
-        Set<String> products = new HashSet<>();
+    /**
+     * The quotas of the team by metered feature of the product, sorted by feature. The cycle is null if it was removed
+     * outside of Orgkeep (the cycle of the org then applies).
+     */
+    default Map<String, FeatureQuota> featureQuotas(Map<String, List<String>> attributes, String catalog, String product) {
+        Map<String, FeatureQuota> quotas = new TreeMap<>();
         attributes.keySet().forEach(attribute -> {
-            String[] grant = TeamGrants.productOf(attribute);
-            if (grant != null && quota(attributes, grant[0], grant[1]) != null) {
-                products.add(attribute);
+            String feature = TeamGrants.featureOfQuota(attribute, catalog, product);
+            if (feature == null) {
+                return;
+            }
+            try {
+                long quota = Long.parseLong(firstValue(attributes, attribute));
+                String cycle = firstValue(attributes, TeamGrants.featureQuotaCycle(catalog, product, feature));
+                quotas.put(feature, new FeatureQuota(quota, cycle == null ? null : QuotaCycle.fromValue(cycle).orElse(null)));
+            } catch (NumberFormatException e) {
+                // changed outside of Orgkeep: ignored, like a quota of product that is not a number
             }
         });
-        return products;
+        return quotas;
+    }
+
+    /**
+     * What the team has a quota for: a simple product (feature null), or a metered feature of a product. A member uses
+     * at most one quota of team for each of them (see TeamQuotas).
+     */
+    default Set<QuotaScope> quotaScopes(Map<String, List<String>> attributes) {
+        Set<QuotaScope> scopes = new HashSet<>();
+        attributes.keySet().forEach(attribute -> {
+            String[] grant = TeamGrants.productOf(attribute);
+            if (grant == null) {
+                return;
+            }
+            if (quota(attributes, grant[0], grant[1]) != null) {
+                scopes.add(new QuotaScope(grant[0], grant[1], null));
+            }
+            featureQuotas(attributes, grant[0], grant[1]).keySet()
+                    .forEach(feature -> scopes.add(new QuotaScope(grant[0], grant[1], feature)));
+        });
+        return scopes;
     }
 
     /**
      * The attributes of the team with new choices for the product. The derived attributes are left to TeamAlignment.
      *
-     * @param features null: every feature the org bought
-     * @param quota    null: no quota of team (then no cycle either)
+     * @param features      null: every feature the org bought
+     * @param quota         null: no quota of team (then no cycle either)
+     * @param featureQuotas metered product: the quotas of the team by feature, cycles included. Replace the previous ones
      */
     default Map<String, List<String>> withChoices(Map<String, List<String>> attributes, String catalog, String product,
-                                                  List<String> features, Long quota, QuotaCycle cycle) {
+                                                  List<String> features, Long quota, QuotaCycle cycle,
+                                                  Map<String, FeatureQuota> featureQuotas) {
         Map<String, List<String>> updated = new HashMap<>(attributes);
         updated.put(TeamGrants.product(catalog, product),
                 List.of(features == null ? TeamGrants.ALL_FEATURES : TeamGrants.LISTED_FEATURES));
@@ -95,12 +132,20 @@ public interface TeamMapper {
                 quota == null ? List.of() : List.of(quota.toString()));
         putOrRemove(updated, TeamGrants.quotaCycle(catalog, product),
                 quota == null || cycle == null ? List.of() : List.of(cycle.getValue()));
+        featureQuotas(attributes, catalog, product).keySet()
+                .forEach(feature -> removeFeatureQuota(updated, catalog, product, feature));
+        featureQuotas.forEach((feature, featureQuota) -> {
+            updated.put(TeamGrants.featureQuota(catalog, product, feature), List.of(featureQuota.quota().toString()));
+            updated.put(TeamGrants.featureQuotaCycle(catalog, product, feature), List.of(featureQuota.cycle().getValue()));
+        });
         return updated;
     }
 
     /** The attributes of the team without anything about the product: choices and derived values. */
     default Map<String, List<String>> withoutProduct(Map<String, List<String>> attributes, String catalog, String product) {
         Map<String, List<String>> updated = new HashMap<>(attributes);
+        featureQuotas(attributes, catalog, product).keySet()
+                .forEach(feature -> removeFeatureQuota(updated, catalog, product, feature));
         updated.remove(TeamGrants.product(catalog, product));
         updated.remove(TeamGrants.features(catalog, product));
         updated.remove(TeamGrants.quota(catalog, product));
@@ -132,7 +177,8 @@ public interface TeamMapper {
                     .toList();
             Long quota = quota(attributes, catalog, product);
             products.add(new TeamProduct(catalog, product, askedFeatures(attributes, catalog, product), effective,
-                    quota, quota == null ? null : quotaCycle(attributes, catalog, product)));
+                    quota, quota == null ? null : quotaCycle(attributes, catalog, product),
+                    featureQuotas(attributes, catalog, product)));
         });
         products.sort(Comparator.comparing(TeamProduct::catalog).thenComparing(TeamProduct::product));
         return products;
@@ -158,6 +204,12 @@ public interface TeamMapper {
         });
         roles.sort(Comparator.comparing(TeamCatalogRole::catalog).thenComparing(TeamCatalogRole::role));
         return roles;
+    }
+
+    /** The quota of the team for a metered feature, and its cycle. */
+    static void removeFeatureQuota(Map<String, List<String>> attributes, String catalog, String product, String feature) {
+        attributes.remove(TeamGrants.featureQuota(catalog, product, feature));
+        attributes.remove(TeamGrants.featureQuotaCycle(catalog, product, feature));
     }
 
     /** Keycloak keeps an attribute with no value: an empty list removes it. */

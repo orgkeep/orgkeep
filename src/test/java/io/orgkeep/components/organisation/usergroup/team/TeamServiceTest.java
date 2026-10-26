@@ -29,6 +29,7 @@ import io.orgkeep.api.model.ParamDefinition;
 import io.orgkeep.api.model.ParamType;
 import io.orgkeep.api.model.QuotaCycle;
 import io.orgkeep.api.model.TeamCatalogRole;
+import io.orgkeep.api.model.TeamFeatureQuota;
 import io.orgkeep.api.model.TeamProduct;
 import io.orgkeep.api.model.UpdateCatalogRoleRequest;
 import io.orgkeep.api.model.UpdateProductRequest;
@@ -76,6 +77,7 @@ class TeamServiceTest {
     private static final String BILLING_QUOTAS = "prod.billing.quotas";
     private static final String SCAN_POOL = "{\"feature\":\"scan\",\"pool\":\"acme\",\"limit\":200,\"cycle\":\"daily\"}";
     private static final String FLOW_POOL = "{\"feature\":\"flow\",\"pool\":\"acme\",\"limit\":100,\"cycle\":\"daily\"}";
+    private static final String SCAN_TEAM_POOL = "{\"feature\":\"scan\",\"pool\":\"acme/ops\",\"limit\":50,\"cycle\":\"daily\"}";
 
     @Inject Keycloak keycloak;
     @Inject TeamService teamService;
@@ -112,7 +114,7 @@ class TeamServiceTest {
     void grantWithoutFeaturesGivesEveryBoughtFeature() {
         TeamProduct given = teamService.grantProduct(realmName(), ORG, TEAM, CATALOG, PRODUCT, GrantProductRequest.allFeatures());
 
-        assertEquals(new TeamProduct(CATALOG, PRODUCT, null, List.of("scan"), null, null), given);
+        assertEquals(new TeamProduct(CATALOG, PRODUCT, null, List.of("scan"), null, null, Map.of()), given);
         assertEquals(Set.of(PRODUCT, PRODUCT + ":scan"), teamRoles(TEAM));
         Map<String, List<String>> attributes = team(TEAM).getAttributes();
         assertEquals(List.of(ORG_POOL), attributes.get(QUOTAS));
@@ -338,7 +340,7 @@ class TeamServiceTest {
                 .filter(group -> TEAM.equals(group.name()))
                 .findFirst().orElseThrow();
 
-        assertEquals(List.of(new TeamProduct(CATALOG, PRODUCT, List.of("scan"), List.of("scan"), 300L, QuotaCycle.DAILY)),
+        assertEquals(List.of(new TeamProduct(CATALOG, PRODUCT, List.of("scan"), List.of("scan"), 300L, QuotaCycle.DAILY, Map.of())),
                 ops.products());
         assertEquals(List.of(new TeamCatalogRole(CATALOG, "stats")), ops.catalogRoles());
         assertEquals(Set.of(aliceId), ops.memberIds());
@@ -361,7 +363,7 @@ class TeamServiceTest {
 
         TeamProduct given = teamService.grantProduct(realmName(), ORG, TEAM, CATALOG, BILLING, GrantProductRequest.allFeatures());
 
-        assertEquals(new TeamProduct(CATALOG, BILLING, null, List.of("flow", "scan", "stats"), null, null), given);
+        assertEquals(new TeamProduct(CATALOG, BILLING, null, List.of("flow", "scan", "stats"), null, null, Map.of()), given);
         assertEquals(Set.of("billing:stats", "billing:scan", "billing:flow"), teamRoles(TEAM));
         assertEquals(Set.of(SCAN_POOL, FLOW_POOL), Set.copyOf(team(TEAM).getAttributes().get(BILLING_QUOTAS)));
         // read back from the role mappings: the features, and no catalog role taken for one
@@ -383,7 +385,8 @@ class TeamServiceTest {
         assertNull(team(TEAM).getAttributes().get(BILLING_QUOTAS));
     }
 
-    // no quota of team on a metered product yet, and at least one feature: without access role, nothing would be given
+    // no quota of team for the product itself on a metered product (only by feature), and at least one feature:
+    // without access role, nothing would be given
     @Test
     void grantRefusesAQuotaOfTeamOrNoFeatureOnAMeteredProduct() {
         assignBilling();
@@ -459,6 +462,100 @@ class TeamServiceTest {
         productService.unassign(realmName(), ORG, CATALOG, BILLING);
 
         assertEquals(Set.of(), teamRoles(TEAM));
+        assertEquals(Map.of(), teamAttributes(TEAM));
+    }
+
+    // --- quotas of team by metered feature
+
+    // a quota of team for scan: the pool of the team next to the one of the org, for scan only. The cycle defaults to
+    // the one of the org for the feature, copied
+    @Test
+    void aQuotaOfTeamForAMeteredFeature() {
+        assignBilling();
+
+        TeamProduct given = teamService.grantProduct(realmName(), ORG, TEAM, CATALOG, BILLING, new GrantProductRequest(
+                null, null, null, Map.of("scan", new TeamFeatureQuota(50L, null))));
+
+        assertEquals(Map.of("scan", new FeatureQuota(50L, QuotaCycle.DAILY)), given.featureQuotas());
+        assertEquals(Set.of(SCAN_POOL, FLOW_POOL, SCAN_TEAM_POOL),
+                Set.copyOf(team(TEAM).getAttributes().get(BILLING_QUOTAS)));
+        assertEquals(List.of("50"), team(TEAM).getAttributes().get("grant:prod:billing:quota:scan"));
+        assertEquals(List.of("daily"), team(TEAM).getAttributes().get("grant:prod:billing:quota-cycle:scan"));
+        // read back by the list of the user groups
+        UserGroup ops = userGroupService.list(realmName(), ORG).stream()
+                .filter(group -> TEAM.equals(group.name()))
+                .findFirst().orElseThrow();
+        assertEquals(List.of(given), ops.products());
+    }
+
+    // giving the product again replaces the quotas of team: the one no longer asked for leaves with its pool
+    @Test
+    void grantingAgainReplacesTheQuotasOfFeatures() {
+        assignBilling();
+        teamService.grantProduct(realmName(), ORG, TEAM, CATALOG, BILLING, new GrantProductRequest(
+                null, null, null, Map.of("scan", new TeamFeatureQuota(50L, null))));
+
+        teamService.grantProduct(realmName(), ORG, TEAM, CATALOG, BILLING, new GrantProductRequest(
+                null, null, null, Map.of("flow", new TeamFeatureQuota(10L, QuotaCycle.MONTHLY))));
+
+        assertEquals(Set.of(SCAN_POOL, FLOW_POOL, "{\"feature\":\"flow\",\"pool\":\"acme/ops\",\"limit\":10,\"cycle\":\"monthly\"}"),
+                Set.copyOf(team(TEAM).getAttributes().get(BILLING_QUOTAS)));
+        assertNull(team(TEAM).getAttributes().get("grant:prod:billing:quota:scan"));
+    }
+
+    // a quota of team only for a metered feature the team gives, and only on a metered product
+    @Test
+    void grantRefusesAQuotaOfFeatureWithoutItsPool() {
+        assignBilling();
+
+        // stats is not metered
+        assertThrowsExactly(InvalidRequestException.class, () -> teamService.grantProduct(realmName(), ORG, TEAM,
+                CATALOG, BILLING, new GrantProductRequest(null, null, null, Map.of("stats", new TeamFeatureQuota(5L, null)))));
+        // flow is not given by the team
+        assertThrowsExactly(InvalidRequestException.class, () -> teamService.grantProduct(realmName(), ORG, TEAM,
+                CATALOG, BILLING, new GrantProductRequest(List.of("scan"), null, null, Map.of("flow", new TeamFeatureQuota(5L, null)))));
+        // a simple product has a quota of product, not by feature
+        assertThrowsExactly(InvalidRequestException.class, () -> teamService.grantProduct(realmName(), ORG, TEAM,
+                CATALOG, PRODUCT, new GrantProductRequest(null, null, null, Map.of("scan", new TeamFeatureQuota(5L, null)))));
+        assertEquals(Set.of(), teamRoles(TEAM));
+    }
+
+    // for a metered feature, a member is in at most one team with a quota; another feature is fine
+    @Test
+    void aMemberHasOneQuotaOfTeamPerFeature() {
+        assignBilling();
+        teamService.grantProduct(realmName(), ORG, TEAM, CATALOG, BILLING, new GrantProductRequest(
+                null, null, null, Map.of("scan", new TeamFeatureQuota(50L, null))));
+        userGroupService.create(realmName(), ORG, new CreateUserGroupRequest("analysts"));
+        userGroupService.addMember(realmName(), ORG, "analysts", aliceId);
+
+        teamService.grantProduct(realmName(), ORG, "analysts", CATALOG, BILLING, new GrantProductRequest(
+                null, null, null, Map.of("flow", new TeamFeatureQuota(10L, null))));
+        assertThrowsExactly(OperationNotAllowedException.class, () -> teamService.grantProduct(realmName(), ORG,
+                "analysts", CATALOG, BILLING, new GrantProductRequest(null, null, null, Map.of(
+                        "flow", new TeamFeatureQuota(10L, null), "scan", new TeamFeatureQuota(20L, null)))));
+
+        // and when joining: bob joins analysts (quota for flow) and ops (quota for scan), two different features,
+        // but not auditors, which has a quota for scan too
+        String bobId = addMember("bob@acme.test");
+        userGroupService.addMember(realmName(), ORG, "analysts", bobId);
+        userGroupService.addMember(realmName(), ORG, TEAM, bobId);
+        userGroupService.create(realmName(), ORG, new CreateUserGroupRequest("auditors"));
+        teamService.grantProduct(realmName(), ORG, "auditors", CATALOG, BILLING, new GrantProductRequest(
+                null, null, null, Map.of("scan", new TeamFeatureQuota(5L, null))));
+        assertThrowsExactly(OperationNotAllowedException.class,
+                () -> userGroupService.addMember(realmName(), ORG, "auditors", bobId));
+    }
+
+    // revoked: the quotas of features leave with the product
+    @Test
+    void revokeTakesTheQuotasOfFeaturesAway() {
+        assignBilling();
+        teamService.grantProduct(realmName(), ORG, TEAM, CATALOG, BILLING, new GrantProductRequest(
+                null, null, null, Map.of("scan", new TeamFeatureQuota(50L, null))));
+
+        teamService.revokeProduct(realmName(), ORG, TEAM, CATALOG, BILLING);
+
         assertEquals(Map.of(), teamAttributes(TEAM));
     }
 

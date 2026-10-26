@@ -19,6 +19,7 @@ import io.orgkeep.api.model.CreateUserGroupRequest;
 import io.orgkeep.api.model.Feature;
 import io.orgkeep.api.model.FeatureQuota;
 import io.orgkeep.api.model.GrantProductRequest;
+import io.orgkeep.api.model.TeamFeatureQuota;
 import io.orgkeep.api.model.OrgGroups;
 import io.orgkeep.api.model.QuotaCycle;
 import io.orgkeep.config.OrgkeepConfig;
@@ -171,13 +172,17 @@ public class DemoSeeder {
                     List.of("write", "stats", "scan"), Map.of("scan", daily(prod ? 100 : 1000))));
         }
 
-        // accounting: everything on billing; sales: write and scan on shop, stats and scan on billing
+        // accounting: everything on billing; sales: write and scan on shop, stats and scan on billing. In prod, sales
+        // has its own budget for scan on billing (50 a day, pool acme/sales), on top of the pool of acme
         userGroupService.create(realm, ORG, new CreateUserGroupRequest(ACCOUNTING));
         userGroupService.create(realm, ORG, new CreateUserGroupRequest(SALES));
         for (String catalog : List.of(PROD, SANDBOX)) {
             teamService.grantProduct(realm, ORG, ACCOUNTING, catalog, BILLING, GrantProductRequest.allFeatures());
             teamService.grantProduct(realm, ORG, SALES, catalog, SHOP, features("write", "scan"));
-            teamService.grantProduct(realm, ORG, SALES, catalog, BILLING, features("stats", "scan"));
+            teamService.grantProduct(realm, ORG, SALES, catalog, BILLING, PROD.equals(catalog)
+                    ? new GrantProductRequest(List.of("stats", "scan"), null, null,
+                            Map.of("scan", new TeamFeatureQuota(50L, QuotaCycle.DAILY)))
+                    : features("stats", "scan"));
         }
 
         addToTeam(realm, demoUser(PAUL, PAUL_EMAIL, "Paul", "Lefebvre"), SALES);

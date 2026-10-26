@@ -120,15 +120,17 @@ class DemoSeederTest {
     }
 
     // the example token of the spec: Paul, team sales, scope prod. Metered products: no access role, the features
-    // given as roles, a pool of the org per metered feature
+    // given as roles, a pool of the org per metered feature, plus the pool of sales for scan on billing
     @Test
     void paulGetsTheExampleTokenOfTheSpec() throws Exception {
         JsonNode claims = logIn(DemoSeeder.PAUL, "openid prod");
 
         assertEquals(Set.of("billing:stats", "billing:scan", "shop:write", "shop:scan"),
                 strings(claims.at("/resource_access/prod/roles")));
-        assertEquals(json("[{\"feature\":\"scan\",\"pool\":\"acme\",\"limit\":200,\"cycle\":\"daily\"}]"),
-                claims.at("/prod/billing/quotas"));
+        // two values of a multivalued attribute: compared as a set, Keycloak does not promise their order
+        assertEquals(Set.of(json("{\"feature\":\"scan\",\"pool\":\"acme\",\"limit\":200,\"cycle\":\"daily\"}"),
+                        json("{\"feature\":\"scan\",\"pool\":\"acme/sales\",\"limit\":50,\"cycle\":\"daily\"}")),
+                elements(claims.at("/prod/billing/quotas")));
         assertEquals(json("[{\"feature\":\"scan\",\"pool\":\"acme\",\"limit\":100,\"cycle\":\"daily\"}]"),
                 claims.at("/prod/shop/quotas"));
         // without the scope of sandbox, nothing of it
@@ -209,6 +211,13 @@ class DemoSeederTest {
         Set<String> values = new HashSet<>();
         array.forEach(element -> values.add(element.asText()));
         return values;
+    }
+
+    /** The elements of a JSON array, for a comparison that ignores their order. */
+    private static Set<JsonNode> elements(JsonNode array) {
+        Set<JsonNode> elements = new HashSet<>();
+        array.forEach(elements::add);
+        return elements;
     }
 
     /** "feature:limit" for each pool of the quotas of a metered product. */

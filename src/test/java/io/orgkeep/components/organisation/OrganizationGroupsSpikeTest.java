@@ -60,7 +60,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Result (Keycloak 26.7.4, 2026-10-26): the tree itself works (subgroups, role mappings and attributes stored, members
  * of the org only, gone with the org), but the engine cannot use it: an org group gives its members no effective
  * role and no attribute, so nothing of it reaches the token. rolesAndAttributesReachTheToken asserts that finding,
- * next to a control on a group of the realm.
+ * next to a control on a group of the realm. Same with the scope organization, with a realm role and a client in full
+ * scope (realmRoleWithAFullScopeClient), and on Keycloak 26.8.1, although the release notes of 26.7.0 announce the
+ * roles of organization groups in realm_access and resource_access. An open Keycloak issue (#52764, "Organization
+ * group roles are not automapped to realm/resource_access") reports the same.
  */
 @Slf4j
 @QuarkusTest
@@ -82,6 +85,7 @@ class OrganizationGroupsSpikeTest {
 
     private final ObjectMapper json = new ObjectMapper();
     private TestRealm testRealm;
+    private JsonNode organizationContext;
 
     @BeforeEach
     void beforeEach() {
@@ -186,6 +190,23 @@ class OrganizationGroupsSpikeTest {
                 strings(claims.at("/resource_access/prod/roles")), claims.at("/prod/billing/quotas"),
                 claims.path("scope").asText(), claims.path("spike"));
 
+        // "when an organization context is requested" (release notes 26.6 / 26.7): the scope organization
+        var loginClient = testRealm.resource().clients().get(clientUuid(testRealm.name()));
+        log.info("SPIKE default scopes of the login client: {}, optional: {}",
+                loginClient.getDefaultClientScopes().stream().map(s -> s.getName()).toList(),
+                loginClient.getOptionalClientScopes().stream().map(s -> s.getName()).toList());
+        testRealm.resource().clientScopes().findAll().stream()
+                .filter(s -> "organization".equals(s.getName())).findFirst()
+                .ifPresent(s -> {
+                    if (loginClient.getOptionalClientScopes().stream().noneMatch(o -> o.getId().equals(s.getId()))
+                            && loginClient.getDefaultClientScopes().stream().noneMatch(o -> o.getId().equals(s.getId()))) {
+                        loginClient.addOptionalClientScope(s.getId());
+                    }
+                });
+        JsonNode withOrganization = claims(logIn("paul", "openid prod organization"));
+        log.info("SPIKE token of paul with the scope organization: {}", withOrganization.toPrettyString());
+        organizationContext = withOrganization;
+
         // control: the same on a group of the realm, as Orgkeep does today
         GroupRepresentation control = testRealm.resource().getGroupByPath("/acme/user-groups/users");
         var controlGroup = testRealm.resource().groups().group(control.getId());
@@ -220,6 +241,60 @@ class OrganizationGroupsSpikeTest {
                 .getProtocolMappers().createMapper(mapper)) {
             log.info("SPIKE direct mapper {} on the login client: HTTP {}", attribute, response.getStatus());
         }
+    }
+
+    // without Orgkeep's restrictions: a realm role on the org group, a bare public client in full scope
+    @Test
+    void realmRoleWithAFullScopeClient() throws Exception {
+        OrganizationResource org = organization(ORG);
+        OrganizationGroupResource sales = org.groups().group(subGroup(org, topLevel(org, "user-groups"), "sales"));
+        RoleRepresentation role = new RoleRepresentation();
+        role.setName("spike-role");
+        testRealm.resource().roles().create(role);
+        sales.roles().realmLevel().add(List.of(testRealm.resource().roles().get("spike-role").toRepresentation()));
+        String paul = member("paul");
+        sales.addMember(paul);
+        String salesId = sales.toRepresentation(false).getId();
+        try {
+            log.info("SPIKE roles of the org group by the generic group API: {}",
+                    testRealm.resource().groups().group(salesId).roles().getAll().getRealmMappings());
+        } catch (Exception e) {
+            log.info("SPIKE the generic group API refuses the roles of an org group: {}", e.toString());
+        }
+        // emma joins the same group through the realm API (she is a member of the org)
+        String emma = member("emma");
+        try {
+            testRealm.resource().users().get(emma).joinGroup(salesId);
+            log.info("SPIKE emma joined the org group through the realm API");
+        } catch (Exception e) {
+            log.info("SPIKE emma may not join the org group through the realm API: {}", e.toString());
+        }
+        log.info("SPIKE realm roles of emma by the admin API: effective {}", testRealm.resource().users().get(emma)
+                .roles().realmLevel().listEffective().stream().map(RoleRepresentation::getName).toList());
+
+        ClientRepresentation client = new ClientRepresentation();
+        client.setClientId("spike-client");
+        client.setPublicClient(true);
+        client.setDirectAccessGrantsEnabled(true);
+        client.setFullScopeAllowed(true);
+        try (Response response = testRealm.resource().clients().create(client)) {
+            String uuid = CreatedResponseUtil.getCreatedId(response);
+            testRealm.resource().clientScopes().findAll().stream()
+                    .filter(s -> "organization".equals(s.getName())).findFirst()
+                    .ifPresent(s -> testRealm.resource().clients().get(uuid).addOptionalClientScope(s.getId()));
+        }
+
+        log.info("SPIKE realm roles of paul by the admin API: effective {}, composite of the user {}",
+                testRealm.resource().users().get(paul).roles().realmLevel().listEffective().stream()
+                        .map(RoleRepresentation::getName).toList(),
+                testRealm.resource().users().get(paul).roles().getAll().getRealmMappings());
+        for (String scope : List.of("openid", "openid organization", "openid organization:acme")) {
+            JsonNode claims = claims(logIn("spike-client", "paul", scope));
+            log.info("SPIKE full scope client, scope '{}': realm_access {}, organization {}", scope,
+                    claims.at("/realm_access/roles"), claims.path("organization"));
+        }
+        JsonNode emmaClaims = claims(logIn("spike-client", "emma", "openid organization"));
+        log.info("SPIKE full scope client, emma: realm_access {}", emmaClaims.at("/realm_access/roles"));
     }
 
     // who may join an org group, and what the user side shows
@@ -333,7 +408,11 @@ class OrganizationGroupsSpikeTest {
     }
 
     private String logIn(String username, String scope) throws Exception {
-        String form = Map.of("grant_type", "password", "client_id", testRealm.name(),
+        return logIn(testRealm.name(), username, scope);
+    }
+
+    private String logIn(String clientId, String username, String scope) throws Exception {
+        String form = Map.of("grant_type", "password", "client_id", clientId,
                         "username", username, "password", PASSWORD, "scope", scope)
                 .entrySet().stream()
                 .map(e -> e.getKey() + "=" + URLEncoder.encode(e.getValue(), StandardCharsets.UTF_8))

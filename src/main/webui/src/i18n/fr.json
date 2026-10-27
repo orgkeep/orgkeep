@@ -243,7 +243,7 @@
     "token": {
       "title": "Ce que reçoivent vos APIs dans les tokens",
       "scope": "Une application reçoit ce catalogue par défaut, ou le demande avec",
-      "kinds": "Ici billing est un produit simple (un rôle d'accès, un quota), shop un produit à features mesurées (pas de rôle d'accès, un quota par feature mesurée, chaque entrée dit sa feature).",
+      "kinds": "Ici billing est un produit simple (un rôle d'accès, un quota), shop un produit à features mesurées (pas de rôle d'accès, un quota par feature mesurée, dans un claim à elle).",
       "usage": "Orgkeep ne compte pas l'usage : votre API compare ses propres compteurs aux limites du token."
     },
     "introspection": {
@@ -397,7 +397,7 @@
     "token": {
       "title": "Dans les tokens",
       "hint": "Pour un membre d'une organisation qui a acheté toutes les features, avec un quota d'exemple. Les paramètres montrent leur défaut.",
-      "meteredHint": "Pour un membre d'une organisation qui a acheté toutes les features, avec des quotas d'exemple : pas de rôle d'accès, un objet par feature mesurée avec ses quotas. Le pool \"/\" est celui de l'organisation : votre API clé ses compteurs par organisation, catalogue, produit, feature et pool."
+      "meteredHint": "Pour un membre d'une organisation qui a acheté toutes les features, avec des quotas d'exemple : pas de rôle d'accès, un claim par feature mesurée avec ses quotas. Le pool \"/\" est celui de l'organisation : votre API clé ses compteurs par organisation, catalogue, produit, feature et pool."
     }
   },
   "tokenPreview": {

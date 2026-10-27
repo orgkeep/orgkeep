@@ -305,27 +305,30 @@ function TokenHint({ product }: { product: Product }) {
   const features = product.features.map((feature) => `${product.name}:${feature.name}`);
   // a metered product has no access role: the API checks the feature a call needs
   const roles = product.metered ? features : [product.name, ...features];
-  // the claim of the product: a simple product has "quotas", the pool of the org ("/", the root of the org); a
-  // metered product has an object per metered feature instead, each with its own "quotas"
+  // the part of the token about this product, in the token format of the core: rights in resource_access, quotas
+  // and parameters in flat claims, one per product ("prod.billing") and one per metered feature ("prod.billing.scan")
+  const productClaim = `${product.catalog}.${product.name}`;
+  const token: Record<string, unknown> = { resource_access: { [product.catalog]: { roles } } };
+  // the claim of the product: a simple product has "quotas", the pool of the org ("/", the root of the org); the
+  // defaults of the parameters stand for the values an organisation negotiates
   const claim: Record<string, unknown> = {};
+  if (!product.metered) {
+    claim.quotas = [{ pool: '/', limit: 1000, cycle: 'monthly' }];
+  }
+  if (product.params.length > 0) {
+    claim.params = Object.fromEntries(product.params.map((param) => [param.name, param.defaultValue ?? '...']));
+  }
+  // a metered product with no parameter has no claim of its own, only those of its metered features
+  if (Object.keys(claim).length > 0) {
+    token[productClaim] = claim;
+  }
   if (product.metered) {
     product.features
       .filter((feature) => feature.metered)
       .forEach((feature) => {
-        claim[feature.name] = { quotas: [{ pool: '/', limit: 200, cycle: 'daily' }] };
+        token[`${productClaim}.${feature.name}`] = { quotas: [{ pool: '/', limit: 200, cycle: 'daily' }] };
       });
-  } else {
-    claim.quotas = [{ pool: '/', limit: 1000, cycle: 'monthly' }];
   }
-  // the defaults stand for the values an organisation negotiates
-  if (product.params.length > 0) {
-    claim.params = Object.fromEntries(product.params.map((param) => [param.name, param.defaultValue ?? '...']));
-  }
-  // the part of the token about this product, in the token format of the core (rights in resource_access, quotas and parameters in the claim of the catalog)
-  const token = {
-    resource_access: { [product.catalog]: { roles } },
-    [product.catalog]: { [product.name]: claim },
-  };
 
   return (
     <Paper withBorder p="md">

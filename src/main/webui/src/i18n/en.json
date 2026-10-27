@@ -243,7 +243,7 @@
     "token": {
       "title": "What your APIs receive in the tokens",
       "scope": "An application gets this catalog by default, or asks for it with",
-      "kinds": "Here billing is a simple product (an access role, one quota), shop a product with metered features (no access role, one quota per metered feature, each entry says its feature).",
+      "kinds": "Here billing is a simple product (an access role, one quota), shop a product with metered features (no access role, one quota per metered feature, in a claim of its own).",
       "usage": "Orgkeep does not count the usage: your API compares its own counters with the limits of the token."
     },
     "introspection": {
@@ -397,7 +397,7 @@
     "token": {
       "title": "In the tokens",
       "hint": "For a member of an organisation that bought every feature, with an example quota. The parameters show their defaults.",
-      "meteredHint": "For a member of an organisation that bought every feature, with example quotas: no access role, an object per metered feature with its quotas. The pool \"/\" is the one of the organisation: your API keys its counters by organisation, catalog, product, feature and pool."
+      "meteredHint": "For a member of an organisation that bought every feature, with example quotas: no access role, a claim per metered feature with its quotas. The pool \"/\" is the one of the organisation: your API keys its counters by organisation, catalog, product, feature and pool."
     }
   },
   "tokenPreview": {

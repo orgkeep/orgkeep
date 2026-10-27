@@ -255,14 +255,14 @@ export default function GrantProductModal({ org, team, opened, onClose, availabl
           {/* a metered product: the members share the quotas of the org, plus a quota of team per feature if set */}
           {offer?.metered && (
             <Text size="sm" c="dimmed">
-              {t('team.grant.meteredHint', { pool: org })}
+              {t('team.grant.meteredHint', { pool: '/' })}
             </Text>
           )}
 
           {offer?.metered && quotaFeatures.length > 0 && (
             <Input.Wrapper
               label={t('team.grant.featureQuotas')}
-              description={t('team.grant.featureQuotasDescription', { pool: `${org}/${team}` })}
+              description={t('team.grant.featureQuotasDescription', { pool: `/${team}` })}
             >
               {/* one line per metered feature given: the feature and the pool of the org, the quota, its cycle */}
               <Stack gap="xs" mt="xs">
@@ -330,7 +330,7 @@ export default function GrantProductModal({ org, team, opened, onClose, availabl
           )}
           {!offer?.metered && form.values.quota !== '' && (
             <Text size="sm" c="dimmed">
-              {t('team.grant.poolHint', { pool: `${org}/${team}` })}
+              {t('team.grant.poolHint', { pool: `/${team}` })}
             </Text>
           )}
 

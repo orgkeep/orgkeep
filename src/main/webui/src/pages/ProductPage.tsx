@@ -305,17 +305,21 @@ function TokenHint({ product }: { product: Product }) {
   const features = product.features.map((feature) => `${product.name}:${feature.name}`);
   // a metered product has no access role: the API checks the feature a call needs
   const roles = product.metered ? features : [product.name, ...features];
-  // a simple product has one pool of the org; a metered product one per metered feature, which says its feature
-  const quotas = product.metered
-    ? product.features
-        .filter((feature) => feature.metered)
-        .map((feature) => ({ feature: feature.name, pool: 'acme', limit: 200, cycle: 'daily' }))
-    : [{ pool: 'acme', limit: 1000, cycle: 'monthly' }];
+  // the claim of the product: a simple product has "quotas", the pool of the org ("/", the root of the org); a
+  // metered product has an object per metered feature instead, each with its own "quotas"
+  const claim: Record<string, unknown> = {};
+  if (product.metered) {
+    product.features
+      .filter((feature) => feature.metered)
+      .forEach((feature) => {
+        claim[feature.name] = { quotas: [{ pool: '/', limit: 200, cycle: 'daily' }] };
+      });
+  } else {
+    claim.quotas = [{ pool: '/', limit: 1000, cycle: 'monthly' }];
+  }
   // the defaults stand for the values an organisation negotiates
-  const params = Object.fromEntries(product.params.map((param) => [param.name, param.defaultValue ?? '...']));
-  const claim: Record<string, unknown> = { quotas };
   if (product.params.length > 0) {
-    claim.params = params;
+    claim.params = Object.fromEntries(product.params.map((param) => [param.name, param.defaultValue ?? '...']));
   }
   // the part of the token about this product, in the token format of the core (rights in resource_access, quotas and parameters in the claim of the catalog)
   const token = {

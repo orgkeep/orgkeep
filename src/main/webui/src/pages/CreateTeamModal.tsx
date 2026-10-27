@@ -51,7 +51,7 @@ export default function CreateTeamModal({ org, opened, onClose, onCreated }: Cre
             {...form.getInputProps('name')}
           />
           <Text size="sm" c="dimmed">
-            {t('teams.form.poolHint', { pool: `${org}/${form.values.name.trim() || 'ops'}` })}
+            {t('teams.form.poolHint', { pool: `/${form.values.name.trim() || 'ops'}` })}
           </Text>
 
           {createTeam.error && (

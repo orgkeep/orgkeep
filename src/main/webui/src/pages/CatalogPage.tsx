@@ -413,12 +413,12 @@ function TokenHint({ catalog }: { catalog: string }) {
   const { t } = useTranslation();
   // the token format of the core (rights in resource_access, quotas and parameters in the claim of the catalog),
   // with an example of each kind: billing is simple (access role, a quota of product), shop is metered (no access
-  // role, a quota per metered feature)
+  // role, an object per metered feature with its quotas). "/" is the pool of the org, the root of the org
   const token = {
     resource_access: { [catalog]: { roles: ['billing', 'billing:read', 'shop:write', 'shop:scan'] } },
     [catalog]: {
-      billing: { quotas: [{ pool: 'acme', limit: 1000, cycle: 'monthly' }] },
-      shop: { quotas: [{ feature: 'scan', pool: 'acme', limit: 200, cycle: 'daily' }] },
+      billing: { quotas: [{ pool: '/', limit: 1000, cycle: 'monthly' }] },
+      shop: { scan: { quotas: [{ pool: '/', limit: 200, cycle: 'daily' }] } },
     },
   };
 

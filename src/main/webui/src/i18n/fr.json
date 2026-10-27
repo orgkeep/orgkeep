@@ -397,7 +397,7 @@
     "token": {
       "title": "Dans les tokens",
       "hint": "Pour un membre d'une organisation qui a acheté toutes les features, avec un quota d'exemple. Les paramètres montrent leur défaut.",
-      "meteredHint": "Pour un membre d'une organisation qui a acheté toutes les features, avec des quotas d'exemple : pas de rôle d'accès, un pool de l'organisation par feature mesurée. Votre API clé ses compteurs par catalogue, produit, feature et pool."
+      "meteredHint": "Pour un membre d'une organisation qui a acheté toutes les features, avec des quotas d'exemple : pas de rôle d'accès, un objet par feature mesurée avec ses quotas. Le pool \"/\" est celui de l'organisation : votre API clé ses compteurs par organisation, catalogue, produit, feature et pool."
     }
   },
   "tokenPreview": {
@@ -453,7 +453,7 @@
       "name": "Nom",
       "nameDescription": "Minuscules, chiffres et tirets intérieurs. Il ne pourra plus être changé.",
       "nameInvalid": "Minuscules, chiffres et tirets intérieurs seulement",
-      "poolHint": "Avec un quota de team, son pool s'appelle {{pool}} dans les tokens."
+      "poolHint": "Avec un quota de team, son pool s'appelle \"{{pool}}\" dans les tokens."
     }
   },
   "team": {
@@ -506,16 +506,16 @@
       "featuresDescriptionMetered": "Parmi celles achetées par l'organisation. Au moins une : le produit ne donne rien d'autre.",
       "featuresRequired": "Choisissez au moins une feature",
       "meteredOption": "{{feature}} ({{quota}} / {{cycle}})",
-      "meteredHint": "Les membres partagent le quota de l'organisation pour chaque feature mesurée (pool {{pool}} dans les tokens). Pas de quota de team pour le produit lui-même : une feature peut avoir le sien.",
+      "meteredHint": "Les membres partagent le quota de l'organisation pour chaque feature mesurée (pool \"{{pool}}\" dans les tokens). Pas de quota de team pour le produit lui-même : une feature peut avoir le sien.",
       "featureQuotas": "Quotas de team, par feature mesurée",
-      "featureQuotasDescription": "Optionnel : un budget partagé par les membres, en plus du pool de l'organisation pour la feature. Pool {{pool}} dans les tokens. Un membre est dans au plus une team avec quota par feature.",
+      "featureQuotasDescription": "Optionnel : un budget partagé par les membres, en plus du pool de l'organisation pour la feature. Pool \"{{pool}}\" dans les tokens. Un membre de plusieurs teams avec un quota pour la feature reçoit tous leurs pools.",
       "featureQuotaPlaceholder": "Pool de l'organisation seulement",
       "orgQuota": "org : {{quota}} / {{cycle}}",
       "quota": "Quota de team",
       "quotaDescription": "Optionnel : un budget partagé par les membres, en plus du pool de l'organisation ({{quota}} / {{cycle}}).",
       "quotaInvalid": "Un entier supérieur à 0, ou vide",
       "cycle": "Cycle",
-      "poolHint": "Pool {{pool}} dans les tokens. Un membre est dans au plus une team avec quota par produit.",
+      "poolHint": "Pool \"{{pool}}\" dans les tokens. Un membre de plusieurs teams avec un quota pour le produit reçoit tous leurs pools.",
       "submit": "Donner"
     }
   },

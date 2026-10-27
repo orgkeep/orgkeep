@@ -23,6 +23,7 @@ import io.orgkeep.api.model.GrantProductRequest;
 import io.orgkeep.api.model.LightweightTokens;
 import io.orgkeep.api.model.QuotaCycle;
 import io.orgkeep.api.model.UpdateLoginClientRequest;
+import io.orgkeep.fixtures.CatalogClaims;
 import io.orgkeep.fixtures.TestRealm;
 import io.orgkeep.web.CurrentRealm;
 import io.quarkus.test.InjectMock;
@@ -140,8 +141,8 @@ class TokenPreviewTest {
         assertEquals(strings(real.at("/resource_access/prod/roles")), strings(preview.at("/resource_access/prod/roles")));
         // the claim of the catalog, quotas included: {"billing": {"scan": {"quotas": [{"pool": "/", ...}]}}}.
         // Checked present first: two missing claims would compare equal
-        assertEquals("/", preview.at("/prod/billing/scan/quotas/0/pool").asText(), preview.toString());
-        assertEquals(real.path("prod"), preview.path("prod"));
+        assertEquals("/", preview.at("/prod.billing.scan/quotas/0/pool").asText(), preview.toString());
+        assertEquals(CatalogClaims.of(real, "prod"), CatalogClaims.of(preview, "prod"));
         assertTrue(strings(preview.path("aud")).contains("prod"), preview.path("aud").toString());
         // no null claim: a real token has none (the Keycloak representation has one per standard claim)
         assertTrue(preview.path("nonce").isMissingNode(), preview.toString());
@@ -156,7 +157,7 @@ class TokenPreviewTest {
         JsonNode preview = previewResponse(paulId).path("token");
 
         assertTrue(preview.at("/resource_access/prod").isMissingNode(), preview.toString());
-        assertTrue(preview.path("prod").isMissingNode(), preview.toString());
+        assertTrue(CatalogClaims.of(preview, "prod").isEmpty(), preview.toString());
     }
 
     // lightweight tokens: the token is the lightweight one, the introspection is what a real introspection returns,
@@ -179,7 +180,7 @@ class TokenPreviewTest {
         assertEquals(Set.of("billing:stats", "billing:scan"), strings(introspection.at("/resource_access/prod/roles")));
         assertEquals(real.path("resource_access"), introspection.path("resource_access"));
         assertEquals(real.path("realm_access"), introspection.path("realm_access"));
-        assertEquals(real.path("prod"), introspection.path("prod"));
+        assertEquals(CatalogClaims.of(real, "prod"), CatalogClaims.of(introspection, "prod"));
         assertEquals(strings(real.path("aud")), strings(introspection.path("aud")));
         assertEquals(Set.of(real.path("scope").asText().split(" ")), Set.of(introspection.path("scope").asText().split(" ")));
         assertEquals(testRealm.name(), introspection.path("azp").asText());

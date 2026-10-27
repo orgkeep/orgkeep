@@ -149,9 +149,8 @@ public interface ProductMapper {
     }
 
     /**
-     * The native mapper of a metered feature: its quota pools, one JSON object per pool, in an object of its own next
-     * to the parameters of the product ({"billing": {"params": {...}, "scan": {"quotas": [...]}}}). Keycloak merges the
-     * nested objects written by several mappers.
+     * The native mapper of a metered feature: its quota pools, one JSON object per pool, in a claim of its own next to
+     * that of the product ({"prod.billing": {"params": {...}}, "prod.billing.scan": {"quotas": [...]}}).
      */
     default ProtocolMapperRepresentation toFeatureMapper(String catalog, String product, String feature) {
         return attributeMapper(CatalogRoles.featureQuotasAttribute(catalog, product, feature), true);
@@ -160,8 +159,8 @@ public interface ProductMapper {
     private static ProtocolMapperRepresentation attributeMapper(String attribute, boolean multivalued) {
         Map<String, String> config = new HashMap<>();
         config.put("user.attribute", attribute);
-        // the dots of the claim name make nested objects: {"prod": {"shop-repository": {"quotas": [...]}}}
-        config.put("claim.name", attribute);
+        // a flat claim: {"prod.shop-repository": {"quotas": [...]}}
+        config.put("claim.name", CatalogRoles.claimName(attribute));
         config.put("jsonType.label", "JSON");
         config.put("multivalued", String.valueOf(multivalued));
         config.put("aggregate.attrs", "true");

@@ -20,7 +20,9 @@ import java.util.Set;
  * <p>
  * Each product has two native "User Attribute" mappers on the scope of its catalog, reading the attributes
  * {@link #quotasAttribute} and {@link #paramsAttribute} on the groups of the user (the teams giving the product), and
- * each metered feature one more, reading {@link #featureQuotasAttribute}.
+ * each metered feature one more, reading {@link #featureQuotasAttribute}. Each one writes a flat claim
+ * ({@link #claimName}): a top-level object per product and per metered feature, {"prod.billing": {"params": {...}},
+ * "prod.billing.scan": {"quotas": [...]}}, so that an API reads what it counts with a single claim name.
  */
 public final class CatalogRoles {
     public static final String TYPE = "type";
@@ -40,8 +42,8 @@ public final class CatalogRoles {
     public static final String SEPARATOR = ":";
 
     /**
-     * Names a feature cannot take: the object of a metered feature sits in the object of its product, next to these
-     * keys ("prod.billing.params", "prod.billing.scan.quotas"). Some are not used yet, kept for later options.
+     * Names a feature cannot take: they would read as a key of the product in the attributes ("prod.billing.params"
+     * next to "prod.billing.scan.quotas"). Some are not used yet, kept for later options.
      */
     public static final Set<String> RESERVED_FEATURE_NAMES = Set.of("params", "options", "quotas");
 
@@ -91,22 +93,22 @@ public final class CatalogRoles {
     }
 
     /**
-     * Attribute and claim of the quota pools of a simple product, e.g. "prod.shop-repository.quotas": Keycloak turns the
-     * dots of a claim name into nested objects, {"prod": {"shop-repository": {"quotas": [...]}}}.
+     * Attribute of the quota pools of a simple product, e.g. "prod.shop-repository.quotas", written in the token as
+     * {"prod.shop-repository": {"quotas": [...]}} ({@link #claimName}).
      */
     public static String quotasAttribute(String catalog, String product) {
         return productClaim(catalog, product) + ".quotas";
     }
 
     /**
-     * Attribute and claim of the quota pools of a metered feature, e.g. "prod.billing.scan.quotas": an object per
-     * metered feature, {"prod": {"billing": {"scan": {"quotas": [...]}}}}, next to the parameters of the product.
+     * Attribute of the quota pools of a metered feature, e.g. "prod.billing.scan.quotas", written in the token as an
+     * object of its own, {"prod.billing.scan": {"quotas": [...]}} ({@link #claimName}).
      */
     public static String featureQuotasAttribute(String catalog, String product, String feature) {
         return productClaim(catalog, product) + "." + feature + ".quotas";
     }
 
-    /** Attribute and claim of the parameter values of a product, e.g. "prod.shop-repository.params". */
+    /** Attribute of the parameter values of a product, e.g. "prod.shop-repository.params". */
     public static String paramsAttribute(String catalog, String product) {
         return productClaim(catalog, product) + ".params";
     }
@@ -119,7 +121,18 @@ public final class CatalogRoles {
         return attribute.startsWith(productClaim(catalog, product) + ".");
     }
 
-    /** The object of a product in the tokens, e.g. "prod.billing": its keys and those of its features share it. */
+    /**
+     * The claim name of a mapper reading a derived attribute: Keycloak turns the dots of a claim name into nested
+     * objects, unless escaped. Every dot but the last is escaped, "prod.billing.scan.quotas" gives
+     * "prod\.billing\.scan.quotas", written as {"prod.billing.scan": {"quotas": [...]}}. Names are slugs, never
+     * with a dot of their own.
+     */
+    public static String claimName(String attribute) {
+        int last = attribute.lastIndexOf('.');
+        return attribute.substring(0, last).replace(".", "\\.") + attribute.substring(last);
+    }
+
+    /** The prefix of the derived attributes of a product, e.g. "prod.billing". */
     private static String productClaim(String catalog, String product) {
         return catalog + "." + product;
     }

@@ -24,6 +24,7 @@ import io.orgkeep.api.model.ParamDefinition;
 import io.orgkeep.api.model.ParamType;
 import io.orgkeep.api.model.QuotaCycle;
 import io.orgkeep.api.model.TeamFeatureQuota;
+import io.orgkeep.fixtures.CatalogClaims;
 import io.orgkeep.fixtures.TestRealm;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -137,12 +138,12 @@ class TeamTokenTest {
 
         assertEquals(Set.of(PRODUCT, PRODUCT + ":scan", "scanner"), strings(claims.at("/resource_access/prod/roles")));
         assertTrue(strings(claims.path("aud")).contains("prod"), claims.path("aud").toString());
-        JsonNode quotas = claims.at("/prod/shop-repository/quotas");
+        JsonNode quotas = claims.at("/prod.shop-repository/quotas");
         // ops and analysts both carry the pool of the org: Keycloak keeps it once
         assertEquals(2, quotas.size(), quotas.toString());
         // pools relative to the org: "/" its root, "/ops" the team
         assertEquals(Set.of("/", "/ops"), pools(quotas));
-        assertEquals("eu", claims.at("/prod/shop-repository/params/region").asText());
+        assertEquals("eu", claims.at("/prod.shop-repository/params/region").asText());
     }
 
     // without the scope, nothing of the catalog; the roles of the org stay (read by the API of the core)
@@ -151,7 +152,7 @@ class TeamTokenTest {
         JsonNode claims = logIn("paul", "openid");
 
         assertTrue(claims.at("/resource_access/prod").isMissingNode(), claims.toString());
-        assertTrue(claims.path("prod").isMissingNode(), claims.toString());
+        assertTrue(CatalogClaims.of(claims, "prod").isEmpty(), claims.toString());
         assertFalse(claims.at("/resource_access/org-acme").isMissingNode(), claims.toString());
     }
 
@@ -161,7 +162,7 @@ class TeamTokenTest {
         JsonNode claims = logIn("claire", "openid prod");
 
         assertTrue(claims.at("/resource_access/prod").isMissingNode(), claims.toString());
-        assertTrue(claims.path("prod").isMissingNode(), claims.toString());
+        assertTrue(CatalogClaims.of(claims, "prod").isEmpty(), claims.toString());
     }
 
     // flow is not bought: absent. Bought later, it reaches the token through ops ("every feature bought")
@@ -180,7 +181,7 @@ class TeamTokenTest {
         JsonNode claims = logIn("paul", "openid sandbox");
 
         assertTrue(claims.at("/resource_access/sandbox").isMissingNode(), claims.toString());
-        assertTrue(claims.path("sandbox").isMissingNode(), claims.toString());
+        assertTrue(CatalogClaims.of(claims, "sandbox").isEmpty(), claims.toString());
     }
 
     // a reserved catalog role, given directly by the realm owner
@@ -206,10 +207,10 @@ class TeamTokenTest {
         Set<String> roles = strings(claims.at("/resource_access/prod/roles"));
         assertEquals(Set.of("billing:stats", "billing:scan"), roles);
         assertTrue(strings(claims.path("aud")).contains("prod"), claims.path("aud").toString());
-        // no quota of product, and no object for stats (not metered): its role is enough
-        assertEquals(Set.of("scan"), fieldNames(claims.at("/prod/billing")));
+        // no quota of product, and no claim for stats (not metered): its role is enough
+        assertEquals(Set.of("prod.billing.scan"), claimNames(claims, "prod.billing"));
         // accounting and sales both carry the pool of the org for scan: Keycloak keeps it once
-        JsonNode quotas = claims.at("/prod/billing/scan/quotas");
+        JsonNode quotas = claims.at("/prod.billing.scan/quotas");
         assertEquals(1, quotas.size(), quotas.toString());
         assertEquals("/", quotas.get(0).path("pool").asText());
         assertEquals(200, quotas.get(0).path("limit").asInt());
@@ -226,7 +227,7 @@ class TeamTokenTest {
         teamService.grantProduct(testRealm.name(), ORG, "accounting", "prod", BILLING, new GrantProductRequest(
                 null, null, null, Map.of("scan", new TeamFeatureQuota(80L, null))));
 
-        JsonNode quotas = logIn("emma", "openid prod").at("/prod/billing/scan/quotas");
+        JsonNode quotas = logIn("emma", "openid prod").at("/prod.billing.scan/quotas");
 
         assertEquals(3, quotas.size(), quotas.toString());
         Map<String, Integer> limits = new HashMap<>();
@@ -245,7 +246,8 @@ class TeamTokenTest {
         JsonNode claims = logIn("stan", "openid prod");
 
         assertEquals(Set.of("billing:stats"), strings(claims.at("/resource_access/prod/roles")));
-        assertTrue(claims.at("/prod/billing").isMissingNode(), claims.toString());
+        assertTrue(claims.path("prod.billing").isMissingNode(), claims.toString());
+        assertTrue(CatalogClaims.of(claims, "prod.billing").isEmpty(), claims.toString());
     }
 
     // a metered feature bought later reaches the token, with its pool, through a team giving every feature bought
@@ -258,8 +260,8 @@ class TeamTokenTest {
 
         JsonNode claims = logIn("emma", "openid prod");
         assertTrue(strings(claims.at("/resource_access/prod/roles")).contains("billing:flow"), claims.toString());
-        assertEquals(Set.of("scan", "flow"), fieldNames(claims.at("/prod/billing")));
-        assertEquals(100, claims.at("/prod/billing/flow/quotas/0/limit").asInt(), claims.toString());
+        assertEquals(Set.of("prod.billing.scan", "prod.billing.flow"), claimNames(claims, "prod.billing"));
+        assertEquals(100, claims.at("/prod.billing.flow/quotas/0/limit").asInt(), claims.toString());
         // a team that listed its features does not get it: readers gives stats only
         assertFalse(strings(logIn("stan", "openid prod").at("/resource_access/prod/roles")).contains("billing:flow"));
     }
@@ -359,10 +361,10 @@ class TeamTokenTest {
         return quotas.findValues("pool").stream().map(JsonNode::asText).collect(Collectors.toSet());
     }
 
-    /** The keys of a JSON object: for a product, "params", "quotas" or its metered features. */
-    private static Set<String> fieldNames(JsonNode node) {
+    /** The names of the top-level claims under a prefix: for a product, those of its metered features. */
+    private static Set<String> claimNames(JsonNode claims, String prefix) {
         Set<String> names = new HashSet<>();
-        node.fieldNames().forEachRemaining(names::add);
+        CatalogClaims.of(claims, prefix).fieldNames().forEachRemaining(names::add);
         return names;
     }
 }

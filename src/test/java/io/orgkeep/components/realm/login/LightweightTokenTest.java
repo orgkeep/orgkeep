@@ -25,6 +25,7 @@ import io.orgkeep.api.model.ParamDefinition;
 import io.orgkeep.api.model.ParamType;
 import io.orgkeep.api.model.QuotaCycle;
 import io.orgkeep.api.model.UpdateLoginClientRequest;
+import io.orgkeep.fixtures.CatalogClaims;
 import io.orgkeep.fixtures.TestRealm;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -153,7 +154,7 @@ class LightweightTokenTest {
         assertTrue(claims.path(MARKER).asBoolean(), claims.toString());
         assertTrue(claims.path("resource_access").isMissingNode(), claims.toString());
         assertTrue(claims.path("realm_access").isMissingNode(), claims.toString());
-        assertTrue(claims.path("prod").isMissingNode(), claims.toString());
+        assertTrue(CatalogClaims.of(claims, "prod").isEmpty(), claims.toString());
         assertTrue(claims.path("email").isMissingNode(), claims.toString());
         // the scope of the marker is not listed in the scope claim (white label), the catalog is
         assertEquals(Set.of("openid", "profile", "email", "prod"), scopes(claims));
@@ -171,7 +172,7 @@ class LightweightTokenTest {
 
         assertTrue(claims.path(MARKER).isMissingNode(), claims.toString());
         assertFalse(claims.at("/resource_access/prod").isMissingNode(), claims.toString());
-        assertFalse(claims.at("/prod/shop-repository/quotas").isMissingNode(), claims.toString());
+        assertFalse(claims.at("/prod.shop-repository/quotas").isMissingNode(), claims.toString());
     }
 
     // --- who may introspect: the client of the catalog, for the tokens of its catalog
@@ -187,8 +188,8 @@ class LightweightTokenTest {
 
         assertTrue(introspection.path("active").asBoolean(), introspection.toString());
         assertEquals(Set.of(PRODUCT, PRODUCT + ":scan"), strings(introspection.at("/resource_access/prod/roles")));
-        assertEquals(Set.of("/", "/ops"), pools(introspection.at("/prod/shop-repository/quotas")));
-        assertEquals("eu", introspection.at("/prod/shop-repository/params/region").asText());
+        assertEquals(Set.of("/", "/ops"), pools(introspection.at("/prod.shop-repository/quotas")));
+        assertEquals("eu", introspection.at("/prod.shop-repository/params/region").asText());
         assertFalse(introspection.at("/resource_access/org-acme").isMissingNode(), introspection.toString());
         assertTrue(introspection.path(MARKER).isMissingNode(), introspection.toString());
     }
@@ -204,7 +205,7 @@ class LightweightTokenTest {
         assertTrue(introspection.path("active").asBoolean(), introspection.toString());
         JsonNode claims = claims(token);
         assertEquals(claims.path("resource_access"), introspection.path("resource_access"));
-        assertEquals(claims.path("prod"), introspection.path("prod"));
+        assertEquals(CatalogClaims.of(claims, "prod"), CatalogClaims.of(introspection, "prod"));
     }
 
     // a token without the catalog: its client is not in the audience, the API of the catalog gets active: false

@@ -10,7 +10,6 @@ import io.orgkeep.api.model.OrgGroups;
 import io.orgkeep.api.model.UserGroup;
 import io.orgkeep.components.catalog.CatalogSetup;
 import io.orgkeep.components.organisation.usergroup.team.TeamMapper;
-import io.orgkeep.components.organisation.usergroup.team.TeamQuotas;
 import io.orgkeep.repository.keycloak.KeycloakGroups;
 import io.orgkeep.repository.keycloak.KeycloakOrgs;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -31,7 +30,6 @@ public class UserGroupServiceImpl implements UserGroupService {
     private final KeycloakOrgs orgs;
     private final KeycloakGroups groups;
     private final CatalogSetup catalogSetup;
-    private final TeamQuotas teamQuotas;
     private final UserGroupMapper userGroupMapper;
     private final TeamMapper teamMapper;
 
@@ -84,7 +82,6 @@ public class UserGroupServiceImpl implements UserGroupService {
         if (!orgs.isMember(realm, org.getId(), userId)) {
             throw new MemberNotFoundException(orgName, userId);
         }
-        teamQuotas.checkJoin(realm, orgName, groupId, userId);
 
         // joining a group the user is already in changes nothing in Keycloak
         groups.join(realm, userId, groupId);

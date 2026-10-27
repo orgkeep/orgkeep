@@ -306,9 +306,40 @@ class ProductServiceTest {
 
         Product product = productService.putFeature(realmName(), CATALOG, PRODUCT, "engine", new UpdateFeatureRequest(null, true));
         assertTrue(product.metered());
+        // the metered feature gets the mapper of its quotas, and loses it with the feature
+        assertTrue(mapperNames().contains("prod.shop-repository.engine.quotas"));
 
         product = productService.deleteFeature(realmName(), CATALOG, PRODUCT, "engine");
         assertFalse(product.metered());
+        assertEquals(Set.of("prod.shop-repository.quotas", "prod.shop-repository.params"), mapperNames());
+    }
+
+    // each metered feature has the mapper of its quotas, {"billing": {"scan": {"quotas": [...]}}}; a feature that is
+    // not metered has none, its role is enough. All go with the product
+    @Test
+    void aMeteredProductHasAMapperPerMeteredFeature() {
+        createMeteredProduct();
+
+        assertEquals(Set.of("prod.billing.quotas", "prod.billing.params", "prod.billing.scan.quotas",
+                "prod.billing.flow.quotas"), mapperNames());
+
+        productService.delete(realmName(), CATALOG, BILLING);
+        assertEquals(Set.of(), mapperNames());
+    }
+
+    // the object of a metered feature sits next to the keys of its product in the token: a feature never takes one of
+    // their names
+    @Test
+    void reservedFeatureNamesAreRefused() {
+        assertThrowsExactly(InvalidRequestException.class, () -> productService.create(realmName(), CATALOG,
+                new CreateProductRequest("reports", "Reports", null, List.of(new Feature("params", null)), List.of())));
+        createProduct();
+
+        for (String reserved : List.of("params", "options", "quotas")) {
+            assertThrowsExactly(InvalidRequestException.class, () -> productService.putFeature(realmName(), CATALOG,
+                    PRODUCT, reserved, new UpdateFeatureRequest(null, true)));
+        }
+        assertFalse(catalogRoles().stream().anyMatch(role -> "reports".equals(role.getName())));
     }
 
     // metered is set at creation: the same value is accepted (a rename), another one is refused

@@ -19,7 +19,8 @@ import java.util.Set;
  * group attribute values in 255 characters, hence one short value per element and prefixed keys.
  * <p>
  * Each product has two native "User Attribute" mappers on the scope of its catalog, reading the attributes
- * {@link #quotasAttribute} and {@link #paramsAttribute} on the groups of the user (the teams giving the product).
+ * {@link #quotasAttribute} and {@link #paramsAttribute} on the groups of the user (the teams giving the product), and
+ * each metered feature one more, reading {@link #featureQuotasAttribute}.
  */
 public final class CatalogRoles {
     public static final String TYPE = "type";
@@ -37,6 +38,12 @@ public final class CatalogRoles {
 
     /** Between a product and one of its features: never in a slug, so a feature never clashes with another role. */
     public static final String SEPARATOR = ":";
+
+    /**
+     * Names a feature cannot take: the object of a metered feature sits in the object of its product, next to these
+     * keys ("prod.billing.params", "prod.billing.scan.quotas"). Some are not used yet, kept for later options.
+     */
+    public static final Set<String> RESERVED_FEATURE_NAMES = Set.of("params", "options", "quotas");
 
     /** Parameters every product has, not part of its schema: the quota of the org and its cycle. */
     public static final Set<String> STANDARD_PARAMS = Set.of("quota", "quota-cycle");
@@ -84,15 +91,36 @@ public final class CatalogRoles {
     }
 
     /**
-     * Attribute and claim of the quota pools of a product, e.g. "prod.shop-repository.quotas": Keycloak turns the dots
-     * of a claim name into nested objects, {"prod": {"shop-repository": {"quotas": [...]}}}.
+     * Attribute and claim of the quota pools of a simple product, e.g. "prod.shop-repository.quotas": Keycloak turns the
+     * dots of a claim name into nested objects, {"prod": {"shop-repository": {"quotas": [...]}}}.
      */
     public static String quotasAttribute(String catalog, String product) {
-        return catalog + "." + product + ".quotas";
+        return productClaim(catalog, product) + ".quotas";
+    }
+
+    /**
+     * Attribute and claim of the quota pools of a metered feature, e.g. "prod.billing.scan.quotas": an object per
+     * metered feature, {"prod": {"billing": {"scan": {"quotas": [...]}}}}, next to the parameters of the product.
+     */
+    public static String featureQuotasAttribute(String catalog, String product, String feature) {
+        return productClaim(catalog, product) + "." + feature + ".quotas";
     }
 
     /** Attribute and claim of the parameter values of a product, e.g. "prod.shop-repository.params". */
     public static String paramsAttribute(String catalog, String product) {
-        return catalog + "." + product + ".params";
+        return productClaim(catalog, product) + ".params";
+    }
+
+    /**
+     * True for a derived attribute of the product read by its mappers: its quotas, its parameters, the quotas of one of
+     * its features.
+     */
+    public static boolean isClaimOf(String attribute, String catalog, String product) {
+        return attribute.startsWith(productClaim(catalog, product) + ".");
+    }
+
+    /** The object of a product in the tokens, e.g. "prod.billing": its keys and those of its features share it. */
+    private static String productClaim(String catalog, String product) {
+        return catalog + "." + product;
     }
 }

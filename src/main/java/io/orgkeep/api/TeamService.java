@@ -41,8 +41,6 @@ public interface TeamService {
      * @throws io.orgkeep.api.exceptions.ProductNotAssignedException if the product is not assigned to the org
      * @throws io.orgkeep.api.exceptions.InvalidRequestException for a feature the org did not buy, a cycle without quota,
      *                                                           or, for a metered product, a quota of team or no feature
-     * @throws io.orgkeep.api.exceptions.OperationNotAllowedException with a quota, if a member of the team is already in
-     *                                                               another team with a quota for this product
      */
     TeamProduct grantProduct(String realm, String orgName, String team, String catalog, String product,
                              GrantProductRequest request);

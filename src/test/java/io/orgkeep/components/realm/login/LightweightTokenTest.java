@@ -187,7 +187,7 @@ class LightweightTokenTest {
 
         assertTrue(introspection.path("active").asBoolean(), introspection.toString());
         assertEquals(Set.of(PRODUCT, PRODUCT + ":scan"), strings(introspection.at("/resource_access/prod/roles")));
-        assertEquals(Set.of("acme", "acme/ops"), pools(introspection.at("/prod/shop-repository/quotas")));
+        assertEquals(Set.of("/", "/ops"), pools(introspection.at("/prod/shop-repository/quotas")));
         assertEquals("eu", introspection.at("/prod/shop-repository/params/region").asText());
         assertFalse(introspection.at("/resource_access/org-acme").isMissingNode(), introspection.toString());
         assertTrue(introspection.path(MARKER).isMissingNode(), introspection.toString());

@@ -1,5 +1,5 @@
 ### Demo data: mvn quarkus:dev
-### or Docker: orgkeep-compose, docker compose -f docker-compose.yaml -f docker-compose.demo.yaml up -d
+### or Docker: orgkeep-examples/docker-compose, docker compose up -d (port 8284 instead of 8282)
 ### Accounts (realm "demo"), password "password": realm-owner, org-owner (owner of the organisation "acme"),
 ### org-user, paul (team sales) and emma (team accounting)
 ### Tokens: login client of the realm (clientId = realm name), password grant enabled for the demo by DemoSeeder
@@ -41,7 +41,9 @@ client_id=demo
     &grant_type=password
 
 ### Token of paul, team sales, catalog prod only: resource_access.prod has billing:stats, billing:scan, shop:write,
-### shop:scan (no access role for a metered product), the claim "prod" a pool of acme for scan on each repository
+### shop:scan (no access role for a metered product). In the claim "prod", an object per metered feature:
+### prod.shop.scan.quotas has the pool of acme ("/"), prod.billing.scan.quotas also the pool "/sales" (50 a day),
+### the quota of team of sales for this feature
 POST http://localhost:8280/realms/demo/protocol/openid-connect/token
 Content-Type: application/x-www-form-urlencoded
 
@@ -51,7 +53,8 @@ client_id=demo
     &grant_type=password
     &scope=openid prod
 
-### Token of emma, team accounting, catalog prod only: every feature of billing, a pool for scan and one for flow
+### Token of emma, team accounting, catalog prod only: every feature of billing, prod.billing.scan and prod.billing.flow
+### with the pool of acme each
 POST http://localhost:8280/realms/demo/protocol/openid-connect/token
 Content-Type: application/x-www-form-urlencoded
 
@@ -98,13 +101,18 @@ Authorization: Bearer {{org_owner_token}}
 GET http://localhost:8282/api/organisations/acme/products
 Authorization: Bearer {{org_owner_token}}
 
-### Org owner: the team sales also gets flow on billing in prod (a metered product: no quota of team)
+### Org owner: the team sales also gets flow on billing in prod, with a quota of team for flow too. Giving the product
+### again replaces what the team gives of it: the quota of scan is sent again to keep it
 PUT http://localhost:8282/api/organisations/acme/user-groups/sales/products/prod/billing
 Authorization: Bearer {{org_owner_token}}
 Content-Type: application/json
 
 {
-  "features": ["stats", "scan", "flow"]
+  "features": ["stats", "scan", "flow"],
+  "featureQuotas": {
+    "scan": { "quota": 50, "cycle": "DAILY" },
+    "flow": { "quota": 20 }
+  }
 }
 
 ### Org owner: the catalog roles of prod the teams can give

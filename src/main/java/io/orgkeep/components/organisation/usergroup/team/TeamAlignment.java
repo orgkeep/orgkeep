@@ -30,9 +30,10 @@ import java.util.Set;
  * <ul>
  *   <li>role mappings of the catalog client: P (simple product only: a metered product has no access role), and P:f
  *       for each feature f asked for (all if none listed) that the org bought;</li>
- *   <li>{@code C.P.quotas}: simple product, the pool of the org, plus the pool of the team if it has a quota; metered
- *       product, the pool of the org for each metered feature given, plus the pool of the team if it has a quota for
- *       this feature;</li>
+ *   <li>simple product, {@code C.P.quotas}: the pool of the org ("/"), plus the pool of the team ("/team") if it has a
+ *       quota;</li>
+ *   <li>metered product, {@code C.P.f.quotas} for each metered feature f given: the pool of the org, plus the pool of
+ *       the team if it has a quota for this feature;</li>
  *   <li>{@code C.P.params}: the parameter values of the org.</li>
  * </ul>
  * Called directly, not through the event bus, by the services that change a team or an assignment: the next token is
@@ -75,7 +76,7 @@ public class TeamAlignment {
                 .map(role -> productMapper.params(role.getAttributes()))
                 .orElse(List.of());
         boolean metered = productMapper.isMetered(catalogRoles, product);
-        teams.forEach(team -> apply(realm, orgName, ids.clientUuid(), catalogRoles, metered, schema, orgProduct, team));
+        teams.forEach(team -> apply(realm, ids.clientUuid(), catalogRoles, metered, schema, orgProduct, team));
         log.info("{} team(s) of organisation '{}' realigned on product '{}' of catalog '{}' in realm '{}'",
                 teams.size(), orgName, product, catalog, realm);
     }
@@ -84,7 +85,7 @@ public class TeamAlignment {
     public void revoke(String realm, String orgName, String catalog, String product) {
         List<GroupRepresentation> teams = teams(realm, orgName).stream()
                 .filter(team -> teamMapper.gives(attributes(team), catalog, product)
-                        || attributes(team).containsKey(CatalogRoles.quotasAttribute(catalog, product)))
+                        || attributes(team).keySet().stream().anyMatch(a -> CatalogRoles.isClaimOf(a, catalog, product)))
                 .toList();
         if (teams.isEmpty()) {
             return;
@@ -145,6 +146,7 @@ public class TeamAlignment {
                 TeamMapper.putOrRemove(updated, featuresAttribute, features);
             }
             TeamMapper.removeFeatureQuota(updated, catalog, product, feature);
+            updated.remove(CatalogRoles.featureQuotasAttribute(catalog, product, feature));
             if (!updated.equals(attributes)) {
                 groups.replaceAttributes(realm, team.getId(), updated);
             }
@@ -165,7 +167,7 @@ public class TeamAlignment {
                 .orElse(List.of());
     }
 
-    private void apply(String realm, String orgName, String clientUuid, List<RoleRepresentation> catalogRoles,
+    private void apply(String realm, String clientUuid, List<RoleRepresentation> catalogRoles,
                        boolean metered, List<ParamDefinition> schema, OrgProduct orgProduct, GroupRepresentation team) {
         String catalog = orgProduct.catalog();
         String product = orgProduct.product();
@@ -191,63 +193,67 @@ public class TeamAlignment {
                 .filter(role -> wanted.contains(role.getName()) && !currentNames.contains(role.getName()))
                 .toList());
 
-        // attributes read by the mappers of the product
-        List<String> pools = metered ? featurePools(orgName, orgProduct, team, given) : productPools(orgName, orgProduct, team);
+        // attributes read by the mappers of the product, written again from scratch: a feature no longer given loses
+        // its pools
+        Map<String, List<String>> updated = new HashMap<>(attributes);
+        updated.keySet().removeIf(attribute -> CatalogRoles.isClaimOf(attribute, catalog, product));
+        Map<String, List<String>> quotas = metered ? featurePools(orgProduct, team, given) : productPools(orgProduct, team);
+        quotas.forEach((attribute, pools) -> TeamMapper.putOrRemove(updated, attribute, pools));
         // a metered product whose features given are no longer bought gives nothing: no parameters either. The choices
         // stay, they take effect again if the org buys the features again
         String params = metered && given.isEmpty() ? null : TeamClaims.params(schema, orgProduct.params());
-
-        Map<String, List<String>> updated = new HashMap<>(attributes);
-        TeamMapper.putOrRemove(updated, CatalogRoles.quotasAttribute(catalog, product), pools);
-        TeamMapper.putOrRemove(updated, CatalogRoles.paramsAttribute(catalog, product),
-                params == null ? List.of() : List.of(params));
+        if (params != null) {
+            updated.put(CatalogRoles.paramsAttribute(catalog, product), List.of(params));
+        }
         if (!updated.equals(attributes)) {
             groups.replaceAttributes(realm, team.getId(), updated);
         }
     }
 
-    /** Simple product: the pool of the org, plus the pool of the team if it has a quota. */
-    private List<String> productPools(String orgName, OrgProduct orgProduct, GroupRepresentation team) {
+    /** Simple product, attribute → pools: the pool of the org, plus the pool of the team if it has a quota. */
+    private Map<String, List<String>> productPools(OrgProduct orgProduct, GroupRepresentation team) {
         String catalog = orgProduct.catalog();
         String product = orgProduct.product();
         Map<String, List<String>> attributes = attributes(team);
         List<String> pools = new ArrayList<>();
         if (orgProduct.quota() != null && orgProduct.cycle() != null) {
-            pools.add(TeamClaims.pool(TeamGrants.orgPool(orgName), orgProduct.quota(), orgProduct.cycle()));
+            pools.add(TeamClaims.pool(TeamGrants.ORG_POOL, orgProduct.quota(), orgProduct.cycle()));
         }
         Long teamQuota = teamMapper.quota(attributes, catalog, product);
         if (teamQuota != null) {
             // a quota of team without cycle (changed outside of Orgkeep) takes the cycle of the org
             var cycle = Optional.ofNullable(teamMapper.quotaCycle(attributes, catalog, product)).orElse(orgProduct.cycle());
             if (cycle != null) {
-                pools.add(TeamClaims.pool(TeamGrants.teamPool(orgName, team.getName()), teamQuota, cycle));
+                pools.add(TeamClaims.pool(TeamGrants.teamPool(team.getName()), teamQuota, cycle));
             }
         }
-        return pools;
+        return Map.of(CatalogRoles.quotasAttribute(catalog, product), pools);
     }
 
     /**
-     * Metered product: for each metered feature the team gives, the pool of the org, plus the pool of the team if it
-     * has a quota for this feature.
+     * Metered product, attribute → pools: for each metered feature the team gives, its own attribute with the pool of
+     * the org, plus the pool of the team if it has a quota for this feature.
      */
-    private List<String> featurePools(String orgName, OrgProduct orgProduct, GroupRepresentation team, List<String> given) {
+    private Map<String, List<String>> featurePools(OrgProduct orgProduct, GroupRepresentation team, List<String> given) {
         Map<String, FeatureQuota> teamQuotas = teamMapper.featureQuotas(attributes(team), orgProduct.catalog(), orgProduct.product());
-        List<String> pools = new ArrayList<>();
+        Map<String, List<String>> quotas = new HashMap<>();
         given.forEach(feature -> {
             // the org quota only exists for a metered feature: a feature that is not metered has no pool at all
             FeatureQuota orgQuota = orgProduct.featureQuotas().get(feature);
             if (orgQuota == null) {
                 return;
             }
-            pools.add(TeamClaims.pool(feature, TeamGrants.orgPool(orgName), orgQuota.quota(), orgQuota.cycle()));
+            List<String> pools = new ArrayList<>();
+            pools.add(TeamClaims.pool(TeamGrants.ORG_POOL, orgQuota.quota(), orgQuota.cycle()));
             FeatureQuota teamQuota = teamQuotas.get(feature);
             if (teamQuota != null) {
                 // a quota of team without cycle (changed outside of Orgkeep) takes the cycle of the org
                 var cycle = Optional.ofNullable(teamQuota.cycle()).orElse(orgQuota.cycle());
-                pools.add(TeamClaims.pool(feature, TeamGrants.teamPool(orgName, team.getName()), teamQuota.quota(), cycle));
+                pools.add(TeamClaims.pool(TeamGrants.teamPool(team.getName()), teamQuota.quota(), cycle));
             }
+            quotas.put(CatalogRoles.featureQuotasAttribute(orgProduct.catalog(), orgProduct.product(), feature), pools);
         });
-        return pools;
+        return quotas;
     }
 
     /** The product itself, or one of its features ("shop-repository:scan"). */

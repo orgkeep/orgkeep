@@ -138,9 +138,9 @@ class TokenPreviewTest {
         assertEquals(paulId, preview.path("sub").asText(), preview.toString());
         assertEquals(Set.of("billing:stats", "billing:scan"), strings(preview.at("/resource_access/prod/roles")));
         assertEquals(strings(real.at("/resource_access/prod/roles")), strings(preview.at("/resource_access/prod/roles")));
-        // the claim of the catalog, quotas included: {"billing": {"quotas": [{"feature": "scan", ...}]}}.
+        // the claim of the catalog, quotas included: {"billing": {"scan": {"quotas": [{"pool": "/", ...}]}}}.
         // Checked present first: two missing claims would compare equal
-        assertEquals("scan", preview.at("/prod/billing/quotas/0/feature").asText(), preview.toString());
+        assertEquals("/", preview.at("/prod/billing/scan/quotas/0/pool").asText(), preview.toString());
         assertEquals(real.path("prod"), preview.path("prod"));
         assertTrue(strings(preview.path("aud")).contains("prod"), preview.path("aud").toString());
         // no null claim: a real token has none (the Keycloak representation has one per standard claim)

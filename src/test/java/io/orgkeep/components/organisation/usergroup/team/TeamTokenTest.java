@@ -140,7 +140,8 @@ class TeamTokenTest {
         JsonNode quotas = claims.at("/prod/shop-repository/quotas");
         // ops and analysts both carry the pool of the org: Keycloak keeps it once
         assertEquals(2, quotas.size(), quotas.toString());
-        assertEquals(Set.of("acme", "acme/ops"), pools(quotas));
+        // pools relative to the org: "/" its root, "/ops" the team
+        assertEquals(Set.of("/", "/ops"), pools(quotas));
         assertEquals("eu", claims.at("/prod/shop-repository/params/region").asText());
     }
 
@@ -194,7 +195,7 @@ class TeamTokenTest {
     // accounting gives every feature bought, sales gives stats and scan, readers gives stats only.
     // Emma is in accounting and sales, Stan in readers
 
-    // no access role, the features as roles, one pool per metered feature with its feature, the org pool once
+    // no access role, the features as roles, an object per metered feature with its pools, the org pool once
     @Test
     void aMeteredProduct() throws Exception {
         setUpBilling();
@@ -205,32 +206,35 @@ class TeamTokenTest {
         Set<String> roles = strings(claims.at("/resource_access/prod/roles"));
         assertEquals(Set.of("billing:stats", "billing:scan"), roles);
         assertTrue(strings(claims.path("aud")).contains("prod"), claims.path("aud").toString());
+        // no quota of product, and no object for stats (not metered): its role is enough
+        assertEquals(Set.of("scan"), fieldNames(claims.at("/prod/billing")));
         // accounting and sales both carry the pool of the org for scan: Keycloak keeps it once
-        JsonNode quotas = claims.at("/prod/billing/quotas");
+        JsonNode quotas = claims.at("/prod/billing/scan/quotas");
         assertEquals(1, quotas.size(), quotas.toString());
-        assertEquals("scan", quotas.get(0).path("feature").asText());
-        assertEquals("acme", quotas.get(0).path("pool").asText());
+        assertEquals("/", quotas.get(0).path("pool").asText());
         assertEquals(200, quotas.get(0).path("limit").asInt());
         assertEquals("daily", quotas.get(0).path("cycle").asText());
     }
 
-    // a quota of team for scan: the pool of the team next to the pool of the org, both with the feature
+    // a quota of team for scan in both teams of Emma: the token lists both pools of team next to the pool of the org,
+    // the API chooses how to count them
     @Test
-    void aQuotaOfTeamForAMeteredFeature() throws Exception {
+    void severalQuotasOfTeamForAMeteredFeature() throws Exception {
         setUpBilling();
         teamService.grantProduct(testRealm.name(), ORG, "sales", "prod", BILLING, new GrantProductRequest(
                 List.of("stats", "scan"), null, null, Map.of("scan", new TeamFeatureQuota(50L, null))));
+        teamService.grantProduct(testRealm.name(), ORG, "accounting", "prod", BILLING, new GrantProductRequest(
+                null, null, null, Map.of("scan", new TeamFeatureQuota(80L, null))));
 
-        JsonNode quotas = logIn("emma", "openid prod").at("/prod/billing/quotas");
+        JsonNode quotas = logIn("emma", "openid prod").at("/prod/billing/scan/quotas");
 
-        assertEquals(2, quotas.size(), quotas.toString());
+        assertEquals(3, quotas.size(), quotas.toString());
         Map<String, Integer> limits = new HashMap<>();
         quotas.forEach(quota -> {
-            assertEquals("scan", quota.path("feature").asText());
             assertEquals("daily", quota.path("cycle").asText());
             limits.put(quota.path("pool").asText(), quota.path("limit").asInt());
         });
-        assertEquals(Map.of("acme", 200, "acme/sales", 50), limits);
+        assertEquals(Map.of("/", 200, "/accounting", 80, "/sales", 50), limits);
     }
 
     // only a feature without quota: the role, and no entry for the product in the claim of the catalog
@@ -254,8 +258,8 @@ class TeamTokenTest {
 
         JsonNode claims = logIn("emma", "openid prod");
         assertTrue(strings(claims.at("/resource_access/prod/roles")).contains("billing:flow"), claims.toString());
-        assertEquals(Set.of("scan", "flow"), claims.at("/prod/billing/quotas").findValues("feature").stream()
-                .map(JsonNode::asText).collect(Collectors.toSet()));
+        assertEquals(Set.of("scan", "flow"), fieldNames(claims.at("/prod/billing")));
+        assertEquals(100, claims.at("/prod/billing/flow/quotas/0/limit").asInt(), claims.toString());
         // a team that listed its features does not get it: readers gives stats only
         assertFalse(strings(logIn("stan", "openid prod").at("/resource_access/prod/roles")).contains("billing:flow"));
     }
@@ -353,5 +357,12 @@ class TeamTokenTest {
 
     private static Set<String> pools(JsonNode quotas) {
         return quotas.findValues("pool").stream().map(JsonNode::asText).collect(Collectors.toSet());
+    }
+
+    /** The keys of a JSON object: for a product, "params", "quotas" or its metered features. */
+    private static Set<String> fieldNames(JsonNode node) {
+        Set<String> names = new HashSet<>();
+        node.fieldNames().forEachRemaining(names::add);
+        return names;
     }
 }

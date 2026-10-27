@@ -12,7 +12,6 @@ import org.mapstruct.ReportingPolicy;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -26,9 +25,6 @@ import static io.orgkeep.api.model.CatalogRoles.firstValue;
  */
 @Mapper(componentModel = "cdi", unmappedTargetPolicy = ReportingPolicy.WARN)
 public interface TeamMapper {
-
-    /** What a quota of team is for: a simple product (feature null), or a metered feature of a product. */
-    record QuotaScope(String catalog, String product, String feature) { }
 
     /** True if the team gives the product (choice of an org admin). */
     default boolean gives(Map<String, List<String>> attributes, String catalog, String product) {
@@ -94,26 +90,6 @@ public interface TeamMapper {
     }
 
     /**
-     * What the team has a quota for: a simple product (feature null), or a metered feature of a product. A member uses
-     * at most one quota of team for each of them (see TeamQuotas).
-     */
-    default Set<QuotaScope> quotaScopes(Map<String, List<String>> attributes) {
-        Set<QuotaScope> scopes = new HashSet<>();
-        attributes.keySet().forEach(attribute -> {
-            String[] grant = TeamGrants.productOf(attribute);
-            if (grant == null) {
-                return;
-            }
-            if (quota(attributes, grant[0], grant[1]) != null) {
-                scopes.add(new QuotaScope(grant[0], grant[1], null));
-            }
-            featureQuotas(attributes, grant[0], grant[1]).keySet()
-                    .forEach(feature -> scopes.add(new QuotaScope(grant[0], grant[1], feature)));
-        });
-        return scopes;
-    }
-
-    /**
      * The attributes of the team with new choices for the product. The derived attributes are left to TeamAlignment.
      *
      * @param features      null: every feature the org bought
@@ -150,8 +126,7 @@ public interface TeamMapper {
         updated.remove(TeamGrants.features(catalog, product));
         updated.remove(TeamGrants.quota(catalog, product));
         updated.remove(TeamGrants.quotaCycle(catalog, product));
-        updated.remove(CatalogRoles.quotasAttribute(catalog, product));
-        updated.remove(CatalogRoles.paramsAttribute(catalog, product));
+        updated.keySet().removeIf(attribute -> CatalogRoles.isClaimOf(attribute, catalog, product));
         return updated;
     }
 

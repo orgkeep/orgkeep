@@ -23,7 +23,6 @@ import io.orgkeep.api.model.TeamProduct;
 import io.orgkeep.components.catalog.CatalogSetup;
 import io.orgkeep.components.catalog.product.ProductMapper;
 import io.orgkeep.components.catalog.role.CatalogRoleMapper;
-import io.orgkeep.components.organisation.usergroup.team.TeamMapper.QuotaScope;
 import io.orgkeep.repository.keycloak.KeycloakClients;
 import io.orgkeep.repository.keycloak.KeycloakGroups;
 import io.orgkeep.repository.keycloak.KeycloakOrgs;
@@ -35,10 +34,8 @@ import org.keycloak.representations.idm.RoleRepresentation;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -56,7 +53,6 @@ public class TeamServiceImpl implements TeamService {
     private final ProductService productService;
     private final CatalogRoleService catalogRoleService;
     private final TeamAlignment alignment;
-    private final TeamQuotas teamQuotas;
     private final ProductMapper productMapper;
     private final CatalogRoleMapper catalogRoleMapper;
     private final TeamMapper teamMapper;
@@ -165,13 +161,6 @@ public class TeamServiceImpl implements TeamService {
             throw new InvalidRequestException("Quotas of team for features of the product '%s' that are not metered "
                     + "features given by the team: %s".formatted(product, withoutPool));
         }
-
-        Set<QuotaScope> newQuotas = new HashSet<>();
-        if (request.quota() != null) {
-            newQuotas.add(new QuotaScope(catalog, product, null));
-        }
-        request.featureQuotas().keySet().forEach(feature -> newQuotas.add(new QuotaScope(catalog, product, feature)));
-        teamQuotas.checkQuotas(realm, orgName, teamId, newQuotas);
 
         // the form proposes the cycle of the org: also the default of the API. Copied, it does not follow it afterwards
         QuotaCycle cycle = request.quota() == null ? null

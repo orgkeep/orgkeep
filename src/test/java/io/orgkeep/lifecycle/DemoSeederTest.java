@@ -116,11 +116,11 @@ class DemoSeederTest {
         JsonNode claims = logIn(DemoSeeder.ORG_USER);
 
         assertTrue(contains(claims.at("/resource_access/products/roles"), DemoSeeder.BILLING), claims.toString());
-        assertEquals("acme", claims.at("/products/billing/quotas/0/pool").asText(), claims.toString());
+        assertEquals("/", claims.at("/products/billing/quotas/0/pool").asText(), claims.toString());
     }
 
     // the example token of the spec: Paul, team sales, scope prod. Metered products: no access role, the features
-    // given as roles, a pool of the org per metered feature, plus the pool of sales for scan on billing
+    // given as roles, an object per metered feature with the pool of the org, plus the pool of sales for scan on billing
     @Test
     void paulGetsTheExampleTokenOfTheSpec() throws Exception {
         JsonNode claims = logIn(DemoSeeder.PAUL, "openid prod");
@@ -128,11 +128,10 @@ class DemoSeederTest {
         assertEquals(Set.of("billing:stats", "billing:scan", "shop:write", "shop:scan"),
                 strings(claims.at("/resource_access/prod/roles")));
         // two values of a multivalued attribute: compared as a set, Keycloak does not promise their order
-        assertEquals(Set.of(json("{\"feature\":\"scan\",\"pool\":\"acme\",\"limit\":200,\"cycle\":\"daily\"}"),
-                        json("{\"feature\":\"scan\",\"pool\":\"acme/sales\",\"limit\":50,\"cycle\":\"daily\"}")),
-                elements(claims.at("/prod/billing/quotas")));
-        assertEquals(json("[{\"feature\":\"scan\",\"pool\":\"acme\",\"limit\":100,\"cycle\":\"daily\"}]"),
-                claims.at("/prod/shop/quotas"));
+        assertEquals(Set.of(json("{\"pool\":\"/\",\"limit\":200,\"cycle\":\"daily\"}"),
+                        json("{\"pool\":\"/sales\",\"limit\":50,\"cycle\":\"daily\"}")),
+                elements(claims.at("/prod/billing/scan/quotas")));
+        assertEquals(json("[{\"pool\":\"/\",\"limit\":100,\"cycle\":\"daily\"}]"), claims.at("/prod/shop/scan/quotas"));
         // without the scope of sandbox, nothing of it
         assertTrue(claims.at("/resource_access/sandbox").isMissingNode(), claims.toString());
     }
@@ -144,8 +143,8 @@ class DemoSeederTest {
 
         assertEquals(Set.of("billing:read", "billing:write", "billing:stats", "billing:scan", "billing:flow"),
                 strings(claims.at("/resource_access/prod/roles")));
-        assertEquals(Set.of("scan:200", "flow:100"), limits(claims.at("/prod/billing/quotas")));
-        assertEquals(Set.of("scan:1000", "flow:1000"), limits(claims.at("/sandbox/billing/quotas")));
+        assertEquals(Set.of("scan:200", "flow:100"), limits(claims.at("/prod/billing")));
+        assertEquals(Set.of("scan:1000", "flow:1000"), limits(claims.at("/sandbox/billing")));
         assertTrue(claims.at("/prod/shop").isMissingNode(), claims.toString());
     }
 
@@ -220,10 +219,11 @@ class DemoSeederTest {
         return elements;
     }
 
-    /** "feature:limit" for each pool of the quotas of a metered product. */
-    private static Set<String> limits(JsonNode quotas) {
+    /** "feature:limit" for each pool of the metered features of a product, read from their objects. */
+    private static Set<String> limits(JsonNode product) {
         Set<String> limits = new HashSet<>();
-        quotas.forEach(pool -> limits.add(pool.path("feature").asText() + ":" + pool.path("limit").asInt()));
+        product.fields().forEachRemaining(field -> field.getValue().path("quotas")
+                .forEach(pool -> limits.add(field.getKey() + ":" + pool.path("limit").asInt())));
         return limits;
     }
 

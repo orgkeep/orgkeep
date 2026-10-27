@@ -15,7 +15,8 @@ import java.util.TreeMap;
 
 /**
  * The JSON values written on the groups of the teams, that the native mappers of a product put in the tokens as they
- * are: one value per quota pool ({@code <catalog>.<product>.quotas}), one object for the parameters
+ * are: one value per quota pool ({@code <catalog>.<product>.quotas} for a simple product,
+ * {@code <catalog>.<product>.<feature>.quotas} for a metered feature), one object for the parameters
  * ({@code <catalog>.<product>.params}).
  */
 public final class TeamClaims {
@@ -28,22 +29,13 @@ public final class TeamClaims {
     }
 
     /**
-     * One pool of a product, e.g. {"pool":"acme","limit":1000,"cycle":"monthly"}. Always built the same way, fields in
-     * the same order: Keycloak only merges identical values, and the pool of the org is carried by every team giving
-     * the product. Pool keys are made of slugs, nothing to escape.
+     * One pool of a simple product or of a metered feature, e.g. {"pool":"/","limit":1000,"cycle":"monthly"}: the API
+     * keys its counter by (org, catalog, product, feature, pool). Always built the same way, fields in the same order:
+     * Keycloak only merges identical values, and the pool of the org is carried by every team giving the product.
+     * Pool names are made of slugs, nothing to escape.
      */
     public static String pool(String pool, long limit, QuotaCycle cycle) {
         return "{\"pool\":\"%s\",\"limit\":%d,\"cycle\":\"%s\"}".formatted(pool, limit, cycle.getValue());
-    }
-
-    /**
-     * One pool of a metered feature, e.g. {"feature":"scan","pool":"acme","limit":200,"cycle":"daily"}: the API keys
-     * its counter by (catalog, product, feature, pool). Same rule as {@link #pool(String, long, QuotaCycle)}: always
-     * built the same way, feature first, so that Keycloak merges the pool of the org carried by several teams.
-     */
-    public static String pool(String feature, String pool, long limit, QuotaCycle cycle) {
-        return "{\"feature\":\"%s\",\"pool\":\"%s\",\"limit\":%d,\"cycle\":\"%s\"}"
-                .formatted(feature, pool, limit, cycle.getValue());
     }
 
     /**

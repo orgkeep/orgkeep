@@ -136,7 +136,8 @@ public interface ProductMapper {
      * The two native mappers of a product on the scope of its catalog. They read the attributes of the groups of the user
      * (aggregate.attrs), set on the teams giving the product:
      * <ul>
-     *   <li>quotas: multivalued, one JSON object per pool. Keycloak keeps a value given by several teams once;</li>
+     *   <li>quotas: multivalued, one JSON object per pool. Keycloak keeps a value given by several teams once. Empty for
+     *       a metered product, whose quotas are those of its features ({@link #toFeatureMapper});</li>
      *   <li>params: a single JSON object.</li>
      * </ul>
      * Named after their attribute: unique in the scope, and found back when the product is deleted.
@@ -145,6 +146,15 @@ public interface ProductMapper {
         return List.of(
                 attributeMapper(CatalogRoles.quotasAttribute(catalog, product), true),
                 attributeMapper(CatalogRoles.paramsAttribute(catalog, product), false));
+    }
+
+    /**
+     * The native mapper of a metered feature: its quota pools, one JSON object per pool, in an object of its own next
+     * to the parameters of the product ({"billing": {"params": {...}, "scan": {"quotas": [...]}}}). Keycloak merges the
+     * nested objects written by several mappers.
+     */
+    default ProtocolMapperRepresentation toFeatureMapper(String catalog, String product, String feature) {
+        return attributeMapper(CatalogRoles.featureQuotasAttribute(catalog, product, feature), true);
     }
 
     private static ProtocolMapperRepresentation attributeMapper(String attribute, boolean multivalued) {

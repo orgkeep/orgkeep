@@ -65,6 +65,7 @@ public class ProductServiceImpl implements ProductService {
         ParamRules.checkSchema(request.params());
         Set<String> featureNames = new HashSet<>();
         request.features().forEach(feature -> {
+            checkNotReserved(feature.name());
             if (!featureNames.add(feature.name())) {
                 throw new InvalidRequestException("Feature '%s' is given twice".formatted(feature.name()));
             }
@@ -87,6 +88,10 @@ public class ProductServiceImpl implements ProductService {
             scopes.addClientRolesToScope(realm, ids.scopeId(), ids.clientUuid(), created);
             productMapper.toMappers(catalog, request.name())
                     .forEach(mapper -> scopes.addMapper(realm, ids.scopeId(), mapper));
+            request.features().stream()
+                    .filter(Feature::metered)
+                    .forEach(feature -> scopes.addMapper(realm, ids.scopeId(),
+                            productMapper.toFeatureMapper(catalog, request.name(), feature.name())));
         } catch (RuntimeException e) {
             // admin API calls are not transactional: a product without its features or mappers must not stay behind
             remove(realm, catalog, ids, request.name());
@@ -165,6 +170,7 @@ public class ProductServiceImpl implements ProductService {
         if (!SLUG.matcher(feature).matches() || feature.length() > 50) {
             throw new InvalidRequestException("Feature name '%s': lowercase letters, digits and inner hyphens only".formatted(feature));
         }
+        checkNotReserved(feature);
         CatalogSetup.Ids ids = catalogSetup.get(realm, catalog);
         getProductRole(realm, catalog, ids, product);
 
@@ -199,6 +205,9 @@ public class ProductServiceImpl implements ProductService {
                     new Feature(feature, displayName, metered));
             clients.createRole(realm, ids.clientUuid(), representation);
             scopes.addClientRolesToScope(realm, ids.scopeId(), ids.clientUuid(), List.of(representation.getName()));
+            if (metered) {
+                scopes.addMapper(realm, ids.scopeId(), productMapper.toFeatureMapper(catalog, product, feature));
+            }
             log.info("Feature '{}' added to product '{}' of catalog '{}' in realm '{}'", feature, product, catalog, realm);
         }
         return get(realm, catalog, product);
@@ -215,12 +224,17 @@ public class ProductServiceImpl implements ProductService {
                 .findFirst()
                 .orElseThrow(() -> new FeatureNotFoundException(catalog, product, feature));
         Map<String, String> assignments = assignments(realm, catalog, ids.clientUuid(), product);
-        if (productMapper.toFeature(product, role).metered() && !assignments.isEmpty()) {
+        boolean metered = productMapper.toFeature(product, role).metered();
+        if (metered && !assignments.isEmpty()) {
             checkMeteredFeatureCanGo(realm, product, feature, roles, assignments);
         }
 
         // Keycloak removes the role from the groups holding it: the teams lose it at once
         clients.deleteRole(realm, ids.clientUuid(), roleName);
+        if (metered) {
+            scopes.removeMappers(realm, ids.scopeId(),
+                    List.of(productMapper.toFeatureMapper(catalog, product, feature).getName()));
+        }
         // the orgs that bought it no longer have it, and their teams that listed it forget it
         assignments.forEach((org, path) -> {
             groups.findId(realm, path).ifPresent(groupId -> {
@@ -401,6 +415,16 @@ public class ProductServiceImpl implements ProductService {
         }
     }
 
+    /**
+     * @throws InvalidRequestException if the name of the feature is a key of the object of its product in the tokens
+     */
+    private static void checkNotReserved(String feature) {
+        if (CatalogRoles.RESERVED_FEATURE_NAMES.contains(feature)) {
+            throw new InvalidRequestException("Feature name '%s' is reserved, as are %s"
+                    .formatted(feature, new TreeSet<>(CatalogRoles.RESERVED_FEATURE_NAMES)));
+        }
+    }
+
     private boolean isAssigned(String realm, String catalog, CatalogSetup.Ids ids, String product) {
         return !assignments(realm, catalog, ids.clientUuid(), product).isEmpty();
     }
@@ -447,14 +471,20 @@ public class ProductServiceImpl implements ProductService {
         return updated;
     }
 
-    /** Deletes what exists of the product: its features, its mappers, its role. */
+    /** Deletes what exists of the product: its features, its mappers and those of its features, its role. */
     private void remove(String realm, String catalog, CatalogSetup.Ids ids, String product) {
-        clients.listRoles(realm, ids.clientUuid()).stream()
-                .filter(role -> productMapper.isFeatureOf(role, product))
-                .forEach(role -> clients.deleteRole(realm, ids.clientUuid(), role.getName()));
-        scopes.removeMappers(realm, ids.scopeId(), productMapper.toMappers(catalog, product).stream()
+        List<String> mappers = new ArrayList<>(productMapper.toMappers(catalog, product).stream()
                 .map(ProtocolMapperRepresentation::getName)
                 .toList());
+        clients.listRoles(realm, ids.clientUuid()).stream()
+                .filter(role -> productMapper.isFeatureOf(role, product))
+                .forEach(role -> {
+                    clients.deleteRole(realm, ids.clientUuid(), role.getName());
+                    // a feature that is not metered has no mapper: its name is simply not found
+                    String feature = productMapper.toFeature(product, role).name();
+                    mappers.add(productMapper.toFeatureMapper(catalog, product, feature).getName());
+                });
+        scopes.removeMappers(realm, ids.scopeId(), mappers);
         if (clients.findRole(realm, ids.clientUuid(), product).isPresent()) {
             clients.deleteRole(realm, ids.clientUuid(), product);
         }

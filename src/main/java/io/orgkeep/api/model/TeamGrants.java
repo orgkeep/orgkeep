@@ -81,13 +81,17 @@ public final class TeamGrants {
         return parts.length == 2 ? parts : null;
     }
 
-    /** Key of the pool of the org in the tokens: its name. */
-    public static String orgPool(String orgName) {
-        return orgName;
-    }
+    /**
+     * Name of the pool of the org in the tokens: "/", the root of the org. Relative to the org: the API keys its
+     * counter with the org of the user.
+     */
+    public static final String ORG_POOL = "/";
 
-    /** Key of the pool of a team in the tokens, e.g. "acme/ops": stable, a team recreated with the same name gets it back. */
-    public static String teamPool(String orgName, String team) {
-        return orgName + "/" + team;
+    /**
+     * Name of the pool of a team in the tokens, e.g. "/ops", a sub-pool of the org: stable, a team recreated with the
+     * same name gets it back.
+     */
+    public static String teamPool(String team) {
+        return ORG_POOL + team;
     }
 }

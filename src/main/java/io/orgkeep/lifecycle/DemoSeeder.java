@@ -173,7 +173,7 @@ public class DemoSeeder {
         }
 
         // accounting: everything on billing; sales: write and scan on shop, stats and scan on billing. In prod, sales
-        // has its own budget for scan on billing (50 a day, pool acme/sales), on top of the pool of acme
+        // has its own budget for scan on billing (50 a day, pool "/sales"), on top of the pool of acme ("/")
         userGroupService.create(realm, ORG, new CreateUserGroupRequest(ACCOUNTING));
         userGroupService.create(realm, ORG, new CreateUserGroupRequest(SALES));
         for (String catalog : List.of(PROD, SANDBOX)) {

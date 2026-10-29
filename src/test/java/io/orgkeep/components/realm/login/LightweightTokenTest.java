@@ -42,13 +42,19 @@ import org.keycloak.representations.idm.ClientScopeRepresentation;
 import org.keycloak.representations.idm.CredentialRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 
+import java.math.BigInteger;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.security.KeyFactory;
+import java.security.Signature;
+import java.security.interfaces.RSAPublicKey;
+import java.security.spec.RSAPublicKeySpec;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -264,6 +270,118 @@ class LightweightTokenTest {
         HttpResponse<String> response = post("/protocol/openid-connect/token/introspect",
                 Map.of("token", logIn("paul", "openid prod")), basic(old));
         assertEquals(401, response.statusCode(), response.body());
+    }
+
+    // --- phantom token: a gateway introspects the lightweight token and passes a full JWT to the APIs behind it.
+    // The introspection answers JSON, which is no bearer token. Keycloak can add the full access token, signed, as a
+    // "jwt" field: the attribute "Support JWT claim in Introspection Response" on the introspecting client (the
+    // catalog), and "Accept: application/jwt" on the request. Spike of 2026-10-29
+
+    private static final String JWT_IN_INTROSPECTION = "client.introspection.response.allow.jwt.claim.enabled";
+
+    // the attribute goes on the client that introspects, and only works with the header
+    @Test
+    void theJwtFieldNeedsTheAttributeOnTheCatalogAndTheHeader() throws Exception {
+        setLightweightTokens(true);
+        CatalogCredentials prod = catalogService.regenerateSecret(testRealm.name(), "prod");
+
+        // on the login client, the client the token was issued to: no effect
+        setClientAttribute(testRealm.name(), JWT_IN_INTROSPECTION, "true");
+        assertFalse(introspectAsJwt(prod, logIn("paul", "openid prod")).has("jwt"));
+
+        setClientAttribute("prod", JWT_IN_INTROSPECTION, "true");
+        assertTrue(introspectAsJwt(prod, logIn("paul", "openid prod")).has("jwt"));
+        // without "Accept: application/jwt": the plain JSON answer
+        assertFalse(introspect(prod, logIn("paul", "openid prod")).has("jwt"));
+    }
+
+    /** The introspection with "Accept: application/jwt": Keycloak adds the "jwt" field only with this header. */
+    private JsonNode introspectAsJwt(CatalogCredentials credentials, String token) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder(URI.create(credentials.introspectionUrl()))
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .header("Accept", "application/jwt")
+                .header("Authorization", "Basic " + basic(credentials))
+                .POST(HttpRequest.BodyPublishers.ofString("token=" + URLEncoder.encode(token, StandardCharsets.UTF_8)))
+                .build();
+        try (HttpClient http = HttpClient.newHttpClient()) {
+            HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, response.statusCode(), response.body());
+            return json.readTree(response.body());
+        }
+    }
+
+    // the jwt field is the full version of the lightweight token: same jti and exp, the content of a full token
+    // (roles, claims of the catalog), no marker, signed by Keycloak. An API behind the gateway verifies it offline
+    @Test
+    void theJwtFieldIsTheFullToken() throws Exception {
+        String full = logIn("paul", "openid prod");
+        setLightweightTokens(true);
+        CatalogCredentials prod = catalogService.regenerateSecret(testRealm.name(), "prod");
+        setClientAttribute("prod", JWT_IN_INTROSPECTION, "true");
+
+        String lightweight = logIn("paul", "openid prod");
+        String jwt = introspectAsJwt(prod, lightweight).path("jwt").asText();
+        JsonNode claims = claims(jwt);
+        log.info("Full token from the introspection: {} bytes (lightweight {})", jwt.length(), lightweight.length());
+
+        assertTrue(signatureValid(jwt), "signed with the keys of the realm");
+        assertEquals(claims(lightweight).path("jti"), claims.path("jti"));
+        assertEquals(claims(lightweight).path("exp"), claims.path("exp"));
+        assertTrue(claims.path(MARKER).isMissingNode(), claims.toString());
+        assertEquals(Set.of(PRODUCT, PRODUCT + ":scan"), strings(claims.at("/resource_access/prod/roles")));
+        assertEquals(claims(full).path("resource_access"), claims.path("resource_access"));
+        assertEquals(CatalogClaims.of(claims(full), "prod"), CatalogClaims.of(claims, "prod"));
+    }
+
+    // RFC 9701 (the whole introspection answer as a signed JWT) is not supported: plain JSON, whatever the Accept
+    @Test
+    void theIntrospectionAnswerAsJwtIsNotSupported() throws Exception {
+        setLightweightTokens(true);
+        CatalogCredentials prod = catalogService.regenerateSecret(testRealm.name(), "prod");
+        HttpRequest request = HttpRequest.newBuilder(URI.create(prod.introspectionUrl()))
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .header("Accept", "application/token-introspection+jwt")
+                .header("Authorization", "Basic " + basic(prod))
+                .POST(HttpRequest.BodyPublishers.ofString(
+                        "token=" + URLEncoder.encode(logIn("paul", "openid prod"), StandardCharsets.UTF_8)))
+                .build();
+        try (HttpClient http = HttpClient.newHttpClient()) {
+            HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+            assertEquals("application/json", response.headers().firstValue("Content-Type").orElse(null));
+            assertTrue(json.readTree(response.body()).path("active").asBoolean(), response.body());
+        }
+    }
+
+    private void setClientAttribute(String clientId, String name, String value) {
+        var resource = testRealm.resource().clients().get(testRealm.resource().clients().findByClientId(clientId).get(0).getId());
+        ClientRepresentation client = resource.toRepresentation();
+        Map<String, String> attributes = new HashMap<>(client.getAttributes() == null ? Map.of() : client.getAttributes());
+        attributes.put(name, value);
+        client.setAttributes(attributes);
+        resource.update(client);
+    }
+
+    /** The RS256 signature of the token, checked with the public keys of the realm (JWKS), as an API does offline. */
+    private boolean signatureValid(String jwt) throws Exception {
+        String[] parts = jwt.split("\\.");
+        String kid = json.readTree(Base64.getUrlDecoder().decode(parts[0])).path("kid").asText();
+        HttpResponse<String> certs;
+        try (HttpClient http = HttpClient.newHttpClient()) {
+            certs = http.send(HttpRequest.newBuilder(URI.create(keycloakUrl + "/realms/" + testRealm.name()
+                    + "/protocol/openid-connect/certs")).build(), HttpResponse.BodyHandlers.ofString());
+        }
+        for (JsonNode key : json.readTree(certs.body()).path("keys")) {
+            if (kid.equals(key.path("kid").asText()) && "RSA".equals(key.path("kty").asText())) {
+                RSAPublicKey publicKey = (RSAPublicKey) KeyFactory.getInstance("RSA").generatePublic(new RSAPublicKeySpec(
+                        new BigInteger(1, Base64.getUrlDecoder().decode(key.path("n").asText())),
+                        new BigInteger(1, Base64.getUrlDecoder().decode(key.path("e").asText()))));
+                Signature signature = Signature.getInstance("SHA256withRSA");
+                signature.initVerify(publicKey);
+                signature.update((parts[0] + "." + parts[1]).getBytes(StandardCharsets.US_ASCII));
+                return signature.verify(Base64.getUrlDecoder().decode(parts[2]));
+            }
+        }
+        return false;
     }
 
     // --- the token preview and the service accounts

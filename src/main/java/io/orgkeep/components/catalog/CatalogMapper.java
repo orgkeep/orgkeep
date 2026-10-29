@@ -3,6 +3,7 @@ package io.orgkeep.components.catalog;
 import io.orgkeep.api.model.Catalog;
 import io.orgkeep.api.model.Catalogs;
 import io.orgkeep.api.model.CreateCatalogRequest;
+import io.orgkeep.api.model.LightweightTokens;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.ClientScopeRepresentation;
 import org.mapstruct.BeanMapping;
@@ -19,7 +20,9 @@ public interface CatalogMapper {
 
     /**
      * The catalog client is a container for the product roles: no login flow is enabled on it. Confidential: its
-     * secret is what the APIs of the catalog introspect the tokens with (see CatalogService.regenerateSecret).
+     * secret is what the APIs of the catalog introspect the tokens with (see CatalogService.regenerateSecret). Its
+     * introspection may also give the full token, signed, to a gateway asking for it (see
+     * {@link LightweightTokens#INTROSPECTION_JWT_ATTRIBUTE}).
      */
     // ClientRepresentation has dozens of properties: only map the listed ones instead of warning on each
     @BeanMapping(ignoreByDefault = true)
@@ -31,7 +34,12 @@ public interface CatalogMapper {
     @Mapping(target = "standardFlowEnabled", constant = "false")
     @Mapping(target = "directAccessGrantsEnabled", constant = "false")
     @Mapping(target = "serviceAccountsEnabled", constant = "false")
+    @Mapping(target = "attributes", expression = "java(clientAttributes())")
     ClientRepresentation toClient(CreateCatalogRequest request);
+
+    default Map<String, String> clientAttributes() {
+        return Map.of(LightweightTokens.INTROSPECTION_JWT_ATTRIBUTE, "true");
+    }
 
     // several sources: the client fills the names, productCount the property of the same name
     @Mapping(target = "name", source = "client.clientId")

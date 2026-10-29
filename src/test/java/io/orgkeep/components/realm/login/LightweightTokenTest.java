@@ -54,7 +54,6 @@ import java.security.Signature;
 import java.security.interfaces.RSAPublicKey;
 import java.security.spec.RSAPublicKeySpec;
 import java.util.Base64;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -274,22 +273,16 @@ class LightweightTokenTest {
 
     // --- phantom token: a gateway introspects the lightweight token and passes a full JWT to the APIs behind it.
     // The introspection answers JSON, which is no bearer token. Keycloak can add the full access token, signed, as a
-    // "jwt" field: the attribute "Support JWT claim in Introspection Response" on the introspecting client (the
-    // catalog), and "Accept: application/jwt" on the request. Spike of 2026-10-29
+    // "jwt" field: the attribute "Support JWT claim in Introspection Response" on the introspecting client (set by
+    // Orgkeep on every catalog client), and "Accept: application/jwt" on the request. Spike of 2026-10-29
 
-    private static final String JWT_IN_INTROSPECTION = "client.introspection.response.allow.jwt.claim.enabled";
-
-    // the attribute goes on the client that introspects, and only works with the header
+    // only with the header; the attribute is read on the client that introspects (on the login client, the client the
+    // token was issued to, it has no effect: found by the spike)
     @Test
-    void theJwtFieldNeedsTheAttributeOnTheCatalogAndTheHeader() throws Exception {
+    void theCatalogGivesTheFullJwtOnlyWithTheHeader() throws Exception {
         setLightweightTokens(true);
         CatalogCredentials prod = catalogService.regenerateSecret(testRealm.name(), "prod");
 
-        // on the login client, the client the token was issued to: no effect
-        setClientAttribute(testRealm.name(), JWT_IN_INTROSPECTION, "true");
-        assertFalse(introspectAsJwt(prod, logIn("paul", "openid prod")).has("jwt"));
-
-        setClientAttribute("prod", JWT_IN_INTROSPECTION, "true");
         assertTrue(introspectAsJwt(prod, logIn("paul", "openid prod")).has("jwt"));
         // without "Accept: application/jwt": the plain JSON answer
         assertFalse(introspect(prod, logIn("paul", "openid prod")).has("jwt"));
@@ -317,7 +310,6 @@ class LightweightTokenTest {
         String full = logIn("paul", "openid prod");
         setLightweightTokens(true);
         CatalogCredentials prod = catalogService.regenerateSecret(testRealm.name(), "prod");
-        setClientAttribute("prod", JWT_IN_INTROSPECTION, "true");
 
         String lightweight = logIn("paul", "openid prod");
         String jwt = introspectAsJwt(prod, lightweight).path("jwt").asText();
@@ -350,15 +342,6 @@ class LightweightTokenTest {
             assertEquals("application/json", response.headers().firstValue("Content-Type").orElse(null));
             assertTrue(json.readTree(response.body()).path("active").asBoolean(), response.body());
         }
-    }
-
-    private void setClientAttribute(String clientId, String name, String value) {
-        var resource = testRealm.resource().clients().get(testRealm.resource().clients().findByClientId(clientId).get(0).getId());
-        ClientRepresentation client = resource.toRepresentation();
-        Map<String, String> attributes = new HashMap<>(client.getAttributes() == null ? Map.of() : client.getAttributes());
-        attributes.put(name, value);
-        client.setAttributes(attributes);
-        resource.update(client);
     }
 
     /** The RS256 signature of the token, checked with the public keys of the realm (JWKS), as an API does offline. */

@@ -4,6 +4,7 @@ import io.orgkeep.api.model.Catalogs;
 import io.orgkeep.api.model.CreateCatalogRequest;
 import io.orgkeep.api.model.CreateProductRequest;
 import io.orgkeep.api.model.Feature;
+import io.orgkeep.api.model.LightweightTokens;
 import io.orgkeep.api.model.UpdateCatalogRequest;
 import io.orgkeep.fixtures.TestRealm;
 import io.orgkeep.web.CurrentRealm;
@@ -99,6 +100,9 @@ class CatalogsResourceTest {
         assertFalse(scopeNames(testRealm.resource().clients().get(loginClientUuid).getDefaultClientScopes())
                 .contains(SANDBOX));
         assertFalse(testRealm.resource().clients().findByClientId(SANDBOX).get(0).isStandardFlowEnabled());
+        // its introspection can give the full JWT to a gateway asking for it (see LightweightTokenTest)
+        assertEquals("true", testRealm.resource().clients().findByClientId(SANDBOX).get(0).getAttributes()
+                .get(LightweightTokens.INTROSPECTION_JWT_ATTRIBUTE));
         ClientScopeRepresentation scope = testRealm.resource().clientScopes().findAll().stream()
                 .filter(s -> SANDBOX.equals(s.getName()))
                 .findFirst().orElseThrow();

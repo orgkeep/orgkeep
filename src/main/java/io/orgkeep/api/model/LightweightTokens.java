@@ -16,6 +16,14 @@ public final class LightweightTokens {
     /** The marker claim, also the name of its client scope: neutral, like every name visible in a token. */
     public static final String MARKER_CLAIM = "lightweight";
 
+    /**
+     * Client attribute of Keycloak ("Support JWT claim in Introspection Response"), on the client that introspects:
+     * with "Accept: application/jwt" on the introspection, the answer gets a "jwt" field, the full access token signed
+     * by Keycloak. For a gateway that introspects the lightweight tokens and passes full ones to the APIs behind it
+     * (phantom token). Set on every catalog client: without the header, nothing changes.
+     */
+    public static final String INTROSPECTION_JWT_ATTRIBUTE = "client.introspection.response.allow.jwt.claim.enabled";
+
     private LightweightTokens() {
     }
 }

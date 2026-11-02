@@ -6,7 +6,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 
 /**
  * The flat claims of a catalog in a token: one top-level claim per product and per metered feature,
- * "prod.billing" and "prod.billing.scan". There is no "prod" object to read them from at once.
+ * "prod.billing" and "prod.billing.search". There is no "prod" object to read them from at once.
  */
 public final class CatalogClaims {
 

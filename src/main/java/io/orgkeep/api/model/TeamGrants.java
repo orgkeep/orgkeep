@@ -12,11 +12,11 @@ package io.orgkeep.api.model;
  * </ul>
  * <pre>
  * grant:prod:shop-repository              = all | listed   the team gives the product
- * grant:prod:shop-repository:features     = scan, ...      if listed: the features asked for (absent: none)
+ * grant:prod:shop-repository:features     = search, ...    if listed: the features asked for (absent: none)
  * grant:prod:shop-repository:quota        = 300            optional quota of the team
  * grant:prod:shop-repository:quota-cycle  = monthly        its cycle
- * grant:prod:billing:quota:scan           = 50             metered product: optional quota of the team for a feature
- * grant:prod:billing:quota-cycle:scan     = daily          its cycle
+ * grant:prod:billing:quota:search         = 50            metered product: optional quota of the team for a feature
+ * grant:prod:billing:quota-cycle:search   = daily          its cycle
  * </pre>
  * The separator ":" is never in a slug: a choice never clashes with a derived attribute ("prod.shop-repository.quotas"),
  * whatever the names of the catalogs and products.
@@ -51,7 +51,7 @@ public final class TeamGrants {
         return product(catalog, product) + SEPARATOR + "quota-cycle";
     }
 
-    /** Quota of the team for a metered feature of the product, e.g. "grant:prod:billing:quota:scan". */
+    /** Quota of the team for a metered feature of the product, e.g. "grant:prod:billing:quota:search". */
     public static String featureQuota(String catalog, String product, String feature) {
         return quota(catalog, product) + SEPARATOR + feature;
     }
@@ -61,7 +61,7 @@ public final class TeamGrants {
     }
 
     /**
-     * The feature of a {@link #featureQuota} attribute of the product ("grant:prod:billing:quota:scan" gives "scan"),
+     * The feature of a {@link #featureQuota} attribute of the product ("grant:prod:billing:quota:search" gives "search"),
      * null for another attribute.
      */
     public static String featureOfQuota(String attribute, String catalog, String product) {

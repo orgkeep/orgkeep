@@ -77,8 +77,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *   <li>the introspection recomputes the claims from the scopes listed in the "scope" claim: a catalog scope must be
  *       listed there, or its claims are lost. Orgkeep creates them with include.in.token.scope=true (CatalogMapper).</li>
  * </ul>
- * Setup: the model of TeamTokenTest, reduced to one product. "shop-repository" in prod (features scan and flow,
- * parameter region), assigned to acme (1000 a month, scan bought); Paul is in "ops", which gives the product with a
+ * Setup: the model of TeamTokenTest, reduced to one product. "shop-repository" in prod (features search and dig,
+ * parameter region), assigned to acme (1000 a month, search bought); Paul is in "ops", which gives the product with a
  * quota of team of 300. A second catalog, sandbox, where acme has nothing.
  */
 @Slf4j
@@ -125,11 +125,11 @@ class LightweightTokenTest {
         catalogService.create(realm, new CreateCatalogRequest("prod", "Production", null));
         catalogService.create(realm, new CreateCatalogRequest("sandbox", "Sandbox", null));
         productService.create(realm, "prod", new CreateProductRequest(PRODUCT, "Shop repository", null,
-                List.of(new Feature("scan", null), new Feature("flow", null)),
+                List.of(new Feature("search", null), new Feature("dig", null)),
                 List.of(new ParamDefinition("region", ParamType.ENUM, true, "eu", List.of("eu", "us")))));
         orgService.create(realm, new CreateOrgRequest(ORG, Set.of(), null, null));
         productService.assign(realm, ORG, "prod", PRODUCT,
-                new AssignProductRequest(1000L, QuotaCycle.MONTHLY, List.of("scan"), Map.of()));
+                new AssignProductRequest(1000L, QuotaCycle.MONTHLY, List.of("search"), Map.of()));
 
         paulId = member("paul");
         userGroupService.create(realm, ORG, new CreateUserGroupRequest("ops"));
@@ -192,7 +192,7 @@ class LightweightTokenTest {
         log.info("Introspection of the lightweight token by prod: {}", introspection.toPrettyString());
 
         assertTrue(introspection.path("active").asBoolean(), introspection.toString());
-        assertEquals(Set.of(PRODUCT, PRODUCT + ":scan"), strings(introspection.at("/resource_access/prod/roles")));
+        assertEquals(Set.of(PRODUCT, PRODUCT + ":search"), strings(introspection.at("/resource_access/prod/roles")));
         assertEquals(Set.of("/", "/ops"), pools(introspection.at("/prod.shop-repository/quotas")));
         assertEquals("eu", introspection.at("/prod.shop-repository/params/region").asText());
         assertFalse(introspection.at("/resource_access/org-acme").isMissingNode(), introspection.toString());
@@ -320,7 +320,7 @@ class LightweightTokenTest {
         assertEquals(claims(lightweight).path("jti"), claims.path("jti"));
         assertEquals(claims(lightweight).path("exp"), claims.path("exp"));
         assertTrue(claims.path(MARKER).isMissingNode(), claims.toString());
-        assertEquals(Set.of(PRODUCT, PRODUCT + ":scan"), strings(claims.at("/resource_access/prod/roles")));
+        assertEquals(Set.of(PRODUCT, PRODUCT + ":search"), strings(claims.at("/resource_access/prod/roles")));
         assertEquals(claims(full).path("resource_access"), claims.path("resource_access"));
         assertEquals(CatalogClaims.of(claims(full), "prod"), CatalogClaims.of(claims, "prod"));
     }

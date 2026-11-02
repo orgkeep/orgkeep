@@ -6,7 +6,7 @@ import jakarta.validation.constraints.Size;
 
 /**
  * A feature of a product: a permission ("read", "write", "stats") or, if metered, a capacity an org buys with its own
- * quota ("scan", "flow"). In the tokens: "&lt;product&gt;:&lt;name&gt;" in resource_access.&lt;catalog&gt;.roles.
+ * quota ("search", "dig"). In the tokens: "&lt;product&gt;:&lt;name&gt;" in resource_access.&lt;catalog&gt;.roles.
  *
  * @param name        lowercase slug, unique in its product
  * @param displayName optional

@@ -1,7 +1,7 @@
 package io.orgkeep.api.model;
 
 /**
- * A role valid for every product of a catalog ("scanner", "stats", "anonymous"): the API of the realm owner combines
+ * A role valid for every product of a catalog ("searcher", "stats", "anonymous"): the API of the realm owner combines
  * it with the products of the user. In the tokens: its name in resource_access.&lt;catalog&gt;.roles.
  *
  * @param orgGrantable true: the org admins grant it through their teams. false: reserved to the realm owner, who grants

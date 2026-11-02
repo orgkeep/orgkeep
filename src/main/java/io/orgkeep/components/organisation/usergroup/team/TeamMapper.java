@@ -161,7 +161,7 @@ public interface TeamMapper {
 
     /**
      * The catalog roles given by a team, sorted by catalog then role: the roles of the catalog clients that are neither
-     * a product it gives nor a feature of one ("shop-repository:scan").
+     * a product it gives nor a feature of one ("shop-repository:search").
      *
      * @param clientRoles the client roles granted to its group, by clientId
      * @param catalogs    the names of the catalogs of the realm

@@ -54,7 +54,7 @@ public interface ProductMapper {
         return role;
     }
 
-    /** The client role of a feature of a product, e.g. "shop-repository:scan". */
+    /** The client role of a feature of a product, e.g. "shop-repository:search". */
     default RoleRepresentation toRoleRepresentation(String product, Feature feature) {
         Map<String, List<String>> attributes = new HashMap<>();
         attributes.put(CatalogRoles.TYPE, List.of(CatalogRoles.TYPE_FEATURE));
@@ -94,7 +94,7 @@ public interface ProductMapper {
                 .anyMatch(role -> toFeature(product, role).metered());
     }
 
-    /** The feature of a client role of the product ("shop-repository:scan" gives "scan"). */
+    /** The feature of a client role of the product ("shop-repository:search" gives "search"). */
     default Feature toFeature(String product, RoleRepresentation role) {
         return new Feature(
                 role.getName().substring(product.length() + CatalogRoles.SEPARATOR.length()),
@@ -150,7 +150,7 @@ public interface ProductMapper {
 
     /**
      * The native mapper of a metered feature: its quota pools, one JSON object per pool, in a claim of its own next to
-     * that of the product ({"prod.billing": {"params": {...}}, "prod.billing.scan": {"quotas": [...]}}).
+     * that of the product ({"prod.billing": {"params": {...}}, "prod.billing.search": {"quotas": [...]}}).
      */
     default ProtocolMapperRepresentation toFeatureMapper(String catalog, String product, String feature) {
         return attributeMapper(CatalogRoles.featureQuotasAttribute(catalog, product, feature), true);

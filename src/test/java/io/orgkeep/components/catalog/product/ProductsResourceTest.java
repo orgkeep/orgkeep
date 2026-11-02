@@ -150,11 +150,11 @@ class ProductsResourceTest {
     void meteredFeatures() {
         createBilling();
         given().contentType(ContentType.JSON).body("{\"metered\": true}")
-                .when().put(PRODUCTS + "/{product}/features/{feature}", CATALOG, "billing", "scan")
+                .when().put(PRODUCTS + "/{product}/features/{feature}", CATALOG, "billing", "search")
                 .then().statusCode(200)
                 .body("metered", equalTo(true))
-                .body("features.find { it.name == 'scan' }.metered", equalTo(true));
-        given().when().delete(PRODUCTS + "/{product}/features/{feature}", CATALOG, "billing", "scan")
+                .body("features.find { it.name == 'search' }.metered", equalTo(true));
+        given().when().delete(PRODUCTS + "/{product}/features/{feature}", CATALOG, "billing", "search")
                 .then().statusCode(200)
                 .body("metered", equalTo(false));
 
@@ -162,7 +162,7 @@ class ProductsResourceTest {
                 .when().put(ASSIGNMENT, ORG, CATALOG, "billing")
                 .then().statusCode(200);
         given().contentType(ContentType.JSON).body("{\"metered\": true}")
-                .when().put(PRODUCTS + "/{product}/features/{feature}", CATALOG, "billing", "scan")
+                .when().put(PRODUCTS + "/{product}/features/{feature}", CATALOG, "billing", "search")
                 .then().statusCode(409)
                 .body("message", containsString("billing"));
     }
@@ -173,30 +173,30 @@ class ProductsResourceTest {
     void assignAMeteredProduct() {
         given().contentType(ContentType.JSON)
                 .body("{\"name\": \"repo\", \"displayName\": \"Repository\", "
-                        + "\"features\": [{\"name\": \"read\"}, {\"name\": \"scan\", \"metered\": true}]}")
+                        + "\"features\": [{\"name\": \"read\"}, {\"name\": \"search\", \"metered\": true}]}")
                 .when().post(PRODUCTS, CATALOG)
                 .then().statusCode(201)
                 .body("metered", equalTo(true));
 
         given().contentType(ContentType.JSON)
-                .body("{\"boughtFeatures\": [\"read\", \"scan\"], "
-                        + "\"featureQuotas\": {\"scan\": {\"quota\": 200, \"cycle\": \"DAILY\"}}}")
+                .body("{\"boughtFeatures\": [\"read\", \"search\"], "
+                        + "\"featureQuotas\": {\"search\": {\"quota\": 200, \"cycle\": \"DAILY\"}}}")
                 .when().put(ASSIGNMENT, ORG, CATALOG, "repo")
                 .then().statusCode(200)
                 .body("quota", nullValue())
-                .body("featureQuotas.scan.quota", equalTo(200))
-                .body("featureQuotas.scan.cycle", equalTo("DAILY"));
+                .body("featureQuotas.search.quota", equalTo(200))
+                .body("featureQuotas.search.cycle", equalTo("DAILY"));
 
         // Bean Validation on the quotas of the features; then the rules of the service
         given().contentType(ContentType.JSON)
-                .body("{\"boughtFeatures\": [\"scan\"], \"featureQuotas\": {\"scan\": {\"quota\": 0, \"cycle\": \"DAILY\"}}}")
+                .body("{\"boughtFeatures\": [\"search\"], \"featureQuotas\": {\"search\": {\"quota\": 0, \"cycle\": \"DAILY\"}}}")
                 .when().put(ASSIGNMENT, ORG, CATALOG, "repo")
                 .then().statusCode(400);
         given().contentType(ContentType.JSON)
-                .body("{\"boughtFeatures\": [\"scan\"]}")
+                .body("{\"boughtFeatures\": [\"search\"]}")
                 .when().put(ASSIGNMENT, ORG, CATALOG, "repo")
                 .then().statusCode(400)
-                .body("message", containsString("scan"));
+                .body("message", containsString("search"));
     }
 
     @Test

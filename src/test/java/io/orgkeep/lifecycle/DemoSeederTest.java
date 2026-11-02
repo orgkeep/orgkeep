@@ -121,18 +121,18 @@ class DemoSeederTest {
     }
 
     // the example token of the spec: Paul, team sales, scope prod. Metered products: no access role, the features
-    // given as roles, a claim per metered feature with the pool of the org, plus the pool of sales for scan on billing
+    // given as roles, a claim per metered feature with the pool of the org, plus the pool of sales for search on billing
     @Test
     void paulGetsTheExampleTokenOfTheSpec() throws Exception {
         JsonNode claims = logIn(DemoSeeder.PAUL, "openid prod");
 
-        assertEquals(Set.of("billing:stats", "billing:scan", "shop:write", "shop:scan"),
+        assertEquals(Set.of("billing:stats", "billing:search", "shop:write", "shop:search"),
                 strings(claims.at("/resource_access/prod/roles")));
         // two values of a multivalued attribute: compared as a set, Keycloak does not promise their order
         assertEquals(Set.of(json("{\"pool\":\"/\",\"limit\":200,\"cycle\":\"daily\"}"),
                         json("{\"pool\":\"/sales\",\"limit\":50,\"cycle\":\"daily\"}")),
-                elements(claims.at("/prod.billing.scan/quotas")));
-        assertEquals(json("[{\"pool\":\"/\",\"limit\":100,\"cycle\":\"daily\"}]"), claims.at("/prod.shop.scan/quotas"));
+                elements(claims.at("/prod.billing.search/quotas")));
+        assertEquals(json("[{\"pool\":\"/\",\"limit\":100,\"cycle\":\"daily\"}]"), claims.at("/prod.shop.search/quotas"));
         // without the scope of sandbox, nothing of it
         assertTrue(claims.at("/resource_access/sandbox").isMissingNode(), claims.toString());
     }
@@ -142,10 +142,10 @@ class DemoSeederTest {
     void emmaGetsEveryFeatureOfBilling() throws Exception {
         JsonNode claims = logIn(DemoSeeder.EMMA, "openid prod sandbox");
 
-        assertEquals(Set.of("billing:read", "billing:write", "billing:stats", "billing:scan", "billing:flow"),
+        assertEquals(Set.of("billing:read", "billing:write", "billing:stats", "billing:search", "billing:dig"),
                 strings(claims.at("/resource_access/prod/roles")));
-        assertEquals(Set.of("scan:200", "flow:100"), limits(claims, "prod.billing"));
-        assertEquals(Set.of("scan:1000", "flow:1000"), limits(claims, "sandbox.billing"));
+        assertEquals(Set.of("search:200", "dig:100"), limits(claims, "prod.billing"));
+        assertEquals(Set.of("search:1000", "dig:1000"), limits(claims, "sandbox.billing"));
         assertTrue(CatalogClaims.of(claims, "prod.shop").isEmpty(), claims.toString());
     }
 
@@ -220,7 +220,7 @@ class DemoSeederTest {
         return elements;
     }
 
-    /** "feature:limit" for each pool of the metered features of a product, read from their claims ("prod.billing.scan"). */
+    /** "feature:limit" for each pool of the metered features of a product, read from their claims ("prod.billing.search"). */
     private static Set<String> limits(JsonNode claims, String product) {
         Set<String> limits = new HashSet<>();
         CatalogClaims.of(claims, product).properties().forEach(claim -> claim.getValue().path("quotas")

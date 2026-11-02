@@ -66,17 +66,17 @@ public final class OrgGroups {
         return segments[1];
     }
 
-    /** Attribute of an assignment group of a metered product: the quota of the org for a metered feature, e.g. "quota.scan". */
+    /** Attribute of an assignment group of a metered product: the quota of the org for a metered feature, e.g. "quota.search". */
     public static String featureQuotaAttribute(String feature) {
         return FEATURE_QUOTA_PREFIX + feature;
     }
 
-    /** Its cycle, e.g. "quota-cycle.scan". */
+    /** Its cycle, e.g. "quota-cycle.search". */
     public static String featureQuotaCycleAttribute(String feature) {
         return FEATURE_QUOTA_CYCLE_PREFIX + feature;
     }
 
-    /** The feature of a {@link #featureQuotaAttribute} ("quota.scan" gives "scan"), null for another attribute. */
+    /** The feature of a {@link #featureQuotaAttribute} ("quota.search" gives "search"), null for another attribute. */
     public static String featureOfQuota(String attribute) {
         return attribute.startsWith(FEATURE_QUOTA_PREFIX) ? attribute.substring(FEATURE_QUOTA_PREFIX.length()) : null;
     }

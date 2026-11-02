@@ -66,9 +66,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * turned on for the test as DemoSeeder does. Setup, the example with several environments:
  * <ul>
  *   <li>catalogs "prod" and "sandbox", optional scopes of the login client;</li>
- *   <li>"shop-repository" in prod (features scan and flow, parameter region), assigned to acme: 1000 a month, scan bought;</li>
- *   <li>catalog roles "scanner" (grantable) and "anonymous" (reserved to the realm owner);</li>
- *   <li>Paul is in "ops" (the product, every feature bought, quota of team 300, scanner) and "analysts" (the product
+ *   <li>"shop-repository" in prod (features search and dig, parameter region), assigned to acme: 1000 a month, search bought;</li>
+ *   <li>catalog roles "searcher" (grantable) and "anonymous" (reserved to the realm owner);</li>
+ *   <li>Paul is in "ops" (the product, every feature bought, quota of team 300, searcher) and "analysts" (the product
  *       without feature, no quota); Claire is in no team giving anything.</li>
  * </ul>
  */
@@ -106,20 +106,20 @@ class TeamTokenTest {
         catalogService.create(realm, new CreateCatalogRequest("prod", "Production", null));
         catalogService.create(realm, new CreateCatalogRequest("sandbox", "Sandbox", null));
         productService.create(realm, "prod", new CreateProductRequest(PRODUCT, "Shop repository", null,
-                List.of(new Feature("scan", null), new Feature("flow", null)),
+                List.of(new Feature("search", null), new Feature("dig", null)),
                 List.of(new ParamDefinition("region", ParamType.ENUM, true, "eu", List.of("eu", "us")))));
-        catalogRoleService.create(realm, "prod", new CreateCatalogRoleRequest("scanner", null, null, true));
+        catalogRoleService.create(realm, "prod", new CreateCatalogRoleRequest("searcher", null, null, true));
         catalogRoleService.create(realm, "prod", new CreateCatalogRoleRequest("anonymous", null, null, false));
 
         orgService.create(realm, new CreateOrgRequest(ORG, Set.of(), null, null));
-        assign(List.of("scan"));
+        assign(List.of("search"));
 
         paulId = member("paul");
         member("claire");
         userGroupService.create(realm, ORG, new CreateUserGroupRequest("ops"));
         userGroupService.create(realm, ORG, new CreateUserGroupRequest("analysts"));
         teamService.grantProduct(realm, ORG, "ops", "prod", PRODUCT, new GrantProductRequest(null, 300L, null));
-        teamService.grantCatalogRole(realm, ORG, "ops", "prod", "scanner");
+        teamService.grantCatalogRole(realm, ORG, "ops", "prod", "searcher");
         teamService.grantProduct(realm, ORG, "analysts", "prod", PRODUCT, new GrantProductRequest(List.of(), null, null));
         userGroupService.addMember(realm, ORG, "ops", paulId);
         userGroupService.addMember(realm, ORG, "analysts", paulId);
@@ -136,7 +136,7 @@ class TeamTokenTest {
         JsonNode claims = logIn("paul", "openid prod");
         log.info("Token of paul with scope=prod: {}", claims.toPrettyString());
 
-        assertEquals(Set.of(PRODUCT, PRODUCT + ":scan", "scanner"), strings(claims.at("/resource_access/prod/roles")));
+        assertEquals(Set.of(PRODUCT, PRODUCT + ":search", "searcher"), strings(claims.at("/resource_access/prod/roles")));
         assertTrue(strings(claims.path("aud")).contains("prod"), claims.path("aud").toString());
         JsonNode quotas = claims.at("/prod.shop-repository/quotas");
         // ops and analysts both carry the pool of the org: Keycloak keeps it once
@@ -165,14 +165,14 @@ class TeamTokenTest {
         assertTrue(CatalogClaims.of(claims, "prod").isEmpty(), claims.toString());
     }
 
-    // flow is not bought: absent. Bought later, it reaches the token through ops ("every feature bought")
+    // dig is not bought: absent. Bought later, it reaches the token through ops ("every feature bought")
     @Test
     void aFeatureBoughtLaterReachesTheToken() throws Exception {
-        assertFalse(strings(logIn("paul", "openid prod").at("/resource_access/prod/roles")).contains(PRODUCT + ":flow"));
+        assertFalse(strings(logIn("paul", "openid prod").at("/resource_access/prod/roles")).contains(PRODUCT + ":dig"));
 
-        assign(List.of("scan", "flow"));
+        assign(List.of("search", "dig"));
 
-        assertTrue(strings(logIn("paul", "openid prod").at("/resource_access/prod/roles")).contains(PRODUCT + ":flow"));
+        assertTrue(strings(logIn("paul", "openid prod").at("/resource_access/prod/roles")).contains(PRODUCT + ":dig"));
     }
 
     // the scope of a catalog where the org has nothing: Keycloak gives a token without it, no error
@@ -192,8 +192,8 @@ class TeamTokenTest {
         assertTrue(strings(logIn("paul", "openid prod").at("/resource_access/prod/roles")).contains("anonymous"));
     }
 
-    // --- a metered product: "billing" in prod (read, stats, scan and flow metered), acme bought stats and scan (200 a day).
-    // accounting gives every feature bought, sales gives stats and scan, readers gives stats only.
+    // --- a metered product: "billing" in prod (read, stats, search and dig metered), acme bought stats and search (200 a day).
+    // accounting gives every feature bought, sales gives stats and search, readers gives stats only.
     // Emma is in accounting and sales, Stan in readers
 
     // no access role, the features as roles, an object per metered feature with its pools, the org pool once
@@ -205,29 +205,29 @@ class TeamTokenTest {
         log.info("Token of emma with scope=prod: {}", claims.toPrettyString());
 
         Set<String> roles = strings(claims.at("/resource_access/prod/roles"));
-        assertEquals(Set.of("billing:stats", "billing:scan"), roles);
+        assertEquals(Set.of("billing:stats", "billing:search"), roles);
         assertTrue(strings(claims.path("aud")).contains("prod"), claims.path("aud").toString());
         // no quota of product, and no claim for stats (not metered): its role is enough
-        assertEquals(Set.of("prod.billing.scan"), claimNames(claims, "prod.billing"));
-        // accounting and sales both carry the pool of the org for scan: Keycloak keeps it once
-        JsonNode quotas = claims.at("/prod.billing.scan/quotas");
+        assertEquals(Set.of("prod.billing.search"), claimNames(claims, "prod.billing"));
+        // accounting and sales both carry the pool of the org for search: Keycloak keeps it once
+        JsonNode quotas = claims.at("/prod.billing.search/quotas");
         assertEquals(1, quotas.size(), quotas.toString());
         assertEquals("/", quotas.get(0).path("pool").asText());
         assertEquals(200, quotas.get(0).path("limit").asInt());
         assertEquals("daily", quotas.get(0).path("cycle").asText());
     }
 
-    // a quota of team for scan in both teams of Emma: the token lists both pools of team next to the pool of the org,
+    // a quota of team for search in both teams of Emma: the token lists both pools of team next to the pool of the org,
     // the API chooses how to count them
     @Test
     void severalQuotasOfTeamForAMeteredFeature() throws Exception {
         setUpBilling();
         teamService.grantProduct(testRealm.name(), ORG, "sales", "prod", BILLING, new GrantProductRequest(
-                List.of("stats", "scan"), null, null, Map.of("scan", new TeamFeatureQuota(50L, null))));
+                List.of("stats", "search"), null, null, Map.of("search", new TeamFeatureQuota(50L, null))));
         teamService.grantProduct(testRealm.name(), ORG, "accounting", "prod", BILLING, new GrantProductRequest(
-                null, null, null, Map.of("scan", new TeamFeatureQuota(80L, null))));
+                null, null, null, Map.of("search", new TeamFeatureQuota(80L, null))));
 
-        JsonNode quotas = logIn("emma", "openid prod").at("/prod.billing.scan/quotas");
+        JsonNode quotas = logIn("emma", "openid prod").at("/prod.billing.search/quotas");
 
         assertEquals(3, quotas.size(), quotas.toString());
         Map<String, Integer> limits = new HashMap<>();
@@ -255,24 +255,24 @@ class TeamTokenTest {
     void aMeteredFeatureBoughtLaterReachesTheToken() throws Exception {
         setUpBilling();
 
-        productService.assign(testRealm.name(), ORG, "prod", BILLING, AssignProductRequest.metered(List.of("stats", "scan", "flow"),
-                Map.of("scan", new FeatureQuota(200L, QuotaCycle.DAILY), "flow", new FeatureQuota(100L, QuotaCycle.MONTHLY))));
+        productService.assign(testRealm.name(), ORG, "prod", BILLING, AssignProductRequest.metered(List.of("stats", "search", "dig"),
+                Map.of("search", new FeatureQuota(200L, QuotaCycle.DAILY), "dig", new FeatureQuota(100L, QuotaCycle.MONTHLY))));
 
         JsonNode claims = logIn("emma", "openid prod");
-        assertTrue(strings(claims.at("/resource_access/prod/roles")).contains("billing:flow"), claims.toString());
-        assertEquals(Set.of("prod.billing.scan", "prod.billing.flow"), claimNames(claims, "prod.billing"));
-        assertEquals(100, claims.at("/prod.billing.flow/quotas/0/limit").asInt(), claims.toString());
+        assertTrue(strings(claims.at("/resource_access/prod/roles")).contains("billing:dig"), claims.toString());
+        assertEquals(Set.of("prod.billing.search", "prod.billing.dig"), claimNames(claims, "prod.billing"));
+        assertEquals(100, claims.at("/prod.billing.dig/quotas/0/limit").asInt(), claims.toString());
         // a team that listed its features does not get it: readers gives stats only
-        assertFalse(strings(logIn("stan", "openid prod").at("/resource_access/prod/roles")).contains("billing:flow"));
+        assertFalse(strings(logIn("stan", "openid prod").at("/resource_access/prod/roles")).contains("billing:dig"));
     }
 
     private void setUpBilling() {
         String realm = testRealm.name();
         productService.create(realm, "prod", new CreateProductRequest(BILLING, "Billing", null, List.of(
                 new Feature("read", null), new Feature("stats", null),
-                new Feature("scan", null, true), new Feature("flow", null, true)), List.of()));
-        productService.assign(realm, ORG, "prod", BILLING, AssignProductRequest.metered(List.of("stats", "scan"),
-                Map.of("scan", new FeatureQuota(200L, QuotaCycle.DAILY))));
+                new Feature("search", null, true), new Feature("dig", null, true)), List.of()));
+        productService.assign(realm, ORG, "prod", BILLING, AssignProductRequest.metered(List.of("stats", "search"),
+                Map.of("search", new FeatureQuota(200L, QuotaCycle.DAILY))));
 
         String emmaId = member("emma");
         String stanId = member("stan");
@@ -280,7 +280,7 @@ class TeamTokenTest {
             userGroupService.create(realm, ORG, new CreateUserGroupRequest(team));
         }
         teamService.grantProduct(realm, ORG, "accounting", "prod", BILLING, GrantProductRequest.allFeatures());
-        teamService.grantProduct(realm, ORG, "sales", "prod", BILLING, new GrantProductRequest(List.of("stats", "scan"), null, null));
+        teamService.grantProduct(realm, ORG, "sales", "prod", BILLING, new GrantProductRequest(List.of("stats", "search"), null, null));
         teamService.grantProduct(realm, ORG, "readers", "prod", BILLING, new GrantProductRequest(List.of("stats"), null, null));
         userGroupService.addMember(realm, ORG, "accounting", emmaId);
         userGroupService.addMember(realm, ORG, "sales", emmaId);

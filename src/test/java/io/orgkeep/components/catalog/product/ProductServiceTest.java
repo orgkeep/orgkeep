@@ -91,10 +91,10 @@ class ProductServiceTest {
         Product product = createProduct();
 
         assertEquals(new Product(CATALOG, PRODUCT, "Shop repository", "Repositories",
-                List.of(new Feature("flow", null), new Feature("scan", "Scan engine")), false, List.of(REGION), 0), product);
+                List.of(new Feature("dig", null), new Feature("search", "Search engine")), false, List.of(REGION), 0), product);
         Set<String> roles = catalogRoles().stream().map(RoleRepresentation::getName).collect(Collectors.toSet());
-        assertEquals(Set.of(PRODUCT, PRODUCT + ":scan", PRODUCT + ":flow"), roles);
-        assertEquals(Set.of(PRODUCT, PRODUCT + ":scan", PRODUCT + ":flow"), rolesInScope());
+        assertEquals(Set.of(PRODUCT, PRODUCT + ":search", PRODUCT + ":dig"), roles);
+        assertEquals(Set.of(PRODUCT, PRODUCT + ":search", PRODUCT + ":dig"), rolesInScope());
         assertEquals(Set.of("prod.shop-repository.quotas", "prod.shop-repository.params"), mapperNames());
         // no JSON in the role attributes: one short value per element
         RoleRepresentation role = realm().clients().get(catalogUuid()).roles().get(PRODUCT).toRepresentation();
@@ -105,10 +105,10 @@ class ProductServiceTest {
     // products and catalog roles share the role names of the client
     @Test
     void createWithANameTakenByACatalogRole() {
-        catalogRoleService.create(realmName(), CATALOG, new CreateCatalogRoleRequest("scanner", null, null, true));
+        catalogRoleService.create(realmName(), CATALOG, new CreateCatalogRoleRequest("searcher", null, null, true));
 
         assertThrowsExactly(RoleNameTakenException.class, () -> productService.create(realmName(), CATALOG,
-                new CreateProductRequest("scanner", "Scanner", null)));
+                new CreateProductRequest("searcher", "Searcher", null)));
         assertThrowsExactly(CatalogNotFoundException.class, () -> productService.create(realmName(), "unknown",
                 new CreateProductRequest("billing", "Billing", null)));
     }
@@ -130,14 +130,14 @@ class ProductServiceTest {
         createProduct();
 
         OrgProduct assigned = productService.assign(realmName(), ORG, CATALOG, PRODUCT,
-                new AssignProductRequest(1000L, QuotaCycle.MONTHLY, List.of("scan"), Map.of()));
+                new AssignProductRequest(1000L, QuotaCycle.MONTHLY, List.of("search"), Map.of()));
 
         GroupRepresentation group = realm().getGroupByPath("/" + ORG + "/catalogs/" + CATALOG + "/" + PRODUCT);
         // the default of region is applied
-        assertEquals(new OrgProduct(CATALOG, PRODUCT, group.getId(), 1000L, QuotaCycle.MONTHLY, List.of("scan"),
+        assertEquals(new OrgProduct(CATALOG, PRODUCT, group.getId(), 1000L, QuotaCycle.MONTHLY, List.of("search"),
                 Map.of(), Map.of("region", "eu")), assigned);
         assertEquals(Map.of("quota", List.of("1000"), "quota-cycle", List.of("monthly"),
-                "bought-features", List.of("scan"), "param.region", List.of("eu")), group.getAttributes());
+                "bought-features", List.of("search"), "param.region", List.of("eu")), group.getAttributes());
         assertEquals(Set.of(PRODUCT), groupRoles(group.getId()));
         assertEquals(List.of(assigned), productService.listAssigned(realmName(), ORG));
     }
@@ -146,15 +146,15 @@ class ProductServiceTest {
     void assignAgainReplacesTheValues() {
         createProduct();
         productService.assign(realmName(), ORG, CATALOG, PRODUCT,
-                new AssignProductRequest(1000L, QuotaCycle.MONTHLY, List.of("scan"), Map.of()));
+                new AssignProductRequest(1000L, QuotaCycle.MONTHLY, List.of("search"), Map.of()));
 
         productService.assign(realmName(), ORG, CATALOG, PRODUCT,
-                new AssignProductRequest(20L, QuotaCycle.DAILY, List.of("flow", "scan"), Map.of("region", "us")));
+                new AssignProductRequest(20L, QuotaCycle.DAILY, List.of("dig", "search"), Map.of("region", "us")));
 
         List<OrgProduct> assigned = productService.listAssigned(realmName(), ORG);
         assertEquals(1, assigned.size());
         assertEquals(20L, assigned.get(0).quota());
-        assertEquals(List.of("flow", "scan"), assigned.get(0).boughtFeatures());
+        assertEquals(List.of("dig", "search"), assigned.get(0).boughtFeatures());
         assertEquals(Map.of("region", "us"), assigned.get(0).params());
     }
 
@@ -174,7 +174,7 @@ class ProductServiceTest {
         assertThrowsExactly(InvalidRequestException.class, () -> productService.assign(realmName(), ORG, CATALOG, PRODUCT,
                 new AssignProductRequest(10L, null)));
         assertThrowsExactly(InvalidRequestException.class, () -> productService.assign(realmName(), ORG, CATALOG, PRODUCT,
-                new AssignProductRequest(10L, QuotaCycle.DAILY, List.of("scan"), Map.of("scan", DAILY_200), Map.of())));
+                new AssignProductRequest(10L, QuotaCycle.DAILY, List.of("search"), Map.of("search", DAILY_200), Map.of())));
     }
 
     // a metered product: no quota of product, a quota per metered feature bought, read back as it was written
@@ -183,14 +183,14 @@ class ProductServiceTest {
         createMeteredProduct();
 
         OrgProduct assigned = productService.assign(realmName(), ORG, CATALOG, BILLING, AssignProductRequest.metered(
-                List.of("stats", "scan", "flow"), Map.of("scan", DAILY_200, "flow", new FeatureQuota(100L, QuotaCycle.MONTHLY))));
+                List.of("stats", "search", "dig"), Map.of("search", DAILY_200, "dig", new FeatureQuota(100L, QuotaCycle.MONTHLY))));
 
         GroupRepresentation group = realm().getGroupByPath("/" + ORG + "/catalogs/" + CATALOG + "/" + BILLING);
-        assertEquals(new OrgProduct(CATALOG, BILLING, group.getId(), null, null, List.of("flow", "scan", "stats"),
-                Map.of("flow", new FeatureQuota(100L, QuotaCycle.MONTHLY), "scan", DAILY_200), Map.of()), assigned);
-        assertEquals(Map.of("bought-features", List.of("flow", "scan", "stats"),
-                "quota.scan", List.of("200"), "quota-cycle.scan", List.of("daily"),
-                "quota.flow", List.of("100"), "quota-cycle.flow", List.of("monthly")), group.getAttributes());
+        assertEquals(new OrgProduct(CATALOG, BILLING, group.getId(), null, null, List.of("dig", "search", "stats"),
+                Map.of("dig", new FeatureQuota(100L, QuotaCycle.MONTHLY), "search", DAILY_200), Map.of()), assigned);
+        assertEquals(Map.of("bought-features", List.of("dig", "search", "stats"),
+                "quota.search", List.of("200"), "quota-cycle.search", List.of("daily"),
+                "quota.dig", List.of("100"), "quota-cycle.dig", List.of("monthly")), group.getAttributes());
         // the product role stays on the assignment group: it counts and filters the orgs
         assertEquals(Set.of(BILLING), groupRoles(group.getId()));
         assertEquals(List.of(assigned), productService.listAssigned(realmName(), ORG));
@@ -201,14 +201,14 @@ class ProductServiceTest {
     void assignAMeteredProductAgainReplacesTheQuotas() {
         createMeteredProduct();
         productService.assign(realmName(), ORG, CATALOG, BILLING, AssignProductRequest.metered(
-                List.of("scan", "flow"), Map.of("scan", DAILY_200, "flow", DAILY_200)));
+                List.of("search", "dig"), Map.of("search", DAILY_200, "dig", DAILY_200)));
 
         productService.assign(realmName(), ORG, CATALOG, BILLING, AssignProductRequest.metered(
-                List.of("scan"), Map.of("scan", new FeatureQuota(50L, QuotaCycle.YEARLY))));
+                List.of("search"), Map.of("search", new FeatureQuota(50L, QuotaCycle.YEARLY))));
 
         OrgProduct assigned = productService.listAssigned(realmName(), ORG).get(0);
-        assertEquals(List.of("scan"), assigned.boughtFeatures());
-        assertEquals(Map.of("scan", new FeatureQuota(50L, QuotaCycle.YEARLY)), assigned.featureQuotas());
+        assertEquals(List.of("search"), assigned.boughtFeatures());
+        assertEquals(Map.of("search", new FeatureQuota(50L, QuotaCycle.YEARLY)), assigned.featureQuotas());
     }
 
     // the quotas follow the kind of the product: each error names what is wrong, and nothing is written
@@ -217,14 +217,14 @@ class ProductServiceTest {
         createMeteredProduct();
 
         // no quota of product
-        assertInvalid("quota", new AssignProductRequest(10L, QuotaCycle.DAILY, List.of("scan"), Map.of("scan", DAILY_200), Map.of()));
+        assertInvalid("quota", new AssignProductRequest(10L, QuotaCycle.DAILY, List.of("search"), Map.of("search", DAILY_200), Map.of()));
         // at least one feature bought: without an access role, the product would give nothing
         assertInvalid("at least one", AssignProductRequest.metered(List.of(), Map.of()));
         // a metered feature bought without its quota
-        assertInvalid("[flow]", AssignProductRequest.metered(List.of("scan", "flow"), Map.of("scan", DAILY_200)));
+        assertInvalid("[dig]", AssignProductRequest.metered(List.of("search", "dig"), Map.of("search", DAILY_200)));
         // a quota for a metered feature not bought, or for a feature that is not metered
-        assertInvalid("[flow]", AssignProductRequest.metered(List.of("scan"), Map.of("scan", DAILY_200, "flow", DAILY_200)));
-        assertInvalid("[stats]", AssignProductRequest.metered(List.of("scan", "stats"), Map.of("scan", DAILY_200, "stats", DAILY_200)));
+        assertInvalid("[dig]", AssignProductRequest.metered(List.of("search"), Map.of("search", DAILY_200, "dig", DAILY_200)));
+        assertInvalid("[stats]", AssignProductRequest.metered(List.of("search", "stats"), Map.of("search", DAILY_200, "stats", DAILY_200)));
 
         assertEquals(List.of(), productService.listAssigned(realmName(), ORG));
     }
@@ -273,13 +273,13 @@ class ProductServiceTest {
     void deleteFeatureRemovesItFromTheAssignments() {
         createProduct();
         productService.assign(realmName(), ORG, CATALOG, PRODUCT,
-                new AssignProductRequest(10L, QuotaCycle.DAILY, List.of("scan", "flow"), Map.of()));
+                new AssignProductRequest(10L, QuotaCycle.DAILY, List.of("search", "dig"), Map.of()));
 
-        Product product = productService.deleteFeature(realmName(), CATALOG, PRODUCT, "flow");
+        Product product = productService.deleteFeature(realmName(), CATALOG, PRODUCT, "dig");
 
-        assertEquals(List.of(new Feature("scan", "Scan engine")), product.features());
-        assertEquals(List.of("scan"), productService.listAssigned(realmName(), ORG).get(0).boughtFeatures());
-        assertThrowsExactly(FeatureNotFoundException.class, () -> productService.deleteFeature(realmName(), CATALOG, PRODUCT, "flow"));
+        assertEquals(List.of(new Feature("search", "Search engine")), product.features());
+        assertEquals(List.of("search"), productService.listAssigned(realmName(), ORG).get(0).boughtFeatures());
+        assertThrowsExactly(FeatureNotFoundException.class, () -> productService.deleteFeature(realmName(), CATALOG, PRODUCT, "dig"));
     }
 
     // metered is read at creation only: renaming the feature keeps it
@@ -314,14 +314,14 @@ class ProductServiceTest {
         assertEquals(Set.of("prod.shop-repository.quotas", "prod.shop-repository.params"), mapperNames());
     }
 
-    // each metered feature has the mapper of its quotas, {"billing": {"scan": {"quotas": [...]}}}; a feature that is
+    // each metered feature has the mapper of its quotas, {"billing": {"search": {"quotas": [...]}}}; a feature that is
     // not metered has none, its role is enough. All go with the product
     @Test
     void aMeteredProductHasAMapperPerMeteredFeature() {
         createMeteredProduct();
 
-        assertEquals(Set.of("prod.billing.quotas", "prod.billing.params", "prod.billing.scan.quotas",
-                "prod.billing.flow.quotas"), mapperNames());
+        assertEquals(Set.of("prod.billing.quotas", "prod.billing.params", "prod.billing.search.quotas",
+                "prod.billing.dig.quotas"), mapperNames());
 
         productService.delete(realmName(), CATALOG, BILLING);
         assertEquals(Set.of(), mapperNames());
@@ -347,14 +347,14 @@ class ProductServiceTest {
     void meteredNeverChangesOnAnExistingFeature() {
         createMeteredProduct();
 
-        productService.putFeature(realmName(), CATALOG, BILLING, "scan", new UpdateFeatureRequest("Scan", true));
+        productService.putFeature(realmName(), CATALOG, BILLING, "search", new UpdateFeatureRequest("Search", true));
         productService.putFeature(realmName(), CATALOG, BILLING, "stats", new UpdateFeatureRequest("Stats", false));
 
         assertThrowsExactly(OperationNotAllowedException.class, () -> productService.putFeature(realmName(), CATALOG,
-                BILLING, "scan", new UpdateFeatureRequest(null, false)));
+                BILLING, "search", new UpdateFeatureRequest(null, false)));
         assertThrowsExactly(OperationNotAllowedException.class, () -> productService.putFeature(realmName(), CATALOG,
                 BILLING, "stats", new UpdateFeatureRequest(null, true)));
-        assertEquals(List.of(new Feature("flow", "Flow engine", true), new Feature("scan", "Scan", true),
+        assertEquals(List.of(new Feature("dig", "Dig engine", true), new Feature("search", "Search", true),
                 new Feature("stats", "Stats", false)), productService.get(realmName(), CATALOG, BILLING).features());
     }
 
@@ -377,7 +377,7 @@ class ProductServiceTest {
     @Test
     void aNewMeteredFeatureOnAnAssignedMeteredProductIsFree() {
         createMeteredProduct();
-        productService.assign(realmName(), ORG, CATALOG, BILLING, AssignProductRequest.metered(List.of("scan"), Map.of("scan", DAILY_200)));
+        productService.assign(realmName(), ORG, CATALOG, BILLING, AssignProductRequest.metered(List.of("search"), Map.of("search", DAILY_200)));
 
         Product product = productService.putFeature(realmName(), CATALOG, BILLING, "search", new UpdateFeatureRequest(null, true));
 
@@ -389,14 +389,14 @@ class ProductServiceTest {
     @Test
     void aBoughtMeteredFeatureCannotBeDeleted() {
         createMeteredProduct();
-        productService.assign(realmName(), ORG, CATALOG, BILLING, AssignProductRequest.metered(List.of("scan"), Map.of("scan", DAILY_200)));
+        productService.assign(realmName(), ORG, CATALOG, BILLING, AssignProductRequest.metered(List.of("search"), Map.of("search", DAILY_200)));
 
         OperationNotAllowedException e = assertThrowsExactly(OperationNotAllowedException.class,
-                () -> productService.deleteFeature(realmName(), CATALOG, BILLING, "scan"));
+                () -> productService.deleteFeature(realmName(), CATALOG, BILLING, "search"));
         assertTrue(e.getMessage().contains(ORG), e.getMessage());
 
-        Product product = productService.deleteFeature(realmName(), CATALOG, BILLING, "flow");
-        assertEquals(List.of("scan", "stats"), product.features().stream().map(Feature::name).toList());
+        Product product = productService.deleteFeature(realmName(), CATALOG, BILLING, "dig");
+        assertEquals(List.of("search", "stats"), product.features().stream().map(Feature::name).toList());
     }
 
     // the last metered feature of an assigned product: refused even if nobody bought it (the kind would change).
@@ -404,11 +404,11 @@ class ProductServiceTest {
     @Test
     void theLastMeteredFeatureOfAnAssignedProductIsRefused() {
         productService.create(realmName(), CATALOG, new CreateProductRequest(BILLING, "Billing", null,
-                List.of(new Feature("stats", null), new Feature("scan", null, true)), List.of()));
+                List.of(new Feature("stats", null), new Feature("search", null, true)), List.of()));
         productService.assign(realmName(), ORG, CATALOG, BILLING, AssignProductRequest.metered(List.of("stats"), Map.of()));
 
         assertThrowsExactly(OperationNotAllowedException.class,
-                () -> productService.deleteFeature(realmName(), CATALOG, BILLING, "scan"));
+                () -> productService.deleteFeature(realmName(), CATALOG, BILLING, "search"));
 
         productService.deleteFeature(realmName(), CATALOG, BILLING, "stats");
         assertEquals(List.of(), productService.listAssigned(realmName(), ORG).get(0).boughtFeatures());
@@ -448,7 +448,7 @@ class ProductServiceTest {
 
     private Product createProduct() {
         return productService.create(realmName(), CATALOG, new CreateProductRequest(PRODUCT, "Shop repository", "Repositories",
-                List.of(new Feature("scan", "Scan engine"), new Feature("flow", null)), List.of(REGION)));
+                List.of(new Feature("search", "Search engine"), new Feature("dig", null)), List.of(REGION)));
     }
 
     /** The assignment of the metered product is refused, with a message that contains {@code expected}. */
@@ -458,11 +458,11 @@ class ProductServiceTest {
         assertTrue(e.getMessage().contains(expected), e.getMessage());
     }
 
-    /** A metered product: a permission (stats) and two engines bought with a quota each (scan, flow). */
+    /** A metered product: a permission (stats) and two engines bought with a quota each (search, dig). */
     private Product createMeteredProduct() {
         return productService.create(realmName(), CATALOG, new CreateProductRequest(BILLING, "Billing", null,
-                List.of(new Feature("stats", null), new Feature("scan", "Scan engine", true),
-                        new Feature("flow", "Flow engine", true)), List.of()));
+                List.of(new Feature("stats", null), new Feature("search", "Search engine", true),
+                        new Feature("dig", "Dig engine", true)), List.of()));
     }
 
     private String realmName() {

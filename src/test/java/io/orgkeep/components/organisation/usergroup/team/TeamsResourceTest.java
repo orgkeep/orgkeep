@@ -116,22 +116,22 @@ class TeamsResourceTest {
     @TestSecurity(user = "realm-owner", roles = "realm-owner")
     void realmOwnerGivesAMeteredProductWithAQuotaOfFeature() {
         productService.create(testRealm.name(), "prod", new CreateProductRequest("shop", "Shop", null,
-                List.of(new Feature("scan", null, true)), List.of()));
+                List.of(new Feature("search", null, true)), List.of()));
         productService.assign(testRealm.name(), ORG, "prod", "shop",
-                AssignProductRequest.metered(List.of("scan"), Map.of("scan", new FeatureQuota(200L, QuotaCycle.DAILY))));
+                AssignProductRequest.metered(List.of("search"), Map.of("search", new FeatureQuota(200L, QuotaCycle.DAILY))));
 
-        given().contentType(ContentType.JSON).body("{\"featureQuotas\": {\"scan\": {\"quota\": 50}}}")
+        given().contentType(ContentType.JSON).body("{\"featureQuotas\": {\"search\": {\"quota\": 50}}}")
                 .when().put(TEAM_PRODUCT, ORG, "ops", "prod", "shop")
                 .then().statusCode(200)
-                .body("featureQuotas.scan.quota", equalTo(50))
-                .body("featureQuotas.scan.cycle", equalTo("DAILY"));
+                .body("featureQuotas.search.quota", equalTo(50))
+                .body("featureQuotas.search.cycle", equalTo("DAILY"));
 
         given().when().get("/api/organisations/{org}/user-groups", ORG)
                 .then().statusCode(200)
-                .body("find { it.name == 'ops' }.products[0].featureQuotas.scan.quota", equalTo(50));
+                .body("find { it.name == 'ops' }.products[0].featureQuotas.search.quota", equalTo(50));
 
         // the quota is required with a quota of feature
-        given().contentType(ContentType.JSON).body("{\"featureQuotas\": {\"scan\": {\"cycle\": \"DAILY\"}}}")
+        given().contentType(ContentType.JSON).body("{\"featureQuotas\": {\"search\": {\"cycle\": \"DAILY\"}}}")
                 .when().put(TEAM_PRODUCT, ORG, "ops", "prod", "shop")
                 .then().statusCode(400);
     }

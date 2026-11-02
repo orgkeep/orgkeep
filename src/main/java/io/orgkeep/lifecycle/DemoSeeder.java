@@ -139,7 +139,7 @@ public class DemoSeeder {
 
     /**
      * The case with several environments and metered features: catalogs prod and sandbox, repositories billing and
-     * shop, permissions (read, write, stats) and engines bought with a quota each (scan, flow). Two teams: accounting
+     * shop, permissions (read, write, stats) and engines bought with a quota each (search, dig). Two teams: accounting
      * (Emma) and sales (Paul).
      * Checked on its own, not with the org: a realm seeded before this example existed gets it too.
      */
@@ -150,14 +150,14 @@ public class DemoSeeder {
         Feature read = new Feature("read", "Read");
         Feature write = new Feature("write", "Write");
         Feature stats = new Feature("stats", "Statistics");
-        Feature scan = new Feature("scan", "Scan engine", true);
-        Feature flow = new Feature("flow", "Flow engine", true);
+        Feature search = new Feature("search", "Search engine", true);
+        Feature dig = new Feature("dig", "Dig engine", true);
         for (String catalog : List.of(PROD, SANDBOX)) {
             catalogService.create(realm, new CreateCatalogRequest(catalog, PROD.equals(catalog) ? "Production" : "Sandbox", null));
             productService.create(realm, catalog, new CreateProductRequest(BILLING, "Billing repository",
-                    "Invoices and payments", List.of(read, write, stats, scan, flow), List.of()));
+                    "Invoices and payments", List.of(read, write, stats, search, dig), List.of()));
             productService.create(realm, catalog, new CreateProductRequest(SHOP, "Shop repository",
-                    "Orders of the shops", List.of(read, write, stats, scan), List.of()));
+                    "Orders of the shops", List.of(read, write, stats, search), List.of()));
             catalogRoleService.create(realm, catalog, new CreateCatalogRoleRequest("anonymous", "Test account",
                     "Excluded from the statistics", false));
         }
@@ -166,23 +166,23 @@ public class DemoSeeder {
         for (String catalog : List.of(PROD, SANDBOX)) {
             boolean prod = PROD.equals(catalog);
             productService.assign(realm, ORG, catalog, BILLING, AssignProductRequest.metered(
-                    List.of("read", "write", "stats", "scan", "flow"),
-                    Map.of("scan", daily(prod ? 200 : 1000), "flow", daily(prod ? 100 : 1000))));
+                    List.of("read", "write", "stats", "search", "dig"),
+                    Map.of("search", daily(prod ? 200 : 1000), "dig", daily(prod ? 100 : 1000))));
             productService.assign(realm, ORG, catalog, SHOP, AssignProductRequest.metered(
-                    List.of("write", "stats", "scan"), Map.of("scan", daily(prod ? 100 : 1000))));
+                    List.of("write", "stats", "search"), Map.of("search", daily(prod ? 100 : 1000))));
         }
 
-        // accounting: everything on billing; sales: write and scan on shop, stats and scan on billing. In prod, sales
-        // has its own budget for scan on billing (50 a day, pool "/sales"), on top of the pool of acme ("/")
+        // accounting: everything on billing; sales: write and search on shop, stats and search on billing. In prod, sales
+        // has its own budget for search on billing (50 a day, pool "/sales"), on top of the pool of acme ("/")
         userGroupService.create(realm, ORG, new CreateUserGroupRequest(ACCOUNTING));
         userGroupService.create(realm, ORG, new CreateUserGroupRequest(SALES));
         for (String catalog : List.of(PROD, SANDBOX)) {
             teamService.grantProduct(realm, ORG, ACCOUNTING, catalog, BILLING, GrantProductRequest.allFeatures());
-            teamService.grantProduct(realm, ORG, SALES, catalog, SHOP, features("write", "scan"));
+            teamService.grantProduct(realm, ORG, SALES, catalog, SHOP, features("write", "search"));
             teamService.grantProduct(realm, ORG, SALES, catalog, BILLING, PROD.equals(catalog)
-                    ? new GrantProductRequest(List.of("stats", "scan"), null, null,
-                            Map.of("scan", new TeamFeatureQuota(50L, QuotaCycle.DAILY)))
-                    : features("stats", "scan"));
+                    ? new GrantProductRequest(List.of("stats", "search"), null, null,
+                            Map.of("search", new TeamFeatureQuota(50L, QuotaCycle.DAILY)))
+                    : features("stats", "search"));
         }
 
         addToTeam(realm, demoUser(PAUL, PAUL_EMAIL, "Paul", "Lefebvre"), SALES);

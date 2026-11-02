@@ -120,7 +120,7 @@ Content-Type: application/json
 {
   "name": "shop-repository",
   "displayName": "Shop repository",
-  "features": [{"name": "scan", "displayName": "Scan engine"}, {"name": "flow"}],
+  "features": [{"name": "search", "displayName": "Search engine"}, {"name": "dig"}],
   "params": [{"name": "region", "type": "ENUM", "required": true, "defaultValue": "eu", "values": ["eu", "us"]}]
 }
 
@@ -149,8 +149,8 @@ Authorization: Bearer {{auth_token}}
 Content-Type: application/json
 
 {
-  "name": "scanner",
-  "displayName": "Can scan",
+  "name": "searcher",
+  "displayName": "Can search",
   "orgGrantable": true
 }
 
@@ -183,7 +183,7 @@ Content-Type: application/json
 {
   "quota": 1000,
   "cycle": "MONTHLY",
-  "boughtFeatures": ["scan"],
+  "boughtFeatures": ["search"],
   "params": {"region": "us"}
 }
 
@@ -195,7 +195,7 @@ Content-Type: application/json
 {
   "name": "billing",
   "displayName": "Billing repository",
-  "features": [{"name": "read"}, {"name": "stats"}, {"name": "scan", "metered": true}, {"name": "flow", "metered": true}]
+  "features": [{"name": "read"}, {"name": "stats"}, {"name": "search", "metered": true}, {"name": "dig", "metered": true}]
 }
 
 ### Assign the metered product: one quota per metered feature bought, no more, no less
@@ -204,8 +204,8 @@ Authorization: Bearer {{auth_token}}
 Content-Type: application/json
 
 {
-  "boughtFeatures": ["read", "stats", "scan", "flow"],
-  "featureQuotas": {"scan": {"quota": 200, "cycle": "DAILY"}, "flow": {"quota": 100, "cycle": "DAILY"}}
+  "boughtFeatures": ["read", "stats", "search", "dig"],
+  "featureQuotas": {"search": {"quota": 200, "cycle": "DAILY"}, "dig": {"quota": 100, "cycle": "DAILY"}}
 }
 
 ### List the products of an organisation, in every catalog

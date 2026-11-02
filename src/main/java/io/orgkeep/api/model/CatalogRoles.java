@@ -10,9 +10,9 @@ import java.util.Set;
  * <ul>
  *   <li>a <b>product</b> ("shop-repository"): its presence in resource_access.&lt;catalog&gt; says the user has the
  *       product. Its parameter schema is in its attributes ({@link #paramAttribute});</li>
- *   <li>a <b>feature</b> ("shop-repository:scan"): a permission, or a capacity an org buys with a quota if it is
+ *   <li>a <b>feature</b> ("shop-repository:search"): a permission, or a capacity an org buys with a quota if it is
  *       {@value #METERED}. A real client role, named after its product, so that it reaches resource_access natively;</li>
- *   <li>a <b>catalog role</b> ("scanner"): valid for every product of the catalog, granted by the org admins
+ *   <li>a <b>catalog role</b> ("searcher"): valid for every product of the catalog, granted by the org admins
  *       ({@value #ORG_GRANTABLE}) or reserved to the realm owner.</li>
  * </ul>
  * Products and catalog roles share the role names of the client. No JSON in the attributes: Keycloak stores role and
@@ -22,7 +22,7 @@ import java.util.Set;
  * {@link #quotasAttribute} and {@link #paramsAttribute} on the groups of the user (the teams giving the product), and
  * each metered feature one more, reading {@link #featureQuotasAttribute}. Each one writes a flat claim
  * ({@link #claimName}): a top-level object per product and per metered feature, {"prod.billing": {"params": {...}},
- * "prod.billing.scan": {"quotas": [...]}}, so that an API reads what it counts with a single claim name.
+ * "prod.billing.search": {"quotas": [...]}}, so that an API reads what it counts with a single claim name.
  */
 public final class CatalogRoles {
     public static final String TYPE = "type";
@@ -43,7 +43,7 @@ public final class CatalogRoles {
 
     /**
      * Names a feature cannot take: they would read as a key of the product in the attributes ("prod.billing.params"
-     * next to "prod.billing.scan.quotas"). Some are not used yet, kept for later options.
+     * next to "prod.billing.search.quotas"). Some are not used yet, kept for later options.
      */
     public static final Set<String> RESERVED_FEATURE_NAMES = Set.of("params", "options", "quotas");
 
@@ -73,7 +73,7 @@ public final class CatalogRoles {
         return values == null || values.isEmpty() ? null : values.get(0);
     }
 
-    /** Client role of a feature, e.g. "shop-repository:scan". */
+    /** Client role of a feature, e.g. "shop-repository:search". */
     public static String feature(String product, String feature) {
         return product + SEPARATOR + feature;
     }
@@ -101,8 +101,8 @@ public final class CatalogRoles {
     }
 
     /**
-     * Attribute of the quota pools of a metered feature, e.g. "prod.billing.scan.quotas", written in the token as an
-     * object of its own, {"prod.billing.scan": {"quotas": [...]}} ({@link #claimName}).
+     * Attribute of the quota pools of a metered feature, e.g. "prod.billing.search.quotas", written in the token as an
+     * object of its own, {"prod.billing.search": {"quotas": [...]}} ({@link #claimName}).
      */
     public static String featureQuotasAttribute(String catalog, String product, String feature) {
         return productClaim(catalog, product) + "." + feature + ".quotas";
@@ -123,8 +123,8 @@ public final class CatalogRoles {
 
     /**
      * The claim name of a mapper reading a derived attribute: Keycloak turns the dots of a claim name into nested
-     * objects, unless escaped. Every dot but the last is escaped, "prod.billing.scan.quotas" gives
-     * "prod\.billing\.scan.quotas", written as {"prod.billing.scan": {"quotas": [...]}}. Names are slugs, never
+     * objects, unless escaped. Every dot but the last is escaped, "prod.billing.search.quotas" gives
+     * "prod\.billing\.search.quotas", written as {"prod.billing.search": {"quotas": [...]}}. Names are slugs, never
      * with a dot of their own.
      */
     public static String claimName(String attribute) {

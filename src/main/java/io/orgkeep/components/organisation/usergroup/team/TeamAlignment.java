@@ -256,7 +256,7 @@ public class TeamAlignment {
         return quotas;
     }
 
-    /** The product itself, or one of its features ("shop-repository:scan"). */
+    /** The product itself, or one of its features ("shop-repository:search"). */
     private static boolean isOfProduct(String roleName, String product) {
         return roleName.equals(product) || roleName.startsWith(product + CatalogRoles.SEPARATOR);
     }

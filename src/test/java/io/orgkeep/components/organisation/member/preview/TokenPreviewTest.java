@@ -66,7 +66,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * and the same catalogs. Comparing with the real thing, rather than with an expected JSON written here, keeps the
  * test right if the token format changes.
  * <p>
- * Setup: catalog "prod" with "billing", a metered product (stats, scan metered), bought by acme with stats and scan
+ * Setup: catalog "prod" with "billing", a metered product (stats, search metered), bought by acme with stats and search
  * at 200 a day; the team "sales" gives every feature bought; Paul is in sales. Gus is a member of another org, globex.
  * The calls to the preview use @TestSecurity (the caller and its roles, without a token) and a mocked CurrentRealm
  * (the throwaway realm of the test).
@@ -106,11 +106,11 @@ class TokenPreviewTest {
 
         catalogService.create(realm, new CreateCatalogRequest("prod", "Production", null));
         productService.create(realm, "prod", new CreateProductRequest("billing", "Billing", null,
-                List.of(new Feature("stats", null), new Feature("scan", null, true)), List.of()));
+                List.of(new Feature("stats", null), new Feature("search", null, true)), List.of()));
         orgService.create(realm, new CreateOrgRequest(ORG, Set.of(), null, null));
         orgService.create(realm, new CreateOrgRequest("globex", Set.of(), null, null));
-        productService.assign(realm, ORG, "prod", "billing", AssignProductRequest.metered(List.of("stats", "scan"),
-                Map.of("scan", new FeatureQuota(200L, QuotaCycle.DAILY))));
+        productService.assign(realm, ORG, "prod", "billing", AssignProductRequest.metered(List.of("stats", "search"),
+                Map.of("search", new FeatureQuota(200L, QuotaCycle.DAILY))));
 
         paulId = member("paul", ORG);
         gusId = member("gus", "globex");
@@ -137,11 +137,11 @@ class TokenPreviewTest {
         assertEquals(preview, response.path("introspection"));
 
         assertEquals(paulId, preview.path("sub").asText(), preview.toString());
-        assertEquals(Set.of("billing:stats", "billing:scan"), strings(preview.at("/resource_access/prod/roles")));
+        assertEquals(Set.of("billing:stats", "billing:search"), strings(preview.at("/resource_access/prod/roles")));
         assertEquals(strings(real.at("/resource_access/prod/roles")), strings(preview.at("/resource_access/prod/roles")));
-        // the claim of the catalog, quotas included: {"billing": {"scan": {"quotas": [{"pool": "/", ...}]}}}.
+        // the claim of the catalog, quotas included: {"billing": {"search": {"quotas": [{"pool": "/", ...}]}}}.
         // Checked present first: two missing claims would compare equal
-        assertEquals("/", preview.at("/prod.billing.scan/quotas/0/pool").asText(), preview.toString());
+        assertEquals("/", preview.at("/prod.billing.search/quotas/0/pool").asText(), preview.toString());
         assertEquals(CatalogClaims.of(real, "prod"), CatalogClaims.of(preview, "prod"));
         assertTrue(strings(preview.path("aud")).contains("prod"), preview.path("aud").toString());
         // no null claim: a real token has none (the Keycloak representation has one per standard claim)
@@ -177,7 +177,7 @@ class TokenPreviewTest {
         assertTrue(token.path("resource_access").isMissingNode(), token.toString());
         assertTrue(real.path("active").asBoolean(), real.toString());
         // checked present first: two missing claims would compare equal
-        assertEquals(Set.of("billing:stats", "billing:scan"), strings(introspection.at("/resource_access/prod/roles")));
+        assertEquals(Set.of("billing:stats", "billing:search"), strings(introspection.at("/resource_access/prod/roles")));
         assertEquals(real.path("resource_access"), introspection.path("resource_access"));
         assertEquals(real.path("realm_access"), introspection.path("realm_access"));
         assertEquals(CatalogClaims.of(real, "prod"), CatalogClaims.of(introspection, "prod"));
@@ -199,7 +199,7 @@ class TokenPreviewTest {
                 new UpdateLoginClientRequest(List.of(), List.of(), List.of(), List.of("prod")));
 
         JsonNode introspection = previewResponse(paulId).path("introspection");
-        assertEquals(Set.of("billing:stats", "billing:scan"), strings(introspection.at("/resource_access/prod/roles")));
+        assertEquals(Set.of("billing:stats", "billing:search"), strings(introspection.at("/resource_access/prod/roles")));
     }
 
     @Test

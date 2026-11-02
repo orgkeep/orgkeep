@@ -263,7 +263,7 @@
     },
     "roles": {
       "title": "Roles",
-      "subtitle": "Valid for the whole catalog, not for one product: what a user may do in this environment (scanner, beta-tester...). Your API combines them with the products of the user.",
+      "subtitle": "Valid for the whole catalog, not for one product: what a user may do in this environment (searcher, beta-tester...). Your API combines them with the products of the user.",
       "new": "New role",
       "loadError": "Could not load the roles",
       "empty": "No role in this catalog.",

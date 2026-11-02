@@ -263,7 +263,7 @@
     },
     "roles": {
       "title": "Rôles",
-      "subtitle": "Valables pour tout le catalogue, pas pour un produit : ce qu'un user peut faire dans cet environnement (scanner, beta-tester...). Votre API les combine avec les produits du user.",
+      "subtitle": "Valables pour tout le catalogue, pas pour un produit : ce qu'un user peut faire dans cet environnement (searcher, beta-tester...). Votre API les combine avec les produits du user.",
       "new": "Nouveau rôle",
       "loadError": "Impossible de charger les rôles",
       "empty": "Aucun rôle dans ce catalogue.",

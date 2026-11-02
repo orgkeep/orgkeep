@@ -6,7 +6,7 @@ import { getJson } from './http';
 // Written by hand for now: to be replaced by types generated from /q/openapi.
 
 // A feature of a product: a permission ("read", "stats") or, if metered, a capacity an org buys with its own quota
-// ("scan"). In the tokens: "<product>:scan"
+// ("search"). In the tokens: "<product>:search"
 export interface Feature {
   name: string;
   displayName: string | null;

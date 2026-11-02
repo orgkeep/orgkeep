@@ -306,7 +306,7 @@ function TokenHint({ product }: { product: Product }) {
   // a metered product has no access role: the API checks the feature a call needs
   const roles = product.metered ? features : [product.name, ...features];
   // the part of the token about this product, in the token format of the core: rights in resource_access, quotas
-  // and parameters in flat claims, one per product ("prod.billing") and one per metered feature ("prod.billing.scan")
+  // and parameters in flat claims, one per product ("prod.billing") and one per metered feature ("prod.billing.search")
   const productClaim = `${product.catalog}.${product.name}`;
   const token: Record<string, unknown> = { resource_access: { [product.catalog]: { roles } } };
   // the claim of the product: a simple product has "quotas", the pool of the org ("/", the root of the org); the

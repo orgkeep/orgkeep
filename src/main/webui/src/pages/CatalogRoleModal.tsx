@@ -84,14 +84,14 @@ export default function CatalogRoleModal({ catalog, opened, onClose, current, on
             <TextInput
               label={t('catalogRoleForm.name')}
               description={t('catalogRoleForm.nameDescription')}
-              placeholder="scanner"
+              placeholder="searcher"
               withAsterisk
               data-autofocus
               styles={{ input: { fontFamily: 'monospace' } }}
               {...form.getInputProps('name')}
             />
           )}
-          <TextInput label={t('catalogRoleForm.displayName')} placeholder="Scanner" {...form.getInputProps('displayName')} />
+          <TextInput label={t('catalogRoleForm.displayName')} placeholder="Searcher" {...form.getInputProps('displayName')} />
           <Textarea label={t('catalogRoleForm.description')} autosize minRows={2} {...form.getInputProps('description')} />
           <Switch
             label={t('catalogRoleForm.orgGrantable')}

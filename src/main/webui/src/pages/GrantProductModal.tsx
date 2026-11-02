@@ -103,7 +103,7 @@ export default function GrantProductModal({ org, team, opened, onClose, availabl
       featureQuotas: initialFeatureQuotas(offerOf(initialKey), current),
     },
     // a function rather than one rule per field: the quotas to check depend on the features given.
-    // The errors are put under the path of the field ('featureQuotas.scan.quota'), where getInputProps finds them
+    // The errors are put under the path of the field ('featureQuotas.search.quota'), where getInputProps finds them
     validate: (values) => {
       const errors: Record<string, string> = {};
       if (!values.productKey) {

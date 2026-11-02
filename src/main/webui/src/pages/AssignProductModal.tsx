@@ -86,7 +86,7 @@ export default function AssignProductModal({ org, opened, onClose, products, ass
       params: current?.params ?? {},
     },
     // A function rather than one rule per field: what is required depends on the kind of the chosen product.
-    // The keys of the errors are the paths of the fields ("featureQuotas.scan.quota"), as getInputProps reads them.
+    // The keys of the errors are the paths of the fields ("featureQuotas.search.quota"), as getInputProps reads them.
     validate: (values) => {
       const errors: Record<string, string> = {};
       const chosen = findProduct(values.productKey);

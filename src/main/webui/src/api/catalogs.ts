@@ -171,7 +171,7 @@ export function useDeleteProduct(catalog: string) {
 
 // ---- Catalog roles (CatalogRolesResource) ----
 
-// A role valid for the whole catalog (scanner, beta-tester...), in resource_access.<catalog>.roles of the tokens
+// A role valid for the whole catalog (searcher, beta-tester...), in resource_access.<catalog>.roles of the tokens
 export interface CatalogRole {
   catalog: string;
   name: string;

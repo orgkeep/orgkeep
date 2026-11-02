@@ -416,9 +416,9 @@ function TokenHint({ catalog }: { catalog: string }) {
   // (access role, a quota of product), shop is metered (no access role, a claim per metered feature with its quotas).
   // "/" is the pool of the org, the root of the org
   const token = {
-    resource_access: { [catalog]: { roles: ['billing', 'billing:read', 'shop:write', 'shop:scan'] } },
+    resource_access: { [catalog]: { roles: ['billing', 'billing:read', 'shop:write', 'shop:search'] } },
     [`${catalog}.billing`]: { quotas: [{ pool: '/', limit: 1000, cycle: 'monthly' }] },
-    [`${catalog}.shop.scan`]: { quotas: [{ pool: '/', limit: 200, cycle: 'daily' }] },
+    [`${catalog}.shop.search`]: { quotas: [{ pool: '/', limit: 200, cycle: 'daily' }] },
   };
 
   return (

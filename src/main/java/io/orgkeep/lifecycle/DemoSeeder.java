@@ -74,6 +74,9 @@ public class DemoSeeder {
     static final String DASHBOARD_CLIENT_ID = "orgkeep-dashboard";
     static final String DASHBOARD_SECRET = "dashboard-dev-secret";
     static final String DASHBOARD_URL = "http://localhost:8284";
+    // fixed secrets of the catalog clients prod and sandbox (prod-demo-secret...): the demo APIs of the compose
+    // (orgkeep-examples) introspect with them, without a secret generated in the dashboard first
+    static final String CATALOG_SECRET_SUFFIX = "-demo-secret";
 
     private final OrgkeepConfig config;
     private final OrgService orgService;
@@ -154,6 +157,7 @@ public class DemoSeeder {
         Feature dig = new Feature("dig", "Dig engine", true);
         for (String catalog : List.of(PROD, SANDBOX)) {
             catalogService.create(realm, new CreateCatalogRequest(catalog, PROD.equals(catalog) ? "Production" : "Sandbox", null));
+            setDemoSecret(realm, catalog);
             productService.create(realm, catalog, new CreateProductRequest(BILLING, "Billing repository",
                     "Invoices and payments", List.of(read, write, stats, search, dig), List.of()));
             productService.create(realm, catalog, new CreateProductRequest(SHOP, "Shop repository",
@@ -189,6 +193,18 @@ public class DemoSeeder {
         addToTeam(realm, demoUser(EMMA, EMMA_EMAIL, "Emma", "Roux"), ACCOUNTING);
         log.info("Demo catalogs '{}' and '{}' created in realm '{}', members '{}' ({}) and '{}' ({}), password '{}'",
                 PROD, SANDBOX, realm, PAUL, SALES, EMMA, ACCOUNTING, PASSWORD);
+    }
+
+    /**
+     * A known secret on the catalog client, instead of the random one Keycloak gave it: regenerating it in the dashboard
+     * still works, the demo APIs then need the new one.
+     */
+    private void setDemoSecret(String realm, String catalog) {
+        String clientUuid = clients.findUuid(realm, catalog)
+                .orElseThrow(() -> new IllegalStateException("Catalog client '%s' not found".formatted(catalog)));
+        ClientRepresentation client = clients.get(realm, clientUuid);
+        client.setSecret(catalog + CATALOG_SECRET_SUFFIX);
+        clients.update(realm, clientUuid, client);
     }
 
     /** Created first with a password, like the owner: OrgMemberService reuses the user and sends no invitation. */

@@ -166,6 +166,16 @@ class DemoSeederTest {
         assertNull(loginClient.getAttributes().get("login_theme"));
     }
 
+    // the demo APIs of the compose introspect with these secrets, written in their configuration
+    @Test
+    void catalogClientsHaveTheDemoSecrets() {
+        for (String catalog : List.of(DemoSeeder.PROD, DemoSeeder.SANDBOX)) {
+            String clientUuid = keycloak.realm(REALM).clients().findByClientId(catalog).get(0).getId();
+            assertEquals(catalog + "-demo-secret",
+                    keycloak.realm(REALM).clients().get(clientUuid).getSecret().getValue());
+        }
+    }
+
     /**
      * Password grant through the login client of the realm (clientId = realm name), as demo.http does.
      * @return the claims of the access token

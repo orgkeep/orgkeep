@@ -29,6 +29,8 @@ public interface OrgMapper {
     OrgSummary toOrgSummary(OrganizationRepresentation org, List<OrgMember> owners, long memberCount,
                             List<String> products);
 
+    // an org without domain has null domains in Keycloak: the API always answers a set, empty here
+    @IterableMapping(nullValueMappingStrategy = NullValueMappingStrategy.RETURN_DEFAULT)
     Set<String> toDomainNames(Set<OrganizationDomainRepresentation> domains);
 
     // used by MapStruct for each element of toDomainNames

@@ -258,6 +258,15 @@ public class OrgServiceTest {
         assertEquals(OrgRole.ORG_OWNER, details.owners().get(0).role());
     }
 
+    // domains are optional and Keycloak gives null for none: the API answers an empty set, which the front relies on
+    @Test
+    public void orgWithoutDomainHasEmptyDomains(){
+        orgService.create(testRealm.name(), new CreateOrgRequest(ORG, Set.of(), null, null));
+
+        assertEquals(Set.of(), orgService.get(testRealm.name(), ORG).emailDomains());
+        assertEquals(Set.of(), orgService.list(testRealm.name(), null, null, null, 0, 100).get(0).emailDomains());
+    }
+
     @Test
     public void getUnknownOrgThrowsNotFound(){
         assertThrowsExactly(OrgNotFoundException.class, () -> orgService.get(testRealm.name(), "unknown-org"));

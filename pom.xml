@@ -19,7 +19,7 @@
     </properties>
 
     <build>
-        <!-- no version in the file name: the compose mounts target/orgkeep-theme.jar -->
+        <!-- no version in the file name: copied as it is in /opt/keycloak/providers/ -->
         <finalName>orgkeep-theme</finalName>
     </build>
 </project>

@@ -5,7 +5,7 @@
 # Through Maven (recommended), after mvn install in orgkeep-core:
 #   mvn package -Pdocker
 # By hand, from the orgkeep-dashboard directory, after mvn package:
-#   docker build -f src/main/docker/Dockerfile.jvm -t orgkeep/orgkeep:1.0.0-SNAPSHOT .
+#   docker build -f src/main/docker/Dockerfile.jvm -t orgkeep/orgkeep:0.1.0-SNAPSHOT .
 #
 # Runtime configuration through environment variables: those of orgkeep-core (KEYCLOAK_URL, KEYCLOAK_ADMIN_USER,
 # KEYCLOAK_ADMIN_PASSWORD, ORGKEEP_REALM_NAME, ORGKEEP_OWNER_*...) plus ORGKEEP_DASHBOARD_CLIENT_SECRET, the secret

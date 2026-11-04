@@ -24,7 +24,7 @@ Three forms, the same content:
   like the official one (used by the demo stack of [orgkeep-examples](https://github.com/orgkeep/orgkeep-examples)):
 
   ```
-  docker build -t ghcr.io/orgkeep/orgkeep-keycloak:1.0.0-SNAPSHOT .
+  docker build -t ghcr.io/orgkeep/orgkeep-keycloak:0.1.0-SNAPSHOT .
   docker build --build-arg KEYCLOAK_VERSION=26.6.1 -t ... .     # another Keycloak version
   ```
 

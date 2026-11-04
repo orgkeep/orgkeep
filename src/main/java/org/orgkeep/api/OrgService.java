@@ -1,0 +1,42 @@
+package org.orgkeep.api;
+
+import org.orgkeep.api.model.CreateOrgRequest;
+import org.orgkeep.api.model.CreateOrgResponse;
+import org.orgkeep.api.model.OrgDetails;
+import org.orgkeep.api.model.OrgSummary;
+
+import java.util.List;
+
+/**
+ * Organisations are identified by their name: it is unique in a realm, never changes,
+ * and is the key of the org client (org-{name}) and of the org groups (/{name}).
+ */
+public interface OrgService {
+    /**
+     * @throws org.orgkeep.api.exceptions.OrgAlreadyExistsException if an organisation has this name
+     * @throws org.orgkeep.api.exceptions.MemberOfAnotherOrgException if the owner is a member of another organisation
+     */
+    CreateOrgResponse create(String realm,CreateOrgRequest request);
+
+    /**
+     * @param search  optional, matches organisation names (not exact)
+     * @param catalog optional, keeps the organisations with a product of this catalog
+     * @param product optional, keeps the organisations this product is assigned to (in any catalog, or in the one given).
+     *                An unknown catalog or product gives an empty list, like any filter that matches nothing
+     */
+    List<OrgSummary> list(String realm, String search, String catalog, String product, int first, int max);
+
+    /** @throws org.orgkeep.api.exceptions.OrgNotFoundException if no organisation has this name */
+    OrgDetails get(String realm, String orgName);
+
+    /**
+     * Keycloak lets the members of a disabled organisation log in: disabling it also disables its enabled members
+     * (and ends their sessions), enabling it enables again only the members it disabled. Idempotent.
+     *
+     * @throws org.orgkeep.api.exceptions.OrgNotFoundException if no organisation has this name
+     */
+    OrgDetails setEnabled(String realm, String orgName, boolean enabled);
+
+    /** @throws org.orgkeep.api.exceptions.OrgNotFoundException if no organisation has this name */
+    void delete(String realm, String orgName);
+}

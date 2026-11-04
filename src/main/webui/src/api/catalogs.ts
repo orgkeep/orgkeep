@@ -3,7 +3,7 @@ import { deleteRequest, getJson, postJson, putJson, putRequest } from './http';
 import type { Feature, ParamDefinition, Product } from './products';
 
 // The catalogs endpoints of the API of the core (CatalogsResource, ProductsResource and CatalogRolesResource in orgkeep-core),
-// called directly by the front. Mirror the records of io.orgkeep.api.model.
+// called directly by the front. Mirror the records of org.orgkeep.api.model.
 // Written by hand for now: to be replaced by types generated from /q/openapi.
 
 export interface Catalog {

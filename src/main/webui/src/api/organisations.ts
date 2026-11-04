@@ -3,7 +3,7 @@ import { deleteRequest, getJson, postJson, putJson } from './http';
 
 // The organisations endpoints of the API of the core (OrganisationsResource, OrgProductsResource,
 // OrgCatalogsResource and OrgAdminResource in orgkeep-core), called directly by the front.
-// Mirror the records of io.orgkeep.api.model, with the fields the screens use: the core may send more, they are
+// Mirror the records of org.orgkeep.api.model, with the fields the screens use: the core may send more, they are
 // ignored. Written by hand for now: to be replaced by types generated from /q/openapi.
 export interface OrgOwner {
   id: string;

@@ -1,4 +1,4 @@
-package io.orgkeep.dashboard.auth;
+package org.orgkeep.dashboard.auth;
 
 import java.util.Set;
 

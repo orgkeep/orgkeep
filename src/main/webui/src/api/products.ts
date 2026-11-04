@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { type Catalog, CATALOGS_URL, catalogUrl } from './catalogs';
 import { getJson } from './http';
 
-// Mirror the records of io.orgkeep.api.model in orgkeep-core.
+// Mirror the records of org.orgkeep.api.model in orgkeep-core.
 // Written by hand for now: to be replaced by types generated from /q/openapi.
 
 // A feature of a product: a permission ("read", "stats") or, if metered, a capacity an org buys with its own quota

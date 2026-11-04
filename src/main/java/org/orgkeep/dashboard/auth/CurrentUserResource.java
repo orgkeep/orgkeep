@@ -1,4 +1,4 @@
-package io.orgkeep.dashboard.auth;
+package org.orgkeep.dashboard.auth;
 
 import io.quarkus.security.identity.SecurityIdentity;
 import jakarta.annotation.security.PermitAll;

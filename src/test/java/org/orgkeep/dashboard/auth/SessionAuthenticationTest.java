@@ -1,10 +1,10 @@
-package io.orgkeep.dashboard.auth;
+package org.orgkeep.dashboard.auth;
 
-import io.orgkeep.api.OrgMemberService;
-import io.orgkeep.api.OrgService;
-import io.orgkeep.api.UserGroupService;
-import io.orgkeep.api.model.AddMemberRequest;
-import io.orgkeep.api.model.CreateOrgRequest;
+import org.orgkeep.api.OrgMemberService;
+import org.orgkeep.api.OrgService;
+import org.orgkeep.api.UserGroupService;
+import org.orgkeep.api.model.AddMemberRequest;
+import org.orgkeep.api.model.CreateOrgRequest;
 import io.quarkus.test.common.http.TestHTTPResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.Cookie;

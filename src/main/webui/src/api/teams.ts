@@ -5,7 +5,7 @@ import type { FeatureQuota, QuotaCycle } from './organisations';
 // The teams of an organisation, managed by its org admins (UserGroupsResource, TeamProductsResource,
 // TeamCatalogRolesResource, AvailableProductsResource and AvailableCatalogsResource in orgkeep-core).
 // A team is a user group of the org: it gives products of the org and catalog roles to its members.
-// Mirror the records of io.orgkeep.api.model. Written by hand for now: to be replaced by types generated from /q/openapi.
+// Mirror the records of org.orgkeep.api.model. Written by hand for now: to be replaced by types generated from /q/openapi.
 
 // A product given by a team
 export interface TeamProduct {

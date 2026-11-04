@@ -1,4 +1,4 @@
-package io.orgkeep.dashboard.auth;
+package org.orgkeep.dashboard.auth;
 
 import io.quarkus.oidc.TenantResolver;
 import io.vertx.core.http.Cookie;

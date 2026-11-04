@@ -1,6 +1,6 @@
-package io.orgkeep.dashboard.auth;
+package org.orgkeep.dashboard.auth;
 
-import io.orgkeep.web.security.OrgRoles;
+import org.orgkeep.web.security.OrgRoles;
 import io.quarkus.oidc.AccessTokenCredential;
 import io.quarkus.oidc.IdTokenCredential;
 import io.quarkus.security.identity.AuthenticationRequestContext;

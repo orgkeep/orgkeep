@@ -3,7 +3,7 @@ import { getJson, putJson } from './http';
 
 // The login client endpoints of the API of the core (LoginClientResource in orgkeep-core): the client the users of
 // every organisation log in through, to the applications of the realm owner. Its clientId is the realm name.
-// Mirror the records of io.orgkeep.api.model. Written by hand for now: to be replaced by types generated
+// Mirror the records of org.orgkeep.api.model. Written by hand for now: to be replaced by types generated
 // from /q/openapi.
 
 export interface LoginClient {

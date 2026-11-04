@@ -1,4 +1,4 @@
-package io.orgkeep.dashboard;
+package org.orgkeep.dashboard;
 
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;

@@ -42,6 +42,11 @@ Keycloak of the dev mode, without any cache: a change of CSS or template shows a
 (http://localhost:8284 for the login page of the dashboard). To see the emails and the account console, choose the
 theme `orgkeep` on the realm `demo` in the Keycloak console; the emails arrive in Mailpit (http://localhost:8025).
 
+## Contributing
+
+Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Commits are signed off (DCO), no contributor
+license agreement.
+
 ## License
 
 [Apache License 2.0](LICENSE).

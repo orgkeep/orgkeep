@@ -76,6 +76,11 @@ On the first startup the realm does not exist yet, so neither does the client: s
 `ORGKEEP_DASHBOARD_CLIENT_SECRET` (it is only used at login), create the client, then restart Orgkeep with its real
 secret.
 
+## Contributing
+
+Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Commits are signed off (DCO), no contributor
+license agreement.
+
 ## License
 
 [Apache License 2.0](LICENSE).

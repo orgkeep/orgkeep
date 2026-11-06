@@ -139,6 +139,11 @@ Everything lives under `/api`, for two audiences:
 Callers send an access token of the realm (`Authorization: Bearer ...`). The full contract is on `/q/openapi`, and in
 Swagger UI when enabled.
 
+## Contributing
+
+Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Commits are signed off (DCO), no contributor
+license agreement.
+
 ## License
 
 [Apache License 2.0](LICENSE).

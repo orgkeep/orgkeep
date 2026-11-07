@@ -11,6 +11,11 @@ tokens, as with the core alone.
 To try it without building anything: the demo stack of
 [orgkeep-examples](https://github.com/orgkeep/orgkeep-examples) (`docker compose up`, then http://localhost:8284).
 
+> **Status: early preview (0.x).** Orgkeep is ready to be tried, not yet to run in production. Feedback is welcome
+> in the [issues](https://github.com/orgkeep/orgkeep-dashboard/issues). No upgrade path between 0.x versions, and
+> known limitations (no service accounts yet, among others): see the
+> [status of the core](https://github.com/orgkeep/orgkeep-core#readme).
+
 ## Requirements
 
 - the core installed in the local Maven repository: `mvn install` in [orgkeep-core](https://github.com/orgkeep/orgkeep-core);

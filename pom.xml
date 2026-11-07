@@ -13,6 +13,14 @@
         </license>
     </licenses>
 
+    <!-- where the maven-release-plugin commits, tags and pushes -->
+    <scm>
+        <connection>scm:git:https://github.com/orgkeep/orgkeep-dashboard.git</connection>
+        <developerConnection>scm:git:git@github.com:orgkeep/orgkeep-dashboard.git</developerConnection>
+        <url>https://github.com/orgkeep/orgkeep-dashboard</url>
+        <tag>HEAD</tag>
+    </scm>
+
     <properties>
         <compiler-plugin.version>3.15.0</compiler-plugin.version>
         <maven.compiler.release>25</maven.compiler.release>
@@ -103,6 +111,20 @@
 
     <build>
         <plugins>
+            <!-- mvn release:prepare: release version, tag v<version> (which starts the Release workflow on GitHub),
+                 next SNAPSHOT, then push. No release:perform: nothing is deployed to a Maven repository.
+                 The core must be released first: the plugin asks for the release version of the orgkeep-core
+                 dependency (0.1.0) and its next one (0.1.1-SNAPSHOT), and the build needs that core installed. -->
+            <plugin>
+                <artifactId>maven-release-plugin</artifactId>
+                <version>3.1.1</version>
+                <configuration>
+                    <tagNameFormat>v@{project.version}</tagNameFormat>
+                    <signTag>true</signTag>
+                    <scmReleaseCommitComment>Release @{releaseLabel}</scmReleaseCommitComment>
+                    <scmDevelopmentCommitComment>Next development version</scmDevelopmentCommitComment>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>io.quarkus.platform</groupId>
                 <artifactId>quarkus-maven-plugin</artifactId>

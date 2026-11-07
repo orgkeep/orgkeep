@@ -38,7 +38,8 @@ license).
 ## Pull requests
 
 - One change per pull request, on a branch created from `main`. Pull requests are squash merged.
-- A change of behaviour comes with tests, and `mvn test` passes (see the [README](README.md) to build and run).
+- A change of behaviour comes with tests, and `mvn test` passes (see the [README](README.md) to build and run). The
+  *Build* check runs them again on each pull request.
 - Follow the style of the surrounding code. Comments are in English.
 - A commit message starts with a short summary line, followed by why the change is needed when it is not obvious.
 - No IDE files or build output in the commits.

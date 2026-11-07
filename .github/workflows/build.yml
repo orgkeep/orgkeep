@@ -1,0 +1,31 @@
+# Builds and tests every push to main and every pull request.
+# The tests start Keycloak and Mailpit with Quarkus Dev Services: the GitHub runners have Docker.
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# A new push to a pull request cancels the build still running for the previous one
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Build and test
+        run: mvn -B verify

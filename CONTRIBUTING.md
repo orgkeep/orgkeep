@@ -9,7 +9,7 @@ days.
 - **Larger changes** (a new feature, a change in the API or in what is written in Keycloak): open an issue first, to
   agree on the approach before you spend time on it.
 - **Security vulnerabilities**: never in a public issue. Use *Report a vulnerability* in the *Security* tab of the
-  repository, which keeps the report private.
+  repository, which keeps the report private (see [SECURITY.md](SECURITY.md)).
 
 ## Sign off your commits (DCO)
 

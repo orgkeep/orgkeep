@@ -6,6 +6,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.RequiredArgsConstructor;
 import org.keycloak.admin.client.CreatedResponseUtil;
 import org.keycloak.admin.client.Keycloak;
+import org.keycloak.representations.idm.CredentialRepresentation;
 import org.keycloak.representations.idm.RoleRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 
@@ -60,6 +61,12 @@ public class KeycloakUsers {
     public void addRealmRole(String realm, String userId, String roleName) {
         RoleRepresentation role = keycloak.realm(realm).roles().get(roleName).toRepresentation();
         keycloak.realm(realm).users().get(userId).roles().realmLevel().add(List.of(role));
+    }
+
+    /** Whether the user has a password. A member invited by Orgkeep has none until they follow the email link. */
+    public boolean hasPassword(String realm, String userId) {
+        return keycloak.realm(realm).users().get(userId).credentials().stream()
+                .anyMatch(credential -> CredentialRepresentation.PASSWORD.equals(credential.getType()));
     }
 
     /** Ends all the sessions of the user: their refresh tokens stop working. */

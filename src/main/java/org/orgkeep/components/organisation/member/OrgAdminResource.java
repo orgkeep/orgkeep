@@ -70,4 +70,16 @@ public class OrgAdminResource {
     public void remove(@PathParam("org") String org, @PathParam("userId") String userId){
         memberService.remove(currentRealm.name(), org, userId);
     }
+
+    @POST
+    @Path("/{userId}/invitation")
+    @Operation(summary = "Send the invitation again",
+            description = "Emails the member a new link to choose a password, for a member who has none yet "
+                    + "(invitationPending): expired link, or SMTP server configured after the member was added.")
+    @APIResponse(responseCode = "204", description = "Invitation sent")
+    @APIResponse(responseCode = "404", description = "Unknown organisation or not a member")
+    @APIResponse(responseCode = "409", description = "The member already has a password, or the realm has no SMTP server")
+    public void resendInvitation(@PathParam("org") String org, @PathParam("userId") String userId){
+        memberService.resendInvitation(currentRealm.name(), org, userId);
+    }
 }

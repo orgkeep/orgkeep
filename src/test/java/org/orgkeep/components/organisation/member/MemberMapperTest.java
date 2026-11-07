@@ -36,11 +36,21 @@ class MemberMapperTest {
         user.setEmail("bob@acme.com");
         user.setEnabled(true);
 
-        OrgMember member = mapper.toOrgMember(user, OrgRole.ORG_ADMIN);
+        OrgMember member = mapper.toOrgMember(user, OrgRole.ORG_ADMIN, true);
 
         assertEquals("42", member.id());
         assertEquals("bob@acme.com", member.email());
         assertTrue(member.enabled());
         assertEquals(OrgRole.ORG_ADMIN, member.role());
+        assertTrue(member.invitationPending());
+    }
+
+    @Test
+    void toOrgMemberWithoutInvitationStatus() {
+        UserRepresentation user = new UserRepresentation();
+        user.setId("42");
+
+        // the owners in the organisation lists: the status is not computed
+        assertNull(mapper.toOrgMember(user, OrgRole.ORG_OWNER).invitationPending());
     }
 }

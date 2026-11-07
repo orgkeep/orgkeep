@@ -23,6 +23,10 @@ public interface MemberMapper {
     @Mapping(target = "enabled", constant = "true")
     UserRepresentation toUserRepresentation(AddMemberRequest request);
 
-    // several sources: the user properties come from user, the role parameter fills the property of the same name
+    // several sources: the user properties come from user, the other parameters fill the properties of the same name
+    OrgMember toOrgMember(UserRepresentation user, OrgRole role, Boolean invitationPending);
+
+    /** Without the invitation status, which costs a Keycloak call per member (owners in the organisation lists). */
+    @Mapping(target = "invitationPending", ignore = true)
     OrgMember toOrgMember(UserRepresentation user, OrgRole role);
 }

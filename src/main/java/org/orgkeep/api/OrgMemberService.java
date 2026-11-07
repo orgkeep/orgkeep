@@ -30,4 +30,14 @@ public interface OrgMemberService {
      * @throws org.orgkeep.api.exceptions.OperationNotAllowedException if the user is an owner of the organisation
      */
     void remove(String realm, String orgName, String userId);
+
+    /**
+     * Emails the invitation again: a new link to choose a password (expired link, SMTP server configured after
+     * the creation of the member).
+     *
+     * @throws org.orgkeep.api.exceptions.MemberNotFoundException if the user is not a member
+     * @throws org.orgkeep.api.exceptions.OperationNotAllowedException if the user already has a password,
+     *         or the realm has no SMTP server
+     */
+    void resendInvitation(String realm, String orgName, String userId);
 }

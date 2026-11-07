@@ -11,6 +11,7 @@ import org.orgkeep.api.model.OrgClients;
 import org.orgkeep.api.model.OrgGroups;
 import org.orgkeep.api.model.OrgMember;
 import org.orgkeep.api.model.OrgRole;
+import org.orgkeep.components.organisation.member.invitation.InvitationMailer;
 import org.orgkeep.repository.keycloak.KeycloakClients;
 import org.orgkeep.repository.keycloak.KeycloakGroups;
 import org.orgkeep.repository.keycloak.KeycloakOrgs;
@@ -20,6 +21,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.keycloak.representations.idm.OrganizationRepresentation;
+import org.keycloak.representations.idm.UserRepresentation;
 
 import java.util.List;
 import java.util.Set;
@@ -33,6 +35,7 @@ public class OrgMemberServiceImpl implements OrgMemberService {
     private final KeycloakGroups groups;
     private final KeycloakUsers users;
     private final MemberMapper memberMapper;
+    private final InvitationMailer invitations;
     private final EventBus eventBus;
 
     @Override
@@ -49,7 +52,8 @@ public class OrgMemberServiceImpl implements OrgMemberService {
                 .orElse(Set.of());
 
         return orgs.members(realm, org.getId()).stream()
-                .map(member -> memberMapper.toOrgMember(member, roleOf(member.getId(), ownerIds, adminIds)))
+                .map(member -> memberMapper.toOrgMember(member, roleOf(member.getId(), ownerIds, adminIds),
+                        invitations.isPending(realm, member)))
                 .toList();
     }
 
@@ -89,7 +93,17 @@ public class OrgMemberServiceImpl implements OrgMemberService {
 
         log.info("User {} added to organisation '{}' in realm '{}'", request.email(), orgName, realm);
         // a new member only joined the users group
-        return memberMapper.toOrgMember(users.get(realm, userId), OrgRole.ORG_USER);
+        UserRepresentation user = users.get(realm, userId);
+        return memberMapper.toOrgMember(user, OrgRole.ORG_USER, invitations.isPending(realm, user));
+    }
+
+    @Override
+    public void resendInvitation(String realm, String orgName, String userId) {
+        OrganizationRepresentation org = orgs.getByName(realm, orgName);
+        if (!orgs.isMember(realm, org.getId(), userId)) {
+            throw new MemberNotFoundException(orgName, userId);
+        }
+        invitations.resend(realm, userId);
     }
 
     @Override

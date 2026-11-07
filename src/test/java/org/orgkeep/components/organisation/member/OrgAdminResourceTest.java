@@ -94,6 +94,50 @@ class OrgAdminResourceTest {
                 .body("email", hasItem(OWNER_EMAIL));
     }
 
+    // the emails themselves are tested in InvitationMailerTest: here the security, the status codes and the JSON
+    @Test
+    @TestSecurity(user = "alice", roles = "org-it-members-org:org-admin")
+    void listTellsWhoHasNotFollowedTheInvitation() {
+        given().contentType(ContentType.JSON).body(new AddMemberRequest("ines@it-members-org.test", "Ines", "Martin"))
+                .when().post(BASE, ORG)
+                .then().statusCode(201)
+                .body("invitationPending", equalTo(true));
+
+        given().when().get(BASE, ORG)
+                .then().statusCode(200)
+                .body("find { it.email == 'ines@it-members-org.test' }.invitationPending", equalTo(true))
+                // created with a password
+                .body("find { it.email == '%s' }.invitationPending".formatted(OWNER_EMAIL), equalTo(false));
+    }
+
+    @Test
+    @TestSecurity(user = "mallory", roles = "org-other-org:org-admin")
+    void resendInvitationByAdminOfAnotherOrgGets403() {
+        given().when().post(BASE + "/{userId}/invitation", ORG, ownerId())
+                .then().statusCode(403);
+    }
+
+    @Test
+    @TestSecurity(user = "alice", roles = "org-it-members-org:org-admin")
+    void resendInvitationToAMemberWithAPasswordReturns409() {
+        given().when().post(BASE + "/{userId}/invitation", ORG, ownerId())
+                .then().statusCode(409)
+                .body("message", containsString("password"));
+    }
+
+    @Test
+    @TestSecurity(user = "alice", roles = "org-it-members-org:org-admin")
+    void resendInvitationToANonMemberReturns404() {
+        String strangerId = testRealm.createUser("stranger", "stranger@elsewhere.test");
+
+        given().when().post(BASE + "/{userId}/invitation", ORG, strangerId)
+                .then().statusCode(404);
+    }
+
+    private String ownerId() {
+        return testRealm.resource().users().searchByEmail(OWNER_EMAIL, true).getFirst().getId();
+    }
+
     // owner: role granted directly at creation; admin: member of the admin group; user: anyone else
     @Test
     @TestSecurity(user = "alice", roles = "org-it-members-org:org-admin")

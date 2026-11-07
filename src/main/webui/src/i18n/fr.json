@@ -400,6 +400,11 @@
       "meteredHint": "Pour un membre d'une organisation qui a acheté toutes les features, avec des quotas d'exemple : pas de rôle d'accès, un claim par feature mesurée avec ses quotas. Le pool \"/\" est celui de l'organisation : votre API clé ses compteurs par organisation, catalogue, produit, feature et pool."
     }
   },
+  "invitation": {
+    "pending": "Invitation en attente",
+    "resend": "Renvoyer l'invitation",
+    "sent": "Invitation envoyée"
+  },
   "tokenPreview": {
     "button": "Aperçu du token",
     "title": "Token de {{member}}",

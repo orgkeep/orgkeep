@@ -82,6 +82,11 @@ export async function putJson<T>(url: string, body: unknown): Promise<T> {
   return (await request('PUT', url, body)).json();
 }
 
+// A POST without body, answered 204 No Content (e.g. sending an invitation again): an action, nothing to parse
+export async function postRequest(url: string): Promise<void> {
+  await request('POST', url);
+}
+
 // A PUT without body, answered 204 No Content (e.g. putting a member in a team): nothing to parse, hence void
 export async function putRequest(url: string): Promise<void> {
   await request('PUT', url);

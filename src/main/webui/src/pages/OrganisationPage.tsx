@@ -37,6 +37,7 @@ import AssignProductModal from './AssignProductModal';
 import { ROLE_COLORS } from './orgRoles';
 import { personName } from './personName';
 import MemberName from "../components/MemberName";
+import ResendInvitationButton from '../components/ResendInvitationButton';
 
 // The tabs of the page. The selected one is in the URL (?tab=products) like the product filter of the list:
 // the product count of the list links straight to the products tab.
@@ -348,10 +349,13 @@ function MembersTab({ org, members, isPending, error }: MembersTabProps) {
                   {t(`orgDetail.roles.${member.role}`)}
                 </Badge>
               </Table.Td>
-              <Table.Td ta="right">
-                <Button variant="subtle" size="xs" onClick={() => setPreviewTarget(member)}>
-                  {t('tokenPreview.button')}
-                </Button>
+              <Table.Td>
+                <Group justify="flex-end" align="flex-start" wrap="nowrap">
+                  <ResendInvitationButton org={org} member={member} />
+                  <Button variant="subtle" size="xs" onClick={() => setPreviewTarget(member)}>
+                    {t('tokenPreview.button')}
+                  </Button>
+                </Group>
               </Table.Td>
             </Table.Tr>
           ))}

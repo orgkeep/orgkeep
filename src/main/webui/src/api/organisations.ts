@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { deleteRequest, getJson, postJson, putJson } from './http';
+import { deleteRequest, getJson, postJson, postRequest, putJson } from './http';
 
 // The organisations endpoints of the API of the core (OrganisationsResource, OrgProductsResource,
 // OrgCatalogsResource and OrgAdminResource in orgkeep-core), called directly by the front.
@@ -118,6 +118,8 @@ export interface OrgMember {
   lastName: string | null;
   enabled: boolean | null;
   role: OrgRole;
+  // true while the member has not chosen a password from the invitation email: it can be sent again
+  invitationPending: boolean | null;
 }
 
 // Values of the QuotaCycle enum of the core
@@ -204,6 +206,14 @@ export function useAddOrgMember(org: string) {
   return useMutation({
     mutationFn: (request: AddMemberRequest) => postJson<OrgMember>(membersUrl(org), request),
     onSuccess: invalidate,
+  });
+}
+
+// A new invitation email (expired link, SMTP configured later). Nothing changes in the member: no cache to refresh.
+// The core answers 409 with its reason when nothing can be sent (no SMTP server, password already chosen)
+export function useResendInvitation(org: string) {
+  return useMutation({
+    mutationFn: (userId: string) => postRequest(`${membersUrl(org)}/${encodeURIComponent(userId)}/invitation`),
   });
 }
 

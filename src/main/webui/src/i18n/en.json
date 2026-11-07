@@ -400,6 +400,11 @@
       "meteredHint": "For a member of an organisation that bought every feature, with example quotas: no access role, a claim per metered feature with its quotas. The pool \"/\" is the one of the organisation: your API keys its counters by organisation, catalog, product, feature and pool."
     }
   },
+  "invitation": {
+    "pending": "Invitation pending",
+    "resend": "Resend invitation",
+    "sent": "Invitation sent"
+  },
   "tokenPreview": {
     "button": "Token preview",
     "title": "Token of {{member}}",

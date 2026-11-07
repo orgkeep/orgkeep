@@ -7,7 +7,8 @@ interface MemberNameProps {
   member: OrgMember;
 }
 
-// The name of a member, with a "Disabled" badge when they can no longer log in (enabled may be null: unknown)
+// The name of a member, with a "Disabled" badge when they can no longer log in (enabled may be null: unknown),
+// and an "Invitation pending" badge until they choose a password from the invitation email
 export default function MemberName({ member }: MemberNameProps) {
   const { t } = useTranslation();
 
@@ -17,6 +18,11 @@ export default function MemberName({ member }: MemberNameProps) {
       {member.enabled === false && (
         <Badge color="gray" variant="light" size="sm">
           {t('organisations.status.disabled')}
+        </Badge>
+      )}
+      {member.invitationPending && (
+        <Badge color="yellow" variant="light" size="sm">
+          {t('invitation.pending')}
         </Badge>
       )}
     </Group>

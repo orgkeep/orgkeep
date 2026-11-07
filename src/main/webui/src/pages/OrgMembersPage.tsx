@@ -9,6 +9,7 @@ import AddMemberModal from './AddMemberModal';
 import { ROLE_COLORS } from './orgRoles';
 import { personName } from './personName';
 import MemberName from "../components/MemberName";
+import ResendInvitationButton from '../components/ResendInvitationButton';
 
 // The members of an org, managed by its org admins: add (the core sends the invitation) and remove.
 export default function OrgMembersPage() {
@@ -79,7 +80,8 @@ export default function OrgMembersPage() {
                     </Badge>
                   </Table.Td>
                   <Table.Td>
-                    <Group justify="flex-end">
+                    <Group justify="flex-end" align="flex-start" wrap="nowrap">
+                      <ResendInvitationButton org={org} member={member} />
                       {/* the core refuses to remove an owner (409): not offered */}
                       {member.role !== 'ORG_OWNER' && (
                         <Button variant="subtle" size="xs" color="red" onClick={() => setRemoveTarget(member)}>

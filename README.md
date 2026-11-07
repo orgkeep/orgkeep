@@ -16,6 +16,14 @@ integrity of what it writes in Keycloak and needs no database of its own: everyt
 To try it without building anything: the demo stack of
 [orgkeep-examples](https://github.com/orgkeep/orgkeep-examples) (`docker compose up`).
 
+> **Status: early preview (0.x).** Orgkeep is ready to be tried, not yet to run in production. Feedback is welcome
+> in the [issues](https://github.com/orgkeep/orgkeep-core/issues).
+> - No upgrade path between 0.x versions: a change of format applies to new objects only, and a realm may have to
+>   be created again.
+> - Known limitations: no service accounts yet (machine-to-machine access for the organisations); Orgkeep calls
+>   Keycloak with an admin account of the `master` realm; outside the demo, the `orgkeep-dashboard` client is
+>   created by hand in Keycloak; one realm per Orgkeep instance.
+
 ## Requirements
 
 - Keycloak 26 (tested with 26.6), and the credentials of an admin of its `master` realm;

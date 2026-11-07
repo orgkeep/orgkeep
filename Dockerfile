@@ -6,7 +6,7 @@
 # The theme is not applied to anything here: Orgkeep sets it on the dashboard client (ORGKEEP_DASHBOARD_LOGIN_THEME).
 ARG KEYCLOAK_VERSION=26.6.1
 FROM quay.io/keycloak/keycloak:${KEYCLOAK_VERSION}
-# OCI labels: GitHub links the package to its repository (and gives it the repository's visibility).
+# OCI labels: GitHub links the package to its repository (and gives it the repository's access rights, not its visibility).
 # title, url and documentation replace the ones inherited from the Keycloak image (version stays Keycloak's)
 LABEL org.opencontainers.image.source=https://github.com/orgkeep/orgkeep-theme \
       org.opencontainers.image.title=orgkeep-keycloak \

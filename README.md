@@ -60,7 +60,7 @@ docker run -p 8282:8282 \
   -e ORGKEEP_REALM_NAME=acme \
   -e ORGKEEP_OWNER_EMAIL=owner@acme.com -e ORGKEEP_OWNER_PASSWORD=... \
   -e ORGKEEP_OWNER_FIRST_NAME=Alice -e ORGKEEP_OWNER_LAST_NAME=Martin \
-  ghcr.io/orgkeep/orgkeep-core:0.1.0
+  ghcr.io/orgkeep/orgkeep-core:0.1.0-SNAPSHOT
 ```
 
 The application listens on port **8282** (`QUARKUS_HTTP_PORT` to change it). At the first startup, it creates the

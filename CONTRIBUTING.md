@@ -9,7 +9,7 @@ days.
 - **Larger changes** (a new screen, a change in how the dashboard works): open an issue first, to agree on the approach
   before you spend time on it.
 - **Security vulnerabilities**: never in a public issue. Use *Report a vulnerability* in the *Security* tab of the
-  repository, which keeps the report private.
+  repository, which keeps the report private (see [SECURITY.md](SECURITY.md)).
 
 ## Sign off your commits (DCO)
 

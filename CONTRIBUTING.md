@@ -38,7 +38,9 @@ license).
 
 ## Pull requests
 
-- One change per pull request, on a branch created from `main`. Pull requests are squash merged.
+- One change per pull request, on a branch created from `main`; bring `main` in with a rebase, not a merge. A pull
+  request is squashed into one commit, unless its commits are clean and each makes sense on its own: they are then
+  merged as they are.
 - Check your change in a browser, and in Mailpit for an email (see *Work on it* in the [README](README.md)). A
   screenshot in the pull request helps the review.
 - Comments are in English. A commit message starts with a short summary line, followed by why the change is needed

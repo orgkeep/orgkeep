@@ -37,7 +37,9 @@ license).
 
 ## Pull requests
 
-- One change per pull request, on a branch created from `main`. Pull requests are squash merged.
+- One change per pull request, on a branch created from `main`; bring `main` in with a rebase, not a merge. A pull
+  request is squashed into one commit, unless its commits are clean and each makes sense on its own: they are then
+  merged as they are.
 - A change of behaviour comes with tests, and `mvn test` passes (see the [README](README.md) to build and run). The
   *Build* check runs them again on each pull request, against the `main` branch of orgkeep-core: a change that needs
   a change in the core waits for the core first.

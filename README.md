@@ -74,7 +74,7 @@ docker run -p 8284:8284 \
   -e ORGKEEP_OWNER_EMAIL=owner@acme.com -e ORGKEEP_OWNER_PASSWORD=... \
   -e ORGKEEP_OWNER_FIRST_NAME=Alice -e ORGKEEP_OWNER_LAST_NAME=Martin \
   -e ORGKEEP_DASHBOARD_CLIENT_SECRET=... \
-  ghcr.io/orgkeep/orgkeep:0.1.0-SNAPSHOT
+  ghcr.io/orgkeep/orgkeep:0.1.0
 ```
 
 On the first startup the realm does not exist yet, so neither does the client: start Orgkeep once with any value in

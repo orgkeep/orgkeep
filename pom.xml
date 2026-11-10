@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.orgkeep</groupId>
     <artifactId>orgkeep-theme</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
     <packaging>jar</packaging>
     <description>Keycloak login theme with the look of Orgkeep</description>
 
@@ -19,7 +19,7 @@
         <connection>scm:git:https://github.com/orgkeep/orgkeep-theme.git</connection>
         <developerConnection>scm:git:git@github.com:orgkeep/orgkeep-theme.git</developerConnection>
         <url>https://github.com/orgkeep/orgkeep-theme</url>
-        <tag>HEAD</tag>
+        <tag>v0.1.0</tag>
     </scm>
 
     <properties>

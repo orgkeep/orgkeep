@@ -3,8 +3,9 @@
 #
 # Through Maven (recommended):
 #   mvn package -Pdocker
-# By hand, from the orgkeep-core directory, after mvn package:
-#   docker build -f src/main/docker/Dockerfile.jvm -t orgkeep/orgkeep-core:0.1.0-SNAPSHOT .
+# By hand, from the orgkeep-core directory, after mvn package (tagged with the version of the pom, like Maven does):
+#   docker build -f src/main/docker/Dockerfile.jvm \
+#     -t ghcr.io/orgkeep/orgkeep-core:$(mvn -q help:evaluate -Dexpression=project.version -DforceStdout) .
 #
 # Runtime configuration through environment variables (each orgkeep.* property of application.properties
 # maps to ORGKEEP_*), for example:

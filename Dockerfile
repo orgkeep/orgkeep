@@ -1,5 +1,5 @@
 # Keycloak with the orgkeep theme, used by the demo compose (orgkeep-examples):
-#   docker build -t ghcr.io/orgkeep/orgkeep-keycloak:0.1.0-SNAPSHOT .
+#   docker build -t ghcr.io/orgkeep/orgkeep-keycloak:$(mvn -q help:evaluate -Dexpression=project.version -DforceStdout) .
 #
 # The theme folder is copied in themes/, which needs no kc.sh build (unlike the jar in providers/): the image runs
 # with any Keycloak option (database, hostname...), like the official one. Only the theme is added.

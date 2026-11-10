@@ -2,21 +2,34 @@
 # the image ghcr.io/orgkeep/orgkeep-keycloak:<version> and :latest, for amd64 and arm64, then the GitHub Release with
 # the jar of the theme (for /opt/keycloak/providers). The tag must match the version of the pom (v0.1.0 for 0.1.0):
 # see RELEASE.md for the whole procedure.
+# Run it by hand (Actions > Release > Run workflow) to publish an existing tag again, with the workflow of main:
+# after fixing this file, without moving the tag.
 name: Release
 
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing version tag to publish again, like v1.2.3'
+        required: true
 
 permissions:
   contents: write   # the GitHub Release
   packages: write   # the image on ghcr.io
+
+env:
+  # The pushed tag, or the one given by hand
+  TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.TAG }}
 
       - uses: actions/setup-java@v5
         with:
@@ -28,11 +41,12 @@ jobs:
         id: version
         run: |
           version=$(mvn -B -q help:evaluate -Dexpression=project.version -DforceStdout)
-          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
-            echo "::error::Tag $GITHUB_REF_NAME does not match the version of the pom ($version)"
+          if [ "v$version" != "$TAG" ]; then
+            echo "::error::Tag $TAG does not match the version of the pom ($version)"
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Build the jar
         run: mvn -B package
@@ -47,19 +61,26 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # The labels are in the Dockerfile, except the commit (revision), which replaces the one of the Keycloak image
+      # The labels are in the Dockerfile, except the commit (revision), which replaces the one of the Keycloak image.
+      # The revision is the commit of the tag, not the one of main when the workflow is run by hand.
       - name: Build and push the image
         uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          labels: org.opencontainers.image.revision=${{ github.sha }}
+          labels: org.opencontainers.image.revision=${{ steps.version.outputs.revision }}
           tags: |
             ghcr.io/orgkeep/orgkeep-keycloak:${{ steps.version.outputs.version }}
             ghcr.io/orgkeep/orgkeep-keycloak:latest
 
+      # Run again by hand, the release may already exist: only the jar is replaced
       - name: Create the GitHub Release
-        run: gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes target/orgkeep-theme.jar
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" target/orgkeep-theme.jar --clobber
+          else
+            gh release create "$TAG" --verify-tag --generate-notes target/orgkeep-theme.jar
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

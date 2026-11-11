@@ -65,6 +65,17 @@ jobs:
           -Dquarkus.docker.buildx.platform=linux/amd64,linux/arm64
           -Dquarkus.container-image.labels.\"org.opencontainers.image.revision\"=$(git rev-parse HEAD)
 
+      # GitHub shows the description of a multi-arch package from an annotation of the index, not from the labels of
+      # the images, and Quarkus cannot set annotations: the index is written again with it, for both tags, without
+      # rebuilding (same images). Same text as the description label in application.properties.
+      - name: Add the description to the index
+        run: >-
+          docker buildx imagetools create
+          --annotation "index:org.opencontainers.image.description=Orgkeep core: the REST API for multi-tenant B2B on Keycloak"
+          -t ghcr.io/orgkeep/orgkeep-core:${TAG#v}
+          -t ghcr.io/orgkeep/orgkeep-core:latest
+          ghcr.io/orgkeep/orgkeep-core:${TAG#v}
+
       # Run again by hand, the release may already exist
       - name: Create the GitHub Release
         run: |

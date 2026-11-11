@@ -1,0 +1,8 @@
+target/
+.idea/
+*.iml
+
+# the front of the dashboard (orgkeep-dashboard/src/main/webui), built by Quinoa
+node_modules/
+dist/
+.quinoa/

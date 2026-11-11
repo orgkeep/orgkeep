@@ -3,12 +3,10 @@
 ## Report a vulnerability
 
 Never in a public issue or pull request. Use
-[*Report a vulnerability*](https://github.com/orgkeep/orgkeep-core/security/advisories/new), in the *Security* tab of
+[*Report a vulnerability*](https://github.com/orgkeep/orgkeep/security/advisories/new), in the *Security* tab of
 the repository: the report stays private between you and the maintainer.
 
-A vulnerability in the dashboard goes to the *Security* tab of
-[orgkeep-dashboard](https://github.com/orgkeep/orgkeep-dashboard/security/advisories/new). Everything else comes here:
-the core, the [theme](https://github.com/orgkeep/orgkeep-theme), the
+Everything comes here: the core, the dashboard, the theme, the
 [examples](https://github.com/orgkeep/orgkeep-examples), and any report when in doubt.
 
 Please include:

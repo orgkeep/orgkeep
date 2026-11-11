@@ -5,9 +5,9 @@ days.
 
 ## Before you start
 
-- **Small changes** (a typo, the docs, an obvious bug): open a pull request directly.
-- **Larger changes** (a new feature, a change in the API or in what is written in Keycloak): open an issue first, to
-  agree on the approach before you spend time on it.
+- **Small changes** (a typo, the docs, an obvious bug, a missing translation): open a pull request directly.
+- **Larger changes** (a new feature, a change in the API or in what is written in Keycloak, a new screen, a change of
+  look): open an issue first, to agree on the approach before you spend time on it.
 - **Security vulnerabilities**: never in a public issue. Use *Report a vulnerability* in the *Security* tab of the
   repository, which keeps the report private (see [SECURITY.md](SECURITY.md)).
 
@@ -40,13 +40,19 @@ license).
 - One change per pull request, on a branch created from `main`; bring `main` in with a rebase, not a merge. A pull
   request is squashed into one commit, unless its commits are clean and each makes sense on its own: they are then
   merged as they are.
-- A change of behaviour comes with tests, and `mvn test` passes (see the [README](README.md) to build and run). The
-  *Build* check runs them again on each pull request.
+- A change of behaviour comes with tests, and `mvn verify` passes at the root (see the [README](README.md) to build
+  and run). The *Build* check runs it again on each pull request.
+- A change of the theme is checked in a browser, and in Mailpit for an email (see *Work on it* in the
+  [README of the theme](orgkeep-theme/README.md)). A screenshot in the pull request helps the review.
 - Follow the style of the surrounding code. Comments are in English.
 - A commit message starts with a short summary line, followed by why the change is needed when it is not obvious.
-- No IDE files or build output in the commits.
+- No IDE files or build output in the commits (`target`, `node_modules`, `dist`, `.quinoa`).
 
 ## Where things go
+
+Three Maven modules, built together by the `pom.xml` at the root, with one version:
+
+### `orgkeep-core`: the REST API
 
 The packages are under `org.orgkeep`:
 
@@ -61,3 +67,21 @@ Code style of the project: Lombok `@Slf4j` for logging, constructor injection wi
 one).
 
 The tests start their own Keycloak with Quarkus Dev Services and work in throwaway realms: Docker must be running.
+
+### `orgkeep-dashboard`: the dashboard
+
+**The dashboard is only a front.** It embeds the core and always goes through its REST API, with the session of the
+user: it never calls Keycloak and holds no business rule. A missing rule or check belongs in the core, not here.
+
+- `src/main/webui`: the front, React and TypeScript with Vite, Mantine and TanStack Query. The code is meant to stay
+  simple and readable: explicit rather than clever.
+- `src/main/java`: only the authentication of the browser (the session and the CSRF protection).
+
+### `orgkeep-theme`: the Keycloak theme
+
+Everything is under `src/main/resources/theme/orgkeep`, one folder per type of theme: `login`, `email`, `account`.
+
+The theme inherits from the default themes of Keycloak and only changes their appearance: CSS rather than copied
+templates, nothing specific to Orgkeep in the flows. The less is copied, the less there is to update when Keycloak
+changes version. Texts go in the `messages` files, with keys prefixed `orgkeep` so that they never replace a key of
+Keycloak.

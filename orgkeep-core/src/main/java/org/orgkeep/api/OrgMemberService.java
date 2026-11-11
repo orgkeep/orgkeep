@@ -16,6 +16,11 @@ public interface OrgMemberService {
     /**
      * Adds the user with this email to the organisation (creating the user if needed)
      * and to the default group /{org}/user-groups/users.
+     * <p>
+     * An organisation disabled while the user is being added: if the disable counted the user among its members, the
+     * add goes through (the member is disabled with the org, and enabled again with it); otherwise the membership is
+     * undone and the call refused. A user created by a refused call is kept, and has already been sent the
+     * invitation email (UserCreated): a retry reuses it.
      *
      * @throws org.orgkeep.api.exceptions.MemberAlreadyExistsException if the user is already a member
      * @throws org.orgkeep.api.exceptions.MemberOfAnotherOrgException if the user is a member of another organisation

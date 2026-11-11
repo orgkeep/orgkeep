@@ -79,13 +79,11 @@ public class OrgMemberServiceImpl implements OrgMemberService {
         if (!orgs.addMember(realm, org.getId(), userId)) {
             throw new MemberAlreadyExistsException(orgName, request.email());
         }
-        try {
-            // the org may have been disabled since the first check, after its members were read
-            eligibility.checkStillEnabled(realm, orgName);
-        } catch (OperationNotAllowedException e) {
-            // a member of a disabled org must not stay enabled: the membership is undone, the user is kept
-            orgs.removeMember(realm, org.getId(), userId);
-            throw e;
+        // The org may have been disabled since the first check (see MemberEligibility.afterJoin). If the disable
+        // counted the user among its members (DISABLED_WITH_THE_ORG), the add came first: it goes through, and the
+        // member, disabled with the org, comes back with it. It still joins the users group below, like any member
+        if (eligibility.afterJoin(realm, orgName, userId) == MemberEligibility.AfterJoin.ORG_DISABLED) {
+            throw undoMembership(realm, org, userId);
         }
 
         String usersGroupId = groups.findId(realm, OrgGroups.users(orgName))
@@ -132,6 +130,22 @@ public class OrgMemberServiceImpl implements OrgMemberService {
 
         orgs.removeMember(realm, org.getId(), userId);
         log.info("User {} removed from organisation '{}' in realm '{}'", userId, orgName, realm);
+    }
+
+    /**
+     * The org was disabled without the new member: a member of a disabled org must not stay enabled, the membership is
+     * undone (the user is kept). If that fails too, the refusal is still the error reported, with the failure attached.
+     */
+    private OperationNotAllowedException undoMembership(String realm, OrganizationRepresentation org, String userId) {
+        OperationNotAllowedException refusal = MemberEligibility.disabledOrg(org.getName());
+        try {
+            orgs.removeMember(realm, org.getId(), userId);
+        } catch (RuntimeException e) {
+            refusal.addSuppressed(e);
+            log.warn("User {} could not be removed from the disabled organisation '{}' in realm '{}' and may still be "
+                    + "enabled: disable the organisation again", userId, org.getName(), realm, e);
+        }
+        return refusal;
     }
 
     private String createUser(String realm, String orgName, AddMemberRequest request) {

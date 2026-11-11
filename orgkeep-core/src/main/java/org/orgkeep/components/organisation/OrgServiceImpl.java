@@ -49,6 +49,7 @@ public class OrgServiceImpl implements OrgService {
     private final KeycloakGroups groups;
     private final KeycloakUsers users;
     private final MemberEligibility eligibility;
+    private final OrgLocks orgLocks;
     private final CatalogSetup catalogSetup;
     private final EventBus eventBus;
     private final OrgMapper orgMapper;
@@ -188,24 +189,22 @@ public class OrgServiceImpl implements OrgService {
     }
 
     /**
-     * The members disabled with the organisation are listed in this attribute of the Keycloak organisation (user ids,
-     * one per value), to enable again only them. Not on the users: the user profile of Keycloak 24+ drops the user
-     * attributes it does not declare.
-     */
-    static final String DISABLED_MEMBERS_ATTRIBUTE = "disabled-members";
-
-    /**
      * The organisation is always marked first, its members follow. If a call fails half way, the org is disabled with
      * some members still enabled, or enabled with some members still disabled; a new call with the same value
      * finishes the job.
+     * <p>
+     * One call at a time per organisation, within this instance (see OrgLocks): each call reads the org and writes it
+     * back whole, two of them at the same time would overwrite each other.
      */
     @Override
     public OrgDetails setEnabled(String realm, String orgName, boolean enabled) {
-        if (enabled) {
-            enable(realm, orgName);
-        } else {
-            disable(realm, orgName);
-        }
+        orgLocks.run(realm, orgName, () -> {
+            if (enabled) {
+                enable(realm, orgName);
+            } else {
+                disable(realm, orgName);
+            }
+        });
         return get(realm, orgName);
     }
 
@@ -214,7 +213,7 @@ public class OrgServiceImpl implements OrgService {
      * <p>
      * The org is marked disabled <b>before</b> its members are read: a member added at the same time is either read
      * here, or added after this read and then refused by OrgMemberServiceImpl.add, which checks the org again once the
-     * user is a member (MemberEligibility.checkStillEnabled).
+     * user is a member (MemberEligibility.afterJoin).
      * <p>
      * No early return when the org is already disabled: a call that failed half way left members enabled, the next one
      * disables them. On a fully disabled org, the only enabled members left are the privileged ones: nothing changes.
@@ -268,10 +267,14 @@ public class OrgServiceImpl implements OrgService {
      * of an enabled org are still disabled, never the reverse (enabled members in a disabled org). The list of the
      * disabled members is kept until they are all enabled again: the next call finishes the job, even if the org is
      * already enabled.
+     * <p>
+     * The org is read again before the list is dropped. A disable from another instance of the core (the lock does not
+     * reach it) may have run in between: it found these members still disabled, so it did not list them again, and
+     * this call has just enabled them. Then the list is kept and the disable steps run again.
      */
     private void enable(String realm, String orgName) {
         OrganizationRepresentation org = orgs.getByName(realm, orgName);
-        List<String> disabled = disabledMembers(org);
+        List<String> disabled = MemberEligibility.disabledMembers(org);
         if (org.isEnabled() && disabled.isEmpty()) {
             return;
         }
@@ -280,14 +283,24 @@ public class OrgServiceImpl implements OrgService {
             orgs.update(realm, org);
         }
 
+        int enabledAgain = 0;
         for (String userId : disabled) {
             // a user deleted in the meantime is skipped
             if (users.find(realm, userId).isPresent()) {
                 users.setEnabled(realm, userId, true);
+                enabledAgain++;
             }
         }
-        removeDisabledMembers(realm, orgName, disabled);
-        log.info("Organisation '{}' enabled in realm '{}' ({} member(s) enabled again)", orgName, realm, disabled.size());
+
+        OrganizationRepresentation current = orgs.getByName(realm, orgName);
+        if (!current.isEnabled()) {
+            log.warn("Organisation '{}' in realm '{}' was disabled again while it was being enabled: its members are "
+                    + "disabled again", orgName, realm);
+            disable(realm, orgName);
+            return;
+        }
+        removeDisabledMembers(realm, current, disabled);
+        log.info("Organisation '{}' enabled in realm '{}' ({} member(s) enabled again)", orgName, realm, enabledAgain);
     }
 
     /**
@@ -297,30 +310,23 @@ public class OrgServiceImpl implements OrgService {
      */
     private void addDisabledMembers(String realm, String orgName, List<String> userIds) {
         OrganizationRepresentation org = orgs.getByName(realm, orgName);
-        Set<String> disabled = new LinkedHashSet<>(disabledMembers(org));
+        Set<String> disabled = new LinkedHashSet<>(MemberEligibility.disabledMembers(org));
         if (disabled.addAll(userIds)) {
-            attributes(org).put(DISABLED_MEMBERS_ATTRIBUTE, new ArrayList<>(disabled));
+            attributes(org).put(MemberEligibility.DISABLED_MEMBERS_ATTRIBUTE, new ArrayList<>(disabled));
             orgs.update(realm, org);
         }
     }
 
-    /** Removes these users from the list kept on the org, read again (see addDisabledMembers). */
-    private void removeDisabledMembers(String realm, String orgName, List<String> userIds) {
-        OrganizationRepresentation org = orgs.getByName(realm, orgName);
-        List<String> disabled = new ArrayList<>(disabledMembers(org));
+    /** Removes these users from the list kept on the org, just read again by the caller (see addDisabledMembers). */
+    private void removeDisabledMembers(String realm, OrganizationRepresentation org, List<String> userIds) {
+        List<String> disabled = new ArrayList<>(MemberEligibility.disabledMembers(org));
         disabled.removeAll(userIds);
         if (disabled.isEmpty()) {
-            attributes(org).remove(DISABLED_MEMBERS_ATTRIBUTE);
+            attributes(org).remove(MemberEligibility.DISABLED_MEMBERS_ATTRIBUTE);
         } else {
-            attributes(org).put(DISABLED_MEMBERS_ATTRIBUTE, disabled);
+            attributes(org).put(MemberEligibility.DISABLED_MEMBERS_ATTRIBUTE, disabled);
         }
         orgs.update(realm, org);
-    }
-
-    private static List<String> disabledMembers(OrganizationRepresentation org) {
-        return org.getAttributes() == null
-                ? List.of()
-                : org.getAttributes().getOrDefault(DISABLED_MEMBERS_ATTRIBUTE, List.of());
     }
 
     private static Map<String, List<String>> attributes(OrganizationRepresentation org) {
@@ -385,9 +391,17 @@ public class OrgServiceImpl implements OrgService {
 
         // the org was just created: the owner cannot be a member yet, the result can be ignored
         orgs.addMember(realm, orgId, ownerId);
-        // the new org may have been disabled meanwhile, after its members were read: the creation fails and is
+        // the new org may have been disabled meanwhile (see MemberEligibility.afterJoin): the creation fails and is
         // rolled back, which removes the membership
-        eligibility.checkStillEnabled(realm, request.name());
+        MemberEligibility.AfterJoin afterJoin = eligibility.afterJoin(realm, request.name(), ownerId);
+        if (afterJoin == MemberEligibility.AfterJoin.DISABLED_WITH_THE_ORG) {
+            // the disable listed the owner, and disabled it or is about to: the rollback deletes the org and its list,
+            // so the owner would stay disabled with no record. Enabled again first, as it was before
+            users.setEnabled(realm, ownerId, true);
+        }
+        if (afterJoin != MemberEligibility.AfterJoin.ORG_ENABLED) {
+            throw MemberEligibility.disabledOrg(request.name());
+        }
         clients.grantToUser(realm, clientUuid, ownerId, OrgRole.ORG_OWNER.getRoleName());
         return ownerId;
     }

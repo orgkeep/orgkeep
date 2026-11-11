@@ -105,24 +105,60 @@ public class MemberEligibility {
      */
     public void checkEnabled(OrganizationRepresentation org) {
         if (!org.isEnabled()) {
-            throw new OperationNotAllowedException("The organisation '%s' is disabled".formatted(org.getName()));
+            throw disabledOrg(org.getName());
         }
     }
 
+    public static OperationNotAllowedException disabledOrg(String orgName) {
+        return new OperationNotAllowedException("The organisation '%s' is disabled".formatted(orgName));
+    }
+
+    /** What the organisation, read again once the user is a member, says about the new member. */
+    public enum AfterJoin {
+        /** Still enabled: the member stays. */
+        ORG_ENABLED,
+        /**
+         * Disabled meanwhile, and the disable read the new member: it is listed in disabled-members (and disabled, or
+         * about to be), so it comes back with the org like the other members.
+         */
+        DISABLED_WITH_THE_ORG,
+        /** Disabled meanwhile, without the new member: the disable did not see it, the caller must undo the membership. */
+        ORG_DISABLED
+    }
+
     /**
-     * Checked again once the user is a member, on the organisation read again. Disabling an organisation marks it
-     * disabled first, then reads its members: a user who became a member after that read is not disabled, but this
-     * read sees the organisation disabled. Whatever the timing, a new member is either disabled with the org or
-     * refused here. The caller undoes the membership.
-     *
-     * @throws OperationNotAllowedException if the organisation was disabled in the meantime
+     * Checked once the user is a member, on the organisation read again. Disabling an organisation marks it disabled
+     * first, then reads its members: a user who became a member after that read is not disabled, but this read sees
+     * the organisation disabled. Whatever the timing, a new member is either disabled with the org or seen here.
+     * <p>
+     * A new user is created, and UserCreated published (invitation email), before this check: a user refused here
+     * still gets the email, and is kept, so that a retry reuses it.
      */
-    public void checkStillEnabled(String realm, String orgName) {
+    public AfterJoin afterJoin(String realm, String orgName, String userId) {
         OrganizationRepresentation org = orgs.getByName(realm, orgName);
-        if (!org.isEnabled()) {
-            log.info("Organisation '{}' in realm '{}' was disabled while a member was being added", orgName, realm);
+        if (org.isEnabled()) {
+            return AfterJoin.ORG_ENABLED;
         }
-        checkEnabled(org);
+        if (disabledMembers(org).contains(userId)) {
+            log.info("Organisation '{}' in realm '{}' was disabled while user {} was being added, with that user",
+                    orgName, realm, userId);
+            return AfterJoin.DISABLED_WITH_THE_ORG;
+        }
+        log.info("Organisation '{}' in realm '{}' was disabled while user {} was being added", orgName, realm, userId);
+        return AfterJoin.ORG_DISABLED;
+    }
+
+    /**
+     * The members disabled with the organisation are listed in this attribute of the Keycloak organisation (user ids,
+     * one per value), to enable again only them. Not on the users: the user profile of Keycloak 24+ drops the user
+     * attributes it does not declare. Written by OrgServiceImpl.setEnabled.
+     */
+    public static final String DISABLED_MEMBERS_ATTRIBUTE = "disabled-members";
+
+    public static List<String> disabledMembers(OrganizationRepresentation org) {
+        return org.getAttributes() == null
+                ? List.of()
+                : org.getAttributes().getOrDefault(DISABLED_MEMBERS_ATTRIBUTE, List.of());
     }
 
     private boolean hasPrivilegedRealmRole(String realm, String userId) {

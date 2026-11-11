@@ -51,7 +51,10 @@ public class OrgAdminResource {
     @Operation(summary = "Add a member",
             description = "Reuses the user with this email or creates it, then adds it to the organisation "
                     + "and to its default group user-groups/users (role org-user). First and last name are required, "
-                    + "an existing user keeps their own.")
+                    + "an existing user keeps their own. If the organisation is disabled while the member is being "
+                    + "added: either the member was disabled with it (201, the member is disabled and comes back "
+                    + "when the organisation is enabled again), or the call answers 409 and the user is not a member. "
+                    + "A user created by a refused call is kept and still gets the invitation email.")
     @APIResponseSchema(value = OrgMember.class, responseCode = "201", responseDescription = "Member added")
     @APIResponse(responseCode = "400", description = "Invalid request")
     @APIResponse(responseCode = "404", description = "Unknown organisation")

@@ -6,9 +6,12 @@ import org.orgkeep.api.RealmProvisioner;
 import org.orgkeep.api.exceptions.OperationNotAllowedException;
 import org.orgkeep.api.model.AddMemberRequest;
 import org.orgkeep.api.model.CreateOrgRequest;
+import org.orgkeep.components.organisation.member.MemberEligibility;
 import org.orgkeep.fixtures.TestRealm;
 import org.orgkeep.repository.keycloak.KeycloakOrgs;
 import org.orgkeep.repository.keycloak.KeycloakUsers;
+import io.quarkus.arc.Arc;
+import io.quarkus.arc.ManagedContext;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
 import jakarta.inject.Inject;
@@ -28,11 +31,19 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+
+import static org.awaitility.Awaitility.await;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -60,6 +71,7 @@ class OrgStatusTest {
     // run something just before or after one call, or make it fail once, to replay a precise interleaving
     @InjectSpy KeycloakOrgs orgs;
     @InjectSpy KeycloakUsers users;
+    @Inject OrgLocks orgLocks;
 
     @ConfigProperty(name = "quarkus.keycloak.admin-client.server-url")
     String keycloakUrl;
@@ -237,7 +249,117 @@ class OrgStatusTest {
 
         String emmaId = testRealm.resource().users().searchByEmail("emma@acme.test", true).getFirst().getId();
         assertEquals(List.of(), orgs.organisationsOf(testRealm.name(), emmaId), "the membership is undone");
+        // untouched by the disable, which never saw her
+        assertFalse(disabledMembers().contains(emmaId));
+        assertTrue(user(emmaId).isEnabled());
         assertFalse(user(paulId).isEnabled());
+    }
+
+    // "Both sides win": the membership is written, then the whole disable runs (the spy disables the org just after
+    // the real addMember) and counts Emma among the members it disables. The add then sees the org disabled, but with
+    // Emma listed: the add came first, it goes through. Emma is a disabled member and comes back with the org
+    @Test
+    void memberDisabledWithTheOrgWhileBeingAddedStaysAMember() {
+        Mockito.doAnswer(invocation -> {
+                    Object added = invocation.callRealMethod();
+                    orgService.setEnabled(testRealm.name(), ORG, false);
+                    return added;
+                })
+                .doCallRealMethod()
+                .when(orgs).addMember(anyString(), anyString(), anyString());
+
+        String emmaId = memberService.add(testRealm.name(), ORG, new AddMemberRequest("emma@acme.test", "Emma", "Roux")).id();
+
+        assertEquals(List.of(ORG), orgs.organisationsOf(testRealm.name(), emmaId));
+        assertTrue(disabledMembers().contains(emmaId));
+        assertFalse(user(emmaId).isEnabled());
+
+        orgService.setEnabled(testRealm.name(), ORG, true);
+        assertTrue(user(emmaId).isEnabled());
+        assertTrue(user(paulId).isEnabled());
+    }
+
+    // The same for the owner of a new org: the disable counted Olga, the creation fails all the same and its rollback
+    // deletes the org with its list of disabled members. Olga is enabled again first, otherwise nothing would
+    @Test
+    void ownerDisabledWithANewOrgIsEnabledAgainBeforeTheRollback() {
+        Mockito.doAnswer(invocation -> {
+                    Object added = invocation.callRealMethod();
+                    orgService.setEnabled(testRealm.name(), "beta", false);
+                    return added;
+                })
+                .doCallRealMethod()
+                .when(orgs).addMember(anyString(), anyString(), anyString());
+
+        assertThrowsExactly(OperationNotAllowedException.class, () -> orgService.create(testRealm.name(),
+                new CreateOrgRequest("beta", Set.of(), "olga@beta.test", null, "Olga", "Test")));
+
+        assertTrue(orgs.findByName(testRealm.name(), "beta").isEmpty());
+        String olgaId = testRealm.resource().users().searchByEmail("olga@beta.test", true).getFirst().getId();
+        assertTrue(user(olgaId).isEnabled());
+    }
+
+    // An enable and a disable that overlap. The lock only covers one instance of the core: here the disable runs from
+    // inside the enable, on the same thread, which the reentrant lock lets through, like a disable coming from another
+    // instance. Interleaving: the enable marks the org enabled; the disable marks it disabled and finds Paul still
+    // disabled, so lists nothing new; then the enable enables Paul. Before dropping the list, the enable reads the org
+    // again, sees it disabled, and runs the disable steps again: Paul ends disabled and still listed
+    @Test
+    void disableRunningDuringAnEnableDisablesTheMembersAgain() {
+        orgService.setEnabled(testRealm.name(), ORG, false);
+        Mockito.doAnswer(invocation -> {
+                    orgService.setEnabled(testRealm.name(), ORG, false);
+                    return invocation.callRealMethod();
+                })
+                .doCallRealMethod()
+                .when(users).setEnabled(anyString(), eq(paulId), eq(true));
+
+        orgService.setEnabled(testRealm.name(), ORG, true);
+
+        assertFalse(orgService.get(testRealm.name(), ORG).enabled());
+        assertFalse(user(paulId).isEnabled());
+        assertTrue(disabledMembers().contains(paulId));
+
+        // and the next enable brings him back
+        orgService.setEnabled(testRealm.name(), ORG, true);
+        assertTrue(user(paulId).isEnabled());
+    }
+
+    // Two calls at the same time, on two threads: the disable is held inside (the spy blocks it while it reads the
+    // members) and the enable must wait for it. Instead of a sleep, the test waits until the enable is queued on the
+    // lock of the org, then lets the disable finish: the enable runs after it, so the org ends enabled with Paul
+    @Test
+    void concurrentCallsForTheSameOrgRunOneAfterTheOther() throws Exception {
+        CountDownLatch disableInside = new CountDownLatch(1);
+        CountDownLatch releaseDisable = new CountDownLatch(1);
+        Mockito.doAnswer(invocation -> {
+                    disableInside.countDown();
+                    releaseDisable.await();
+                    return invocation.callRealMethod();
+                })
+                .doCallRealMethod()
+                .when(orgs).members(anyString(), anyString());
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> disable = inRequest(executor, () -> orgService.setEnabled(testRealm.name(), ORG, false));
+            assertTrue(disableInside.await(30, TimeUnit.SECONDS));
+
+            Future<?> enable = inRequest(executor, () -> orgService.setEnabled(testRealm.name(), ORG, true));
+            await().atMost(Duration.ofSeconds(30))
+                    .until(() -> orgLocks.lockOf(testRealm.name(), ORG).hasQueuedThreads());
+            assertFalse(enable.isDone());
+
+            releaseDisable.countDown();
+            disable.get(30, TimeUnit.SECONDS);
+            enable.get(30, TimeUnit.SECONDS);
+        } finally {
+            releaseDisable.countDown();
+            executor.shutdownNow();
+        }
+
+        assertTrue(orgService.get(testRealm.name(), ORG).enabled());
+        assertTrue(user(paulId).isEnabled());
     }
 
     // The same for the owner of a new org, disabled while it is being created: the creation fails and is rolled back
@@ -296,6 +418,27 @@ class OrgStatusTest {
         orgService.setEnabled(testRealm.name(), ORG, true);
         assertTrue(user(claireId).isEnabled());
         assertTrue(user(paulId).isEnabled());
+    }
+
+    /**
+     * Runs the action on another thread inside a request context, like an HTTP request: the Keycloak admin client is
+     * a request scoped bean, the test thread has a context but a plain thread of an executor does not.
+     */
+    private static Future<?> inRequest(ExecutorService executor, Runnable action) {
+        return executor.submit(() -> {
+            ManagedContext requestContext = Arc.container().requestContext();
+            requestContext.activate();
+            try {
+                action.run();
+            } finally {
+                requestContext.terminate();
+            }
+        });
+    }
+
+    /** The ids listed in the attribute disabled-members of the org. */
+    private List<String> disabledMembers() {
+        return MemberEligibility.disabledMembers(orgs.getByName(testRealm.name(), ORG));
     }
 
     private UserRepresentation user(String userId) {

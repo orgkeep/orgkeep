@@ -55,7 +55,8 @@ public class OrgAdminResource {
     @APIResponseSchema(value = OrgMember.class, responseCode = "201", responseDescription = "Member added")
     @APIResponse(responseCode = "400", description = "Invalid request")
     @APIResponse(responseCode = "404", description = "Unknown organisation")
-    @APIResponse(responseCode = "409", description = "The user is already a member, or the organisation is disabled")
+    @APIResponse(responseCode = "409", description = "The user is already a member, cannot be added to this "
+            + "organisation, or the organisation is disabled")
     public OrgMember add(@PathParam("org") String org, @Valid @NotNull AddMemberRequest request){
         return memberService.add(currentRealm.name(), org, request);
     }

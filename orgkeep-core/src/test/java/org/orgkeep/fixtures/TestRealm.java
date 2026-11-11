@@ -7,8 +7,10 @@ import org.keycloak.admin.client.resource.RealmResource;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.GroupRepresentation;
 import org.keycloak.representations.idm.RealmRepresentation;
+import org.keycloak.representations.idm.RoleRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -67,6 +69,25 @@ public class TestRealm implements AutoCloseable {
         try (Response response = realm.clients().create(client)) {
             return CreatedResponseUtil.getCreatedId(response);
         }
+    }
+
+    /** A bare realm doesn't have the roles of Orgkeep (realm-owner...): a test creates the ones it needs. */
+    public void createRealmRole(String roleName) {
+        RoleRepresentation role = new RoleRepresentation();
+        role.setName(roleName);
+        realm.roles().create(role);
+    }
+
+    public void grantRealmRole(String userId, String roleName) {
+        RoleRepresentation role = realm.roles().get(roleName).toRepresentation();
+        realm.users().get(userId).roles().realmLevel().add(List.of(role));
+    }
+
+    /** Grants directly a role of the client clientId (e.g. realm-management/manage-users) to the user. */
+    public void grantClientRole(String userId, String clientId, String roleName) {
+        String clientUuid = realm.clients().findByClientId(clientId).getFirst().getId();
+        RoleRepresentation role = realm.clients().get(clientUuid).roles().get(roleName).toRepresentation();
+        realm.users().get(userId).roles().clientLevel(clientUuid).add(List.of(role));
     }
 
     public void joinGroup(String userId, String groupPath) {

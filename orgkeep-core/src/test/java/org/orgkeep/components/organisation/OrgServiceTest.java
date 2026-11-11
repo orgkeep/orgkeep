@@ -4,9 +4,11 @@ import org.orgkeep.api.CatalogService;
 import org.orgkeep.api.OrgMemberService;
 import org.orgkeep.api.OrgService;
 import org.orgkeep.api.ProductService;
+import org.orgkeep.api.exceptions.MemberAlreadyExistsException;
 import org.orgkeep.api.exceptions.MemberOfAnotherOrgException;
 import org.orgkeep.api.exceptions.OrgAlreadyExistsException;
 import org.orgkeep.api.exceptions.OrgNotFoundException;
+import org.orgkeep.api.exceptions.PrivilegedUserException;
 import org.orgkeep.api.model.AddMemberRequest;
 import org.orgkeep.api.model.AssignProductRequest;
 import org.orgkeep.api.model.CreateCatalogRequest;
@@ -141,6 +143,35 @@ public class OrgServiceTest {
                 new CreateOrgRequest("other-org", Set.of(), OWNER_EMAIL, null)));
         // checked before anything is created
         assertTrue(realm().organizations().search("other-org").isEmpty());
+    }
+
+    // Order of the refusals for an existing user (MemberEligibility): member of this org, then privileged, then member
+    // of another org. The 409s of the last two share their message: only the exception class tells them apart.
+    // The user here is both a member of ORG and privileged (granted realm-owner after joining).
+    @Test
+    public void memberRefusalsComeInOrder(){
+        orgService.create(testRealm.name(), request("changeme"));
+        orgService.create(testRealm.name(), new CreateOrgRequest("other-org", Set.of(), null, null));
+        String ownerId = realm().users().searchByEmail(OWNER_EMAIL, true).getFirst().getId();
+        testRealm.createRealmRole("realm-owner");
+        testRealm.grantRealmRole(ownerId, "realm-owner");
+
+        AddMemberRequest owner = new AddMemberRequest(OWNER_EMAIL, "Olivia", "Owner");
+        assertThrowsExactly(MemberAlreadyExistsException.class, () -> memberService.add(testRealm.name(), ORG, owner));
+        assertThrowsExactly(PrivilegedUserException.class, () -> memberService.add(testRealm.name(), "other-org", owner));
+    }
+
+    // same order for the owner of a new org: an org with this very name is reported as already existing
+    @Test
+    public void ownerRefusalsComeInOrder(){
+        orgService.create(testRealm.name(), request("changeme"));
+        String ownerId = realm().users().searchByEmail(OWNER_EMAIL, true).getFirst().getId();
+        testRealm.createRealmRole("realm-owner");
+        testRealm.grantRealmRole(ownerId, "realm-owner");
+
+        assertThrowsExactly(OrgAlreadyExistsException.class, () -> orgService.create(testRealm.name(), request(null)));
+        assertThrowsExactly(PrivilegedUserException.class, () -> orgService.create(testRealm.name(),
+                new CreateOrgRequest("other-org", Set.of(), OWNER_EMAIL, null, "Olivia", "Owner")));
     }
 
     @Test

@@ -3,7 +3,6 @@ package org.orgkeep.components.organisation;
 import org.orgkeep.api.OrgService;
 import org.orgkeep.api.events.UserCreated;
 import org.orgkeep.api.exceptions.ClientAlreadyExistsException;
-import org.orgkeep.api.exceptions.MemberOfAnotherOrgException;
 import org.orgkeep.api.exceptions.OrgAlreadyExistsException;
 import org.orgkeep.api.model.CreateOrgRequest;
 import org.orgkeep.api.model.CreateOrgResponse;
@@ -20,6 +19,7 @@ import org.orgkeep.repository.keycloak.KeycloakClients;
 import org.orgkeep.repository.keycloak.KeycloakGroups;
 import org.orgkeep.repository.keycloak.KeycloakOrgs;
 import org.orgkeep.repository.keycloak.KeycloakUsers;
+import org.orgkeep.components.organisation.member.MemberEligibility;
 import org.orgkeep.components.organisation.member.MemberMapper;
 import io.vertx.core.eventbus.EventBus;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -47,6 +47,7 @@ public class OrgServiceImpl implements OrgService {
     private final KeycloakClients clients;
     private final KeycloakGroups groups;
     private final KeycloakUsers users;
+    private final MemberEligibility eligibility;
     private final CatalogSetup catalogSetup;
     private final EventBus eventBus;
     private final OrgMapper orgMapper;
@@ -59,16 +60,11 @@ public class OrgServiceImpl implements OrgService {
      */
     @Override
     public CreateOrgResponse create(String realm, CreateOrgRequest request) {
-        // checked before anything is created: an existing user may already belong to another org
+        // checked before anything is created: an existing user may be privileged or already belong to another org.
+        // A member of an org with this very name is not refused there: the org already exists, reported below as such
         if (request.ownerEmail() != null) {
             users.findIdByEmail(realm, request.ownerEmail())
-                    .flatMap(userId -> orgs.organisationsOf(realm, userId).stream()
-                            // same name: the org already exists, reported below as such
-                            .filter(orgName -> !orgName.equals(request.name()))
-                            .findFirst())
-                    .ifPresent(otherOrg -> {
-                        throw new MemberOfAnotherOrgException(request.ownerEmail(), otherOrg);
-                    });
+                    .ifPresent(userId -> eligibility.checkReusable(realm, request.name(), userId, request.ownerEmail()));
         }
 
         String orgId = orgs.create(realm, orgMapper.toOrgRepresentation(request))
@@ -219,16 +215,28 @@ public class OrgServiceImpl implements OrgService {
     /**
      * Keycloak 26 lets the members of a disabled organisation log in, with their roles: they are disabled one by one.
      * A member already disabled (for another reason) is left out, and stays disabled when the org is enabled again.
+     * A privileged member (see MemberEligibility) is never disabled: it cannot join an org through Orgkeep, but may
+     * have been added before, in the console, or got its role afterwards, and disabling it could lock the realm owner
+     * out.
      */
     private void disableMembers(String realm, OrganizationRepresentation org) {
+        List<MemberRepresentation> enabledMembers = orgs.members(realm, org.getId()).stream()
+                .filter(member -> Boolean.TRUE.equals(member.isEnabled()))
+                .toList();
+        Set<String> privileged = eligibility.privilegedAmong(realm,
+                enabledMembers.stream().map(MemberRepresentation::getId).toList());
+
         List<String> disabled = new ArrayList<>();
-        for (MemberRepresentation member : orgs.members(realm, org.getId())) {
-            if (Boolean.TRUE.equals(member.isEnabled())) {
-                users.setEnabled(realm, member.getId(), false);
-                // the refresh tokens stop working; an access token already issued lives until it expires
-                users.logout(realm, member.getId());
-                disabled.add(member.getId());
+        for (MemberRepresentation member : enabledMembers) {
+            if (privileged.contains(member.getId())) {
+                log.warn("User {} is privileged: left enabled with the disabled organisation '{}' in realm '{}'",
+                        member.getEmail(), org.getName(), realm);
+                continue;
             }
+            users.setEnabled(realm, member.getId(), false);
+            // the refresh tokens stop working; an access token already issued lives until it expires
+            users.logout(realm, member.getId());
+            disabled.add(member.getId());
         }
         attributes(org).put(DISABLED_MEMBERS_ATTRIBUTE, disabled);
     }

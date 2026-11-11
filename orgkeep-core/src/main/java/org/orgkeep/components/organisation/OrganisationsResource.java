@@ -48,7 +48,8 @@ public class OrganisationsResource {
                     + "and, if an owner email is given, makes that user its owner.")
     @APIResponseSchema(value = CreateOrgResponse.class, responseCode = "201", responseDescription = "Organisation created")
     @APIResponse(responseCode = "400", description = "Invalid request")
-    @APIResponse(responseCode = "409", description = "An organisation or a client with this name already exists")
+    @APIResponse(responseCode = "409", description = "An organisation or a client with this name already exists, "
+            + "or the existing user given as owner cannot be added to this organisation")
     public CreateOrgResponse create(@Valid @NotNull CreateOrgRequest request){
         return orgService.create(currentRealm.name(), request);
     }
@@ -79,7 +80,9 @@ public class OrganisationsResource {
     @Path("/{org}/enabled")
     @Operation(summary = "Enable or disable an organisation",
             description = "Disabling also disables its enabled members and ends their sessions: they can no longer "
-                    + "log in (an access token already issued lives until it expires). Enabling enables again only "
+                    + "log in (an access token already issued lives until it expires). A privileged member (a realm "
+                    + "role realm-owner, realm-admin or realm-user, or any role of the realm-management client) is "
+                    + "never disabled. Enabling enables again only "
                     + "the members it disabled. Members cannot be added while it is disabled. Idempotent.")
     @APIResponseSchema(value = OrgDetails.class, responseCode = "200", responseDescription = "The organisation")
     @APIResponse(responseCode = "404", description = "Unknown organisation")

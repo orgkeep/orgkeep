@@ -1,5 +1,6 @@
 package org.orgkeep.components.organisation.member;
 
+import org.orgkeep.api.OrgMemberService;
 import org.orgkeep.api.OrgService;
 import org.orgkeep.api.model.AddMemberRequest;
 import org.orgkeep.api.model.CreateOrgRequest;
@@ -10,14 +11,18 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.security.TestSecurity;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
+import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.keycloak.admin.client.CreatedResponseUtil;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.RealmResource;
+import org.keycloak.representations.idm.GroupRepresentation;
 import org.keycloak.representations.idm.MemberRepresentation;
 import org.mockito.Mockito;
 
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -42,6 +47,7 @@ class OrgAdminResourceTest {
 
     @Inject Keycloak keycloak;
     @Inject OrgService orgService;
+    @Inject OrgMemberService memberService;
     @InjectMock CurrentRealm currentRealm;
 
     private TestRealm testRealm;
@@ -182,15 +188,102 @@ class OrgAdminResourceTest {
                 .then().statusCode(409);
     }
 
-    // a user belongs to one organisation only: the quotas in the token are not qualified by organisation
+    // Two existing users that cannot be added, for two different reasons: a member of another org (a user belongs to
+    // one organisation only, the quotas in the token are not qualified by organisation) and a privileged user (the
+    // realm owner, whom disabling the org would disable). The 409 must not tell which: an org admin would otherwise
+    // learn who is a client of the realm owner, or which emails hold a realm role. Only the email differs.
+    @Test
+    @TestSecurity(user = "mallory", roles = "org-other-org:org-admin")
+    void refusedUsersGetTheSameMessageAsAnOrgAdmin() {
+        assertRefusalsLookTheSame();
+    }
+
+    // the realm owner gets the same messages: the service does not know who calls it
     @Test
     @TestSecurity(user = "owner", roles = "realm-owner")
-    void addMemberOfAnotherOrgReturns409() {
+    void refusedUsersGetTheSameMessageAsTheRealmOwner() {
+        assertRefusalsLookTheSame();
+    }
+
+    private void assertRefusalsLookTheSame() {
         orgService.create(testRealm.name(), new CreateOrgRequest("other-org", Set.of(), null, null));
-        given().contentType(ContentType.JSON).body(new AddMemberRequest(OWNER_EMAIL, "Test", "User"))
+        // a member of ORG, the org of the test (not other-org)
+        String daveId = memberService.add(testRealm.name(), ORG, new AddMemberRequest("dave@elsewhere.test", "Dave", "Test")).id();
+        String bossId = privilegedUser("boss");
+
+        String otherOrgMessage = given().contentType(ContentType.JSON)
+                .body(new AddMemberRequest("dave@elsewhere.test", "Dave", "Test"))
                 .when().post(BASE, "other-org")
                 .then().statusCode(409)
-                .body("message", containsString(ORG));
+                .extract().path("message");
+        String privilegedMessage = given().contentType(ContentType.JSON)
+                .body(new AddMemberRequest("boss@elsewhere.test", "Boss", "Test"))
+                .when().post(BASE, "other-org")
+                .then().statusCode(409)
+                .extract().path("message");
+
+        assertEquals("User 'boss@elsewhere.test' cannot be added to this organisation", privilegedMessage);
+        assertEquals(otherOrgMessage.replace("dave@", "boss@"), privilegedMessage);
+        assertFalse(memberIds("other-org").contains(daveId));
+        assertFalse(memberIds("other-org").contains(bossId));
+    }
+
+    /** An existing user holding the realm role realm-owner, as the realm owner created by the bootstrap. */
+    private String privilegedUser(String username) {
+        String userId = testRealm.createUser(username, username + "@elsewhere.test");
+        testRealm.createRealmRole("realm-owner");
+        testRealm.grantRealmRole(userId, "realm-owner");
+        return userId;
+    }
+
+    // effective roles count, not only the ones granted directly: here realm-owner given by a group of the console
+    @Test
+    @TestSecurity(user = "alice", roles = "org-it-members-org:org-admin")
+    void addUserWithARealmRoleFromAGroupReturns409() {
+        String samId = testRealm.createUser("sam", "sam@elsewhere.test");
+        testRealm.createRealmRole("realm-owner");
+        GroupRepresentation staff = new GroupRepresentation();
+        staff.setName("staff");
+        try (Response response = realm().groups().add(staff)) {
+            String staffId = CreatedResponseUtil.getCreatedId(response);
+            realm().groups().group(staffId).roles().realmLevel()
+                    .add(List.of(realm().roles().get("realm-owner").toRepresentation()));
+        }
+        testRealm.joinGroup(samId, "/staff");
+
+        given().contentType(ContentType.JSON).body(new AddMemberRequest("sam@elsewhere.test", "Sam", "Test"))
+                .when().post(BASE, ORG)
+                .then().statusCode(409);
+        assertFalse(memberIds().contains(samId));
+    }
+
+    // an administrator of the realm in the Keycloak console, without any realm role: privileged too
+    @Test
+    @TestSecurity(user = "alice", roles = "org-it-members-org:org-admin")
+    void addUserWithARealmManagementRoleReturns409() {
+        String adaId = testRealm.createUser("ada", "ada@elsewhere.test");
+        testRealm.grantClientRole(adaId, "realm-management", "manage-users");
+
+        given().contentType(ContentType.JSON).body(new AddMemberRequest("ada@elsewhere.test", "Ada", "Test"))
+                .when().post(BASE, ORG)
+                .then().statusCode(409)
+                .body("message", equalTo("User 'ada@elsewhere.test' cannot be added to this organisation"));
+        assertFalse(memberIds().contains(adaId));
+    }
+
+    // only the realm roles of Orgkeep count: a realm role created in the console does not make a user privileged
+    @Test
+    @TestSecurity(user = "alice", roles = "org-it-members-org:org-admin")
+    void addUserWithAnotherRealmRoleReusesIt() {
+        String frankId = testRealm.createUser("frank", "frank@elsewhere.test");
+        testRealm.createRealmRole("support");
+        testRealm.grantRealmRole(frankId, "support");
+
+        given().contentType(ContentType.JSON).body(new AddMemberRequest("frank@elsewhere.test", "Frank", "Test"))
+                .when().post(BASE, ORG)
+                .then().statusCode(201)
+                .body("id", equalTo(frankId));
+        assertTrue(memberIds().contains(frankId));
     }
 
     @Test
@@ -251,7 +344,11 @@ class OrgAdminResourceTest {
     }
 
     private Set<String> memberIds() {
-        String orgId = realm().organizations().search(ORG).get(0).getId();
+        return memberIds(ORG);
+    }
+
+    private Set<String> memberIds(String orgName) {
+        String orgId = realm().organizations().search(orgName).get(0).getId();
         return realm().organizations().get(orgId).members().getAll().stream()
                 .map(MemberRepresentation::getId)
                 .collect(Collectors.toSet());

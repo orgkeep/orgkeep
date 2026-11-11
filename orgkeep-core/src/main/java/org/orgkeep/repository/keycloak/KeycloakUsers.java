@@ -13,6 +13,8 @@ import org.keycloak.representations.idm.UserRepresentation;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @ApplicationScoped
 @RequiredArgsConstructor
@@ -61,6 +63,23 @@ public class KeycloakUsers {
     public void addRealmRole(String realm, String userId, String roleName) {
         RoleRepresentation role = keycloak.realm(realm).roles().get(roleName).toRepresentation();
         keycloak.realm(realm).users().get(userId).roles().realmLevel().add(List.of(role));
+    }
+
+    /** The names of the effective realm roles of the user: granted directly, through a composite role or a group. */
+    public Set<String> effectiveRealmRoles(String realm, String userId) {
+        return keycloak.realm(realm).users().get(userId).roles().realmLevel().listEffective().stream()
+                .map(RoleRepresentation::getName)
+                .collect(Collectors.toSet());
+    }
+
+    /**
+     * The names of the effective roles of the user on one client (clientUuid: the internal id, not the clientId):
+     * granted directly, through a composite role or a group.
+     */
+    public Set<String> effectiveClientRoles(String realm, String userId, String clientUuid) {
+        return keycloak.realm(realm).users().get(userId).roles().clientLevel(clientUuid).listEffective().stream()
+                .map(RoleRepresentation::getName)
+                .collect(Collectors.toSet());
     }
 
     /** Whether the user has a password. A member invited by Orgkeep has none until they follow the email link. */

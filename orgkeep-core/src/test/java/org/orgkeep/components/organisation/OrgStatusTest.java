@@ -95,6 +95,53 @@ class OrgStatusTest {
         assertTrue(user(paulId).isEnabled());
     }
 
+    // A privileged user cannot join an org through Orgkeep, but may be a member anyway: added before the rule, in the
+    // console, or granted the role afterwards (the case here). Disabling the org must not lock them out
+    @Test
+    void memberHoldingARealmRoleStaysEnabled() throws Exception {
+        String ritaId = member("rita");
+        testRealm.createRealmRole("realm-owner");
+        testRealm.grantRealmRole(ritaId, "realm-owner");
+
+        orgService.setEnabled(testRealm.name(), ORG, false);
+        assertTrue(user(ritaId).isEnabled());
+        assertEquals(200, logIn("rita"));
+        assertFalse(user(paulId).isEnabled());
+
+        // not in the list of the members disabled with the org: enabling it does not touch them either
+        orgService.setEnabled(testRealm.name(), ORG, true);
+        assertTrue(user(ritaId).isEnabled());
+        assertTrue(user(paulId).isEnabled());
+    }
+
+    // an administrator of the realm in the console (a role of realm-management, no realm role) is privileged too
+    @Test
+    void memberWithARealmManagementRoleStaysEnabled() throws Exception {
+        String adaId = member("ada");
+        testRealm.grantClientRole(adaId, "realm-management", "manage-users");
+
+        orgService.setEnabled(testRealm.name(), ORG, false);
+        assertTrue(user(adaId).isEnabled());
+        assertEquals(200, logIn("ada"));
+        assertFalse(user(paulId).isEnabled());
+    }
+
+    // only the realm roles of Orgkeep and realm-management count: a member with a realm role created in the console
+    // is disabled with the org like any other
+    @Test
+    void memberWithAnotherRealmRoleIsDisabled() throws Exception {
+        String frankId = member("frank");
+        testRealm.createRealmRole("support");
+        testRealm.grantRealmRole(frankId, "support");
+
+        orgService.setEnabled(testRealm.name(), ORG, false);
+        assertFalse(user(frankId).isEnabled());
+        assertEquals(400, logIn("frank"));
+
+        orgService.setEnabled(testRealm.name(), ORG, true);
+        assertTrue(user(frankId).isEnabled());
+    }
+
     // a second call changes nothing: disabling twice must not forget who was disabled by the first call
     @Test
     void isIdempotent() {

@@ -4,7 +4,6 @@ import org.orgkeep.api.OrgMemberService;
 import org.orgkeep.api.events.UserCreated;
 import org.orgkeep.api.exceptions.MemberAlreadyExistsException;
 import org.orgkeep.api.exceptions.MemberNotFoundException;
-import org.orgkeep.api.exceptions.MemberOfAnotherOrgException;
 import org.orgkeep.api.exceptions.OperationNotAllowedException;
 import org.orgkeep.api.model.AddMemberRequest;
 import org.orgkeep.api.model.OrgClients;
@@ -24,6 +23,7 @@ import org.keycloak.representations.idm.OrganizationRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 @Slf4j
@@ -34,6 +34,7 @@ public class OrgMemberServiceImpl implements OrgMemberService {
     private final KeycloakClients clients;
     private final KeycloakGroups groups;
     private final KeycloakUsers users;
+    private final MemberEligibility eligibility;
     private final MemberMapper memberMapper;
     private final InvitationMailer invitations;
     private final EventBus eventBus;
@@ -73,15 +74,10 @@ public class OrgMemberServiceImpl implements OrgMemberService {
             throw new OperationNotAllowedException("The organisation '%s' is disabled".formatted(orgName));
         }
 
-        String userId = users.findIdByEmail(realm, request.email())
-                .orElseGet(() -> createUser(realm, orgName, request));
-        List<String> userOrgs = orgs.organisationsOf(realm, userId);
-        if (userOrgs.contains(orgName)) {
-            throw new MemberAlreadyExistsException(orgName, request.email());
-        }
-        if (!userOrgs.isEmpty()) {
-            throw new MemberOfAnotherOrgException(request.email(), userOrgs.get(0));
-        }
+        Optional<String> existingId = users.findIdByEmail(realm, request.email());
+        // an existing user may be privileged or a member of another org; a member of this org is refused just below
+        existingId.ifPresent(userId -> eligibility.checkReusable(realm, orgName, userId, request.email()));
+        String userId = existingId.orElseGet(() -> createUser(realm, orgName, request));
         if (!orgs.addMember(realm, org.getId(), userId)) {
             throw new MemberAlreadyExistsException(orgName, request.email());
         }

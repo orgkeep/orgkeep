@@ -19,6 +19,8 @@ public interface OrgMemberService {
      *
      * @throws org.orgkeep.api.exceptions.MemberAlreadyExistsException if the user is already a member
      * @throws org.orgkeep.api.exceptions.MemberOfAnotherOrgException if the user is a member of another organisation
+     * @throws org.orgkeep.api.exceptions.PrivilegedUserException if the user holds a realm role of Orgkeep or a role
+     *         of the realm-management client
      */
     OrgMember add(String realm, String orgName, AddMemberRequest request);
 

@@ -1,0 +1,44 @@
+# Builds and tests every push to main and every pull request.
+# The dashboard depends on orgkeep-core, which is not published in a Maven repository yet: the job builds the core
+# from its main branch first and installs it in the local Maven repository of the runner.
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# A new push to a pull request cancels the build still running for the previous one
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check out orgkeep-core
+        uses: actions/checkout@v5
+        with:
+          repository: orgkeep/orgkeep-core
+          path: orgkeep-core
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Install orgkeep-core
+        run: mvn -B install -DskipTests
+        working-directory: orgkeep-core
+
+      # Quinoa is disabled in the test profile, but the package phase builds the front (npm run build: TypeScript
+      # check, then Vite), with the Node.js version it downloads itself
+      - name: Build and test
+        run: mvn -B verify

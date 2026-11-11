@@ -1,0 +1,573 @@
+{
+  "common": {
+    "comingSoon": "Coming soon.",
+    "cancel": "Cancel",
+    "failed": "The operation failed",
+    "create": "Create",
+    "save": "Save",
+    "edit": "Edit",
+    "delete": "Delete",
+    "remove": "Remove",
+    "required": "Required",
+    "copy": "Copy",
+    "copied": "Copied"
+  },
+  "app": {
+    "backendUnreachable": "Backend unreachable"
+  },
+  "layout": {
+    "logout": "Log out"
+  },
+  "menu": {
+    "home": "Home",
+    "realm": "Realm",
+    "organisations": "Organisations",
+    "catalogs": "Catalogs",
+    "loginClient": "Login client",
+    "organisation": "Organisation {{org}}",
+    "members": "Members",
+    "teams": "Teams"
+  },
+  "home": {
+    "welcome": "Welcome {{name}}",
+    "realmRoles": "Realm roles",
+    "organisations": "Organisations",
+    "none": "None"
+  },
+  "notFound": {
+    "title": "Page not found",
+    "text": "This page does not exist, or your roles do not give access to it."
+  },
+  "organisations": {
+    "title": "Organisations",
+    "subtitle": "One organisation per customer, each with its owner, members and products.",
+    "new": "New organisation",
+    "searchLabel": "Search organisations",
+    "searchPlaceholder": "Search by name",
+    "allProducts": "All products",
+    "productFilterLabel": "Filter by product",
+    "count_one": "{{count}} organisation",
+    "count_other": "{{count}} organisations",
+    "empty": "No organisation yet. Create the first one with the \"New organisation\" button.",
+    "noMatch": "No organisation matches this search.",
+    "loadError": "Could not load the organisations",
+    "columns": {
+      "name": "Name",
+      "emailDomains": "Email domains",
+      "owner": "Owner",
+      "members": "Members",
+      "products": "Products",
+      "status": "Status"
+    },
+    "noOwner": "No owner",
+    "noProducts": "None",
+    "productCount_one": "{{count}} product",
+    "productCount_other": "{{count}} products",
+    "status": {
+      "active": "Active",
+      "disabled": "Disabled"
+    },
+    "create": {
+      "title": "New organisation",
+      "name": "Name",
+      "nameDescription": "Lowercase letters, digits and hyphens. Cannot be changed later: it is the identifier.",
+      "nameInvalid": "Lowercase letters, digits and inner hyphens only",
+      "emailDomains": "Email domains",
+      "emailDomainsDescription": "Users with these domains are sent to this organisation when they log in. Press Enter or a comma after each domain.",
+      "owner": "Owner (optional)",
+      "ownerEmail": "Email",
+      "ownerFirstName": "First name",
+      "ownerLastName": "Last name",
+      "ownerDescription": "First and last name are required with an email. An existing user is reused (with their own names), unless they already belong to another organisation.",
+      "emailInvalid": "Invalid email address",
+      "submit": "Create",
+      "failed": "Organisation not created"
+    }
+  },
+  "orgDetail": {
+    "breadcrumb": "Organisations",
+    "loadError": "Could not load the organisation {{org}}",
+    "domains": "Domains:",
+    "owners_one": "Owner:",
+    "owners_other": "Owners:",
+    "client": "Client:",
+    "none": "None",
+    "tabs": {
+      "members": "Members",
+      "products": "Products",
+      "teams": "Teams"
+    },
+    "teams": {
+      "loadError": "Could not load the teams",
+      "hint": "Managed by the org admins: what each team gives its members. Open a team to see its members, products and roles.",
+      "columns": {
+        "team": "Team",
+        "members": "Members",
+        "products": "Products",
+        "catalogRoles": "Catalog roles"
+      }
+    },
+    "roles": {
+      "ORG_OWNER": "org-owner",
+      "ORG_ADMIN": "org-admin",
+      "ORG_USER": "org-user"
+    },
+    "cycles": {
+      "DAILY": "Daily",
+      "MONTHLY": "Monthly",
+      "YEARLY": "Yearly"
+    },
+    "delete": {
+      "button": "Delete",
+      "title": "Delete the organisation {{org}}?",
+      "message": "Its client, its groups and the products assigned to it are deleted. The users are kept, but lose their access to the organisation. This cannot be undone.",
+      "confirm": "Delete"
+    },
+    "status": {
+      "disable": {
+        "button": "Disable",
+        "title": "Disable the organisation {{org}}?",
+        "message": "Its members are disabled too: they can no longer log in, and their sessions are closed (a token already issued stays valid until it expires, 5 minutes by default). No member can be added while it is disabled. Enabling it again enables the same members.",
+        "confirm": "Disable"
+      },
+      "enable": {
+        "button": "Enable",
+        "title": "Enable the organisation {{org}}?",
+        "message": "The members disabled with the organisation can log in again. A member disabled for another reason stays disabled.",
+        "confirm": "Enable"
+      }
+    },
+    "members": {
+      "loadError": "Could not load the members",
+      "empty": "No member yet.",
+      "columns": {
+        "name": "Name",
+        "email": "Email",
+        "role": "Role"
+      }
+    },
+    "products": {
+      "subtitle": "What the organisation negotiated for each product: the features it bought, its quotas, its parameters. The API of the product counts the usage.",
+      "assign": "Assign a product",
+      "loadError": "Could not load the products",
+      "empty": "No product assigned yet.",
+      "edit": "Edit",
+      "remove": "Remove",
+      "removeTitle": "Remove {{product}}?",
+      "removeMessage": "The members of the organisation lose this product.",
+      "quotaValue": "{{quota}} / {{cycle}}",
+      "columns": {
+        "product": "Product",
+        "quota": "Quota",
+        "boughtFeatures": "Bought features",
+        "params": "Parameters"
+      }
+    },
+    "assign": {
+      "title": "Assign a product to {{org}}",
+      "editTitle": "Assignment of {{product}}",
+      "product": "Product",
+      "productPlaceholder": "Choose a product",
+      "productRequired": "Choose a product",
+      "noProductLeft": "Every product of the catalogs is already assigned",
+      "quota": "Quota",
+      "quotaInvalid": "A whole number greater than 0",
+      "cycle": "Cycle",
+      "boughtFeatures": "Bought features",
+      "boughtFeaturesDescription": "The features of the product the organisation bought: its teams can give these, never more.",
+      "boughtFeaturesRequired": "Choose at least one feature: a metered product gives nothing else",
+      "meteredHint": "A product with metered features has no quota of its own: the organisation gets a quota for each metered feature it buys.",
+      "meteredOption": "{{feature}} (metered)",
+      "featureQuota": "Quota of {{feature}}",
+      "paramDefault": "Default: {{value}}",
+      "true": "Yes",
+      "false": "No",
+      "tokenHint": "In the tokens, once a team of the organisation gives the product:",
+      "submit": "Assign",
+      "save": "Save",
+      "failed": "Product not assigned"
+    }
+  },
+  "catalogs": {
+    "title": "Catalogs",
+    "subtitle": "Your APIs, grouped as you sell them. Each catalog comes out as one claim in the tokens.",
+    "new": "New catalog",
+    "loadError": "Could not load the catalogs",
+    "empty": "No catalog yet. Create the first one with the \"New catalog\" button.",
+    "columns": {
+      "name": "Name",
+      "displayName": "Display name",
+      "description": "Description",
+      "products": "Products"
+    },
+    "productCount_one": "{{count}} product",
+    "productCount_other": "{{count}} products"
+  },
+  "catalogForm": {
+    "createTitle": "New catalog",
+    "editTitle": "Catalog {{catalog}}",
+    "name": "Name",
+    "nameDescription": "Lowercase letters, digits and hyphens. Cannot be changed later: it is the name of the claim and of the scope the applications ask for.",
+    "nameInvalid": "Lowercase letters, digits and inner hyphens only",
+    "displayName": "Display name",
+    "displayNameRequired": "A display name is required",
+    "description": "Description"
+  },
+  "catalogDetail": {
+    "breadcrumb": "Catalogs",
+    "loadError": "Could not load the catalog {{catalog}}",
+    "delete": {
+      "title": "Delete the catalog {{catalog}}?",
+      "message": "Its client and its scope are deleted: the applications that ask for it no longer get it in their tokens. This cannot be undone.",
+      "notEmpty_one": "The catalog still has {{count}} product: delete it first, the catalog can only be deleted once empty.",
+      "notEmpty_other": "The catalog still has {{count}} products: delete them first, the catalog can only be deleted once empty."
+    },
+    "products": {
+      "title": "Products",
+      "subtitle": "Each product is an access to one of your APIs, with the features an organisation can buy and the parameters it negotiates.",
+      "new": "New product",
+      "loadError": "Could not load the products",
+      "empty": "No product yet in this catalog.",
+      "columns": {
+        "product": "Product",
+        "description": "Description",
+        "kind": "Quotas",
+        "features": "Features",
+        "params": "Parameters",
+        "organisations": "Organisations"
+      },
+      "notAssigned": "Not assigned",
+      "orgCount_one": "{{count}} organisation",
+      "orgCount_other": "{{count}} organisations"
+    },
+    "token": {
+      "title": "What your APIs receive in the tokens",
+      "scope": "An application gets this catalog by default, or asks for it with",
+      "kinds": "Here billing is a simple product (an access role, one quota), shop a product with metered features (no access role, one quota per metered feature, in a claim of its own).",
+      "usage": "Orgkeep does not count the usage: your API compares its own counters with the limits of the token."
+    },
+    "introspection": {
+      "title": "Introspection credentials for your APIs",
+      "generate": "Generate a secret",
+      "description": "With lightweight tokens (see the login client), your APIs read the content of the tokens by introspection (RFC 7662), authenticated with these credentials. It also works with full tokens: an API can switch before the tokens do.",
+      "audience": "These credentials only introspect the tokens of this catalog: a token without it, or of a user with no right in it, is answered \"active\": false.",
+      "shownOnce": "Copy the secret now: it is not shown again. Generating another one replaces it.",
+      "clientId": "Client ID",
+      "clientSecret": "Client secret",
+      "url": "Introspection URL",
+      "confirm": {
+        "title": "Generate a new secret for {{catalog}}?",
+        "message": "The previous secret stops working at once: every API of this catalog must get the new one.",
+        "button": "Generate"
+      }
+    },
+    "roles": {
+      "title": "Roles",
+      "subtitle": "Valid for the whole catalog, not for one product: what a user may do in this environment (searcher, beta-tester...). Your API combines them with the products of the user.",
+      "new": "New role",
+      "loadError": "Could not load the roles",
+      "empty": "No role in this catalog.",
+      "columns": {
+        "role": "Role",
+        "description": "Description",
+        "grantedBy": "Given by"
+      },
+      "grantable": "Org admins",
+      "reserved": "You only"
+    }
+  },
+  "catalogRoleForm": {
+    "createTitle": "New role",
+    "editTitle": "Edit {{role}}",
+    "name": "Name",
+    "nameDescription": "Lowercase letters, digits and hyphens. Cannot be changed later: it is the name in the tokens.",
+    "nameInvalid": "Lowercase letters, digits and inner hyphens only",
+    "displayName": "Display name",
+    "description": "Description",
+    "orgGrantable": "Org admins can give it",
+    "orgGrantableDescription": "On: the org admins give it to their teams. Off: reserved, only you give it, to a user (test accounts, partners...).",
+    "orgGrantableWarning": "Turning this off removes the role from the teams of every organisation. Users who got it from you keep it."
+  },
+  "catalogRole": {
+    "loadError": "Could not load the role {{role}}",
+    "grantableHint": "The org admins give it to their teams, in the organisations with a product of this catalog. You can also give it to a user below.",
+    "reservedHint": "Reserved: only you give it, to a user below.",
+    "delete": {
+      "title": "Delete the role {{role}}?",
+      "message": "It is removed from the teams and from the users who have it. This cannot be undone."
+    },
+    "users": {
+      "title": "Given by you",
+      "subtitle": "Users who hold the role directly, whatever their teams. Only members of an organisation.",
+      "loadError": "Could not load the users",
+      "empty": "Given to nobody directly.",
+      "organisation": "Organisation",
+      "organisationPlaceholder": "Choose an organisation",
+      "member": "Give to",
+      "memberPlaceholder": "Choose a member",
+      "columns": {
+        "user": "User",
+        "email": "Email"
+      },
+      "removeTitle": "Remove {{role}}?",
+      "removeMessage": "{{user}} loses the role (unless a team gives it)."
+    },
+    "token": {
+      "title": "In the tokens",
+      "scope": "Only when the token has the catalog: by default, or asked with"
+    }
+  },
+  "productForm": {
+    "createTitle": "New product in {{catalog}}",
+    "editTitle": "Product {{product}}",
+    "name": "Name",
+    "nameDescription": "Lowercase letters, digits and hyphens. Cannot be changed later: it is the role name in the tokens.",
+    "nameInvalid": "Lowercase letters, digits and inner hyphens only",
+    "displayName": "Display name",
+    "displayNameRequired": "A display name is required",
+    "description": "Description",
+    "features": {
+      "legend": "Features (optional)",
+      "description": "The permissions an organisation buys and its teams give (e.g. read, write), or the capacities it buys with a quota each (metered, e.g. an engine). They can also be added later.",
+      "name": "Feature name",
+      "displayName": "Display name",
+      "displayNamePlaceholder": "Display name (optional)",
+      "metered": "Metered",
+      "meteredHint": "A metered feature is bought with its own quota. One metered feature is enough: the product then has no quota of its own, only a quota per metered feature. Cannot be changed later.",
+      "add": "Add a feature"
+    },
+    "params": {
+      "legend": "Parameters (optional)",
+      "description": "What each organisation negotiates besides its quota and cycle, which every product has (e.g. a region).",
+      "name": "Name",
+      "type": "Type",
+      "types": {
+        "STRING": "Text",
+        "NUMBER": "Number",
+        "BOOLEAN": "Yes / no",
+        "ENUM": "List of values"
+      },
+      "values": "Allowed values",
+      "valuesDescription": "Press Enter or a comma after each value.",
+      "valuesRequired": "A list needs at least one value",
+      "required": "Required",
+      "defaultValue": "Default",
+      "noDefault": "No default",
+      "true": "Yes",
+      "false": "No",
+      "add": "Add a parameter"
+    }
+  },
+  "productDetail": {
+    "loadError": "Could not load the product {{product}}",
+    "delete": {
+      "title": "Delete {{product}}?",
+      "message": "Its features and its parameters are deleted with it. This cannot be undone.",
+      "assigned_one": "The product is assigned to {{count}} organisation: remove it from the organisation first.",
+      "assigned_other": "The product is assigned to {{count}} organisations: remove it from these organisations first."
+    },
+    "kind": {
+      "simple": "Quota per product",
+      "metered": "Quota per feature",
+      "simpleHint": "One quota per organisation for the whole product, and an access role in the tokens.",
+      "meteredHint": "No quota of product nor access role: one quota per metered feature an organisation buys. This stays so while the product is assigned to organisations."
+    },
+    "features": {
+      "title": "Features",
+      "subtitle": "An organisation buys some of them, and its teams give them to their members. A metered feature is bought with its own quota.",
+      "add": "Add a feature",
+      "addTitle": "Add a feature",
+      "editTitle": "Feature {{feature}}",
+      "nameDescription": "Lowercase letters, digits and hyphens. In the tokens: {{product}}:<name>",
+      "meteredFixed": "Chosen when the feature was created: delete it and add it again to change it.",
+      "empty": "No feature: the product is a plain access.",
+      "removeTitle": "Remove the feature {{feature}}?",
+      "removeMessage": "The organisations that bought it lose it, and their members no longer get it in their tokens.",
+      "columns": {
+        "name": "Name",
+        "displayName": "Display name",
+        "inToken": "In the tokens"
+      }
+    },
+    "params": {
+      "title": "Parameters",
+      "subtitle": "Negotiated by each organisation besides its quota. Changed with the \"Edit\" button above.",
+      "empty": "No parameter besides the quota and its cycle."
+    },
+    "token": {
+      "title": "In the tokens",
+      "hint": "For a member of an organisation that bought every feature, with an example quota. The parameters show their defaults.",
+      "meteredHint": "For a member of an organisation that bought every feature, with example quotas: no access role, a claim per metered feature with its quotas. The pool \"/\" is the one of the organisation: your API keys its counters by organisation, catalog, product, feature and pool."
+    }
+  },
+  "invitation": {
+    "pending": "Invitation pending",
+    "resend": "Resend invitation",
+    "sent": "Invitation sent"
+  },
+  "tokenPreview": {
+    "button": "Token preview",
+    "title": "Token of {{member}}",
+    "catalogs": "Catalogs",
+    "catalogsDescription": "Those an application asks for: by default, every catalog where the organisation has a product.",
+    "scope": "As an application asking for",
+    "hint": "The claims of the access token your APIs receive for this member, computed by Keycloak without the member logging in. Only the claims: nothing here can be used to call an API.",
+    "lightweight": "The login client issues lightweight tokens: the token carries nothing but who the user is, your APIs read the rest by introspection.",
+    "introspectionTab": "Introspection (what your API reads)",
+    "tokenTab": "Lightweight token (what travels)",
+    "notInAudience": "Not in the audience of the token: {{catalogs}}. The APIs of these catalogs get \"active\": false when they introspect it (the member has no right in them)."
+  },
+  "members": {
+    "title": "Members of {{org}}",
+    "loadError": "Could not load the members of {{org}}",
+    "empty": "No member yet.",
+    "add": "Add a member",
+    "columns": {
+      "name": "Name",
+      "email": "Email",
+      "role": "Role"
+    },
+    "removeTitle": "Remove {{member}}?",
+    "removeMessage": "The member leaves the organisation {{org}} and its teams, and loses their products. The account is kept.",
+    "form": {
+      "title": "Add a member to {{org}}",
+      "email": "Email",
+      "emailInvalid": "A valid email address",
+      "firstName": "First name",
+      "lastName": "Last name",
+      "invitation": "A new user receives an email to choose a password. The member joins the team users.",
+      "submit": "Add"
+    }
+  },
+  "teams": {
+    "title": "Teams of {{org}}",
+    "subtitle": "A team gives products of the organisation and catalog roles to its members. The team users holds every member: what it gives, everybody has.",
+    "loadError": "Could not load the teams of {{org}}",
+    "create": "New team",
+    "predefined": "predefined",
+    "columns": {
+      "name": "Team",
+      "members": "Members",
+      "products": "Products",
+      "catalogRoles": "Catalog roles"
+    },
+    "deleteTitle": "Delete the team {{team}}?",
+    "deleteMessage": "Its members lose what it gives, unless another team gives it too.",
+    "form": {
+      "title": "New team in {{org}}",
+      "name": "Name",
+      "nameDescription": "Lowercase letters, digits and inner hyphens. It cannot be changed afterwards.",
+      "nameInvalid": "Lowercase letters, digits and inner hyphens only",
+      "poolHint": "With a quota of team, its pool is named \"{{pool}}\" in the tokens."
+    }
+  },
+  "team": {
+    "notFound": "No team {{team}}",
+    "backToTeams": "Back to the teams",
+    "hint": "What this team gives reaches the tokens of its members at their next login or token refresh.",
+    "usersHint": "Every member of the organisation is in this team: what it gives, everybody has.",
+    "realmOwnerHint": "You manage this team as an org admin of {{org}} would: its org admins see the same changes.",
+    "members": {
+      "title": "Members ({{count}})",
+      "add": "Add a member",
+      "empty": "No member in this team.",
+      "removeTitle": "Take {{member}} out of {{team}}?",
+      "removeMessage": "The member loses what this team gives, unless another team gives it too."
+    },
+    "products": {
+      "title": "Products ({{count}})",
+      "give": "Give a product",
+      "empty": "The team gives no product.",
+      "noneAssigned": "The organisation has no product yet: the realm owner assigns them.",
+      "allFeatures": "all bought",
+      "orgPoolOnly": "pool of the org",
+      "orgPoolPerFeature": "pools of the org, per feature",
+      "quota": "{{quota}} / {{cycle}}",
+      "featureQuota": "{{feature}} {{quota}} / {{cycle}}",
+      "columns": {
+        "product": "Product",
+        "features": "Features",
+        "quota": "Quota of team"
+      },
+      "removeTitle": "Stop giving {{product}}?",
+      "removeMessage": "The members lose this product, unless another team gives it."
+    },
+    "catalogRoles": {
+      "title": "Catalog roles ({{count}})",
+      "add": "Give a catalog role",
+      "hint": "Valid for every product of the catalog: what the APIs combine with the products of the user.",
+      "empty": "The team gives no catalog role."
+    },
+    "grant": {
+      "title": "Give a product to {{team}}",
+      "editTitle": "{{product}} in {{team}}",
+      "product": "Product",
+      "productPlaceholder": "Choose a product of the organisation",
+      "productRequired": "Choose a product",
+      "allFeatures": "Every feature the organisation bought",
+      "allFeaturesDescription": "Including those it buys later.",
+      "features": "Features given",
+      "featuresDescription": "Among those the organisation bought. None: the product alone.",
+      "featuresDescriptionMetered": "Among those the organisation bought. At least one: the product gives nothing else.",
+      "featuresRequired": "Choose at least one feature",
+      "meteredOption": "{{feature}} ({{quota}} / {{cycle}})",
+      "meteredHint": "The members share the quota of the organisation for each metered feature (pool \"{{pool}}\" in the tokens). No quota of team for the product itself: a feature can have its own.",
+      "featureQuotas": "Quotas of team, per metered feature",
+      "featureQuotasDescription": "Optional: a budget shared by the members, on top of the pool of the organisation for the feature. Pool \"{{pool}}\" in the tokens. A member in several teams with a quota for the feature gets all their pools.",
+      "featureQuotaPlaceholder": "Pool of the organisation only",
+      "orgQuota": "org: {{quota}} / {{cycle}}",
+      "quota": "Quota of team",
+      "quotaDescription": "Optional: a budget shared by the members, on top of the pool of the organisation ({{quota}} / {{cycle}}).",
+      "quotaInvalid": "A whole number greater than 0, or empty",
+      "cycle": "Cycle",
+      "poolHint": "Pool \"{{pool}}\" in the tokens. A member in several teams with a quota for the product gets all their pools.",
+      "submit": "Give"
+    }
+  },
+  "loginClient": {
+    "title": "Login client",
+    "subtitle": "The client the users of every organisation log in through, to your applications.",
+    "loadError": "Could not load the login client",
+    "details": {
+      "title": "For your developers",
+      "flow": "A public client: your applications use the authorization code flow with PKCE, no secret.",
+      "clientId": "Client ID",
+      "issuer": "Issuer",
+      "discovery": "OpenID configuration",
+      "console": "Anything else (themes, identity providers, sessions) is in the Keycloak console of your realm, with your own account:",
+      "consoleLink": "open the Keycloak console"
+    },
+    "settings": {
+      "title": "Your applications",
+      "noRedirectUri": "No redirect URI yet: nobody can log in through this client.",
+      "redirectUris": "Redirect URIs",
+      "redirectUrisDescription": "Where users come back after login. https (http on localhost only); a wildcard only at the end: https://app.example.com/*. Press Enter after each URI.",
+      "postLogoutRedirectUris": "Post logout redirect URIs",
+      "postLogoutRedirectUrisDescription": "Where users come back after logout. Same rules.",
+      "webOrigins": "Web origins",
+      "webOriginsDescription": "Origins allowed to call Keycloak from a browser (CORS): https://app.example.com, or + for the origins of the redirect URIs.",
+      "defaultCatalogs": "Default catalogs",
+      "defaultCatalogsDescription": "In every token of this client. The other catalogs are only in a token when the application asks for them (scope=<catalog>).",
+      "saved": "Saved."
+    },
+    "orgkeepApi": {
+      "title": "Your own admin screens (Orgkeep API)",
+      "description": "To build your own screens on the API of Orgkeep instead of this dashboard, they log in with this client: same login page, no catalog in its tokens, never lightweight. Set the URIs of those screens here, with the same rules.",
+      "loadError": "Could not load the client of the Orgkeep API"
+    },
+    "lightweight": {
+      "title": "Lightweight tokens",
+      "on": "On",
+      "off": "Off",
+      "description": "When the tokens get too big (many products and features), the tokens of this client can carry only who the user is: no roles, no catalogs, no profile, always the same small size. Your APIs then read the content by introspection, a standard call (RFC 7662) that Spring, Quarkus and the gateways know.",
+      "introspection": "Each API introspects with the credentials of its catalog, generated on the page of the catalog:",
+      "catalogsLink": "Catalogs",
+      "marker": "Each lightweight token carries the claim",
+      "confirm": {
+        "title": "Turn on the lightweight tokens?",
+        "message": "Every application of this client receives lightweight tokens at once. Each of your APIs must introspect the tokens first (it works with full tokens too), or it no longer sees the rights of the users. An application that reads roles in the access token in the browser no longer sees them either; the ID token does not change.",
+        "button": "Turn on"
+      }
+    }
+  }
+}

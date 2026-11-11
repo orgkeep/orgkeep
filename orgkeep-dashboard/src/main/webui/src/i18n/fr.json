@@ -78,7 +78,7 @@
       "ownerEmail": "Email",
       "ownerFirstName": "Prénom",
       "ownerLastName": "Nom",
-      "ownerDescription": "Prénom et nom sont obligatoires avec un email. Un user existant est réutilisé (avec ses propres prénom et nom), sauf s'il appartient déjà à une autre organisation.",
+      "ownerDescription": "Prénom et nom sont obligatoires avec un email. Un user existant est réutilisé (avec ses propres prénom et nom), mais certains ne peuvent pas être ajoutés à cette organisation : un membre d'une autre organisation, ou un administrateur du realm.",
       "emailInvalid": "Adresse email invalide",
       "submit": "Créer",
       "failed": "Organisation non créée"

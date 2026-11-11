@@ -78,7 +78,7 @@
       "ownerEmail": "Email",
       "ownerFirstName": "First name",
       "ownerLastName": "Last name",
-      "ownerDescription": "First and last name are required with an email. An existing user is reused (with their own names), unless they already belong to another organisation.",
+      "ownerDescription": "First and last name are required with an email. An existing user is reused (with their own names), but some cannot be added to this organisation: a member of another organisation, or an administrator of the realm.",
       "emailInvalid": "Invalid email address",
       "submit": "Create",
       "failed": "Organisation not created"

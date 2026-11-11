@@ -1,4 +1,5 @@
-# Builds and tests every push to main and every pull request.
+# Builds and tests every push to main and every pull request: every module (core, dashboard, theme), and the
+# Keycloak image with the theme (built only, never pushed: the Release workflow publishes it).
 # The tests start Keycloak and Mailpit with Quarkus Dev Services: the GitHub runners have Docker.
 name: Build
 
@@ -16,6 +17,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # "build" is the name of the check required by the ruleset of main
   build:
     runs-on: ubuntu-latest
     steps:
@@ -27,5 +29,11 @@ jobs:
           java-version: '25'
           cache: maven
 
+      # The core first, then the dashboard (which embeds it) and the theme. Quinoa is disabled in the test profile,
+      # but the package phase builds the front (npm run build: TypeScript check, then Vite), with the Node.js version
+      # it downloads itself.
       - name: Build and test
         run: mvn -B verify
+
+      - name: Build the Keycloak image
+        run: docker build -t orgkeep-keycloak:ci orgkeep-theme

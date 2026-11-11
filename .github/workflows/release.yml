@@ -1,0 +1,114 @@
+# Publishes a release when a version tag is pushed (v0.2.0), for amd64 and arm64:
+# - ghcr.io/orgkeep/orgkeep-core:<version> and :latest, the API alone;
+# - ghcr.io/orgkeep/orgkeep:<version> and :latest, the core and its dashboard;
+# - ghcr.io/orgkeep/orgkeep-keycloak:<version> and :latest, Keycloak with the theme;
+# then the GitHub Release, with the jar of the theme (for /opt/keycloak/providers).
+# The tag must match the version of the pom (v0.2.0 for 0.2.0): see RELEASE.md for the whole procedure.
+# Run it by hand (Actions > Release > Run workflow) to publish an existing tag again, with the workflow of main:
+# after fixing this file, without moving the tag.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing version tag to publish again, like v1.2.3'
+        required: true
+
+permissions:
+  contents: write   # the GitHub Release
+  packages: write   # the images on ghcr.io
+
+env:
+  # The pushed tag, or the one given by hand
+  TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Check that the tag matches the version of the pom
+        id: version
+        run: |
+          version=$(mvn -B -q help:evaluate -Dexpression=project.version -DforceStdout)
+          if [ "v$version" != "$TAG" ]; then
+            echo "::error::Tag $TAG does not match the version of the pom ($version)"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      # QEMU runs the arm64 steps of the Dockerfiles on the amd64 runner; buildx builds both platforms in one image
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Same build as by hand (mvn package -Pdocker), with the tests: Quarkus builds the images of the core and of
+      # the dashboard with buildx and pushes them, labels included (application.properties of each module). The jar
+      # of the theme is built on the way. The revision is the commit of the tag, not the one of main when the
+      # workflow is run by hand.
+      - name: Build, test and push the images of the core and the dashboard
+        run: >-
+          mvn -B package -Pdocker
+          -Dquarkus.container-image.push=true
+          -Dquarkus.container-image.additional-tags=latest
+          -Dquarkus.docker.buildx.platform=linux/amd64,linux/arm64
+          -Dquarkus.container-image.labels.\"org.opencontainers.image.revision\"=${{ steps.version.outputs.revision }}
+
+      # GitHub shows the description of a multi-arch package from an annotation of the index, not from the labels of
+      # the images, and Quarkus cannot set annotations: each index is written again with it, for both tags, without
+      # rebuilding (same images). Same texts as the description labels in the application.properties.
+      - name: Add the descriptions to the indexes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          describe() {
+            docker buildx imagetools create \
+              --annotation "index:org.opencontainers.image.description=$2" \
+              -t "ghcr.io/orgkeep/$1:$VERSION" -t "ghcr.io/orgkeep/$1:latest" \
+              "ghcr.io/orgkeep/$1:$VERSION"
+          }
+          describe orgkeep-core "Orgkeep core: the REST API for multi-tenant B2B on Keycloak"
+          describe orgkeep "Orgkeep: multi-tenant B2B on Keycloak, the core API and its dashboard"
+
+      # The labels are in the Dockerfile, except the commit (revision), which replaces the one of the Keycloak image.
+      # Here the description annotation is set by the action: same text as the description label of the Dockerfile.
+      - name: Build and push the Keycloak image with the theme
+        uses: docker/build-push-action@v6
+        with:
+          context: orgkeep-theme
+          platforms: linux/amd64,linux/arm64
+          push: true
+          labels: org.opencontainers.image.revision=${{ steps.version.outputs.revision }}
+          annotations: index:org.opencontainers.image.description=Keycloak with the Orgkeep theme
+          tags: |
+            ghcr.io/orgkeep/orgkeep-keycloak:${{ steps.version.outputs.version }}
+            ghcr.io/orgkeep/orgkeep-keycloak:latest
+
+      # Run again by hand, the release may already exist: only the jar is replaced
+      - name: Create the GitHub Release
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" orgkeep-theme/target/orgkeep-theme.jar --clobber
+          else
+            gh release create "$TAG" --verify-tag --generate-notes orgkeep-theme/target/orgkeep-theme.jar
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

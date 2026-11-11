@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -56,7 +57,9 @@ public class MemberEligibility {
         if (userOrgs.contains(orgName)) {
             return;
         }
-        if (isPrivileged(realm, userId, realmManagementUuid(realm))) {
+        // || stops at the first true: the realm-management client is only looked up without a realm role
+        if (hasPrivilegedRealmRole(realm, userId)
+                || hasRealmManagementRole(realm, userId, realmManagementUuid(realm))) {
             log.info("User {} cannot join organisation '{}' in realm '{}': privileged user", email, orgName, realm);
             throw new PrivilegedUserException(email);
         }
@@ -67,26 +70,44 @@ public class MemberEligibility {
         }
     }
 
-    /** The privileged users among userIds. The realm-management client is looked up once for all of them. */
+    /**
+     * The privileged users among userIds. The realm-management client is looked up at most once for all of them,
+     * and only if a user has none of the realm roles.
+     */
     public Set<String> privilegedAmong(String realm, Collection<String> userIds) {
-        Optional<String> realmManagementUuid = realmManagementUuid(realm);
-        return userIds.stream()
-                .filter(userId -> isPrivileged(realm, userId, realmManagementUuid))
-                .collect(Collectors.toSet());
-    }
-
-    private Optional<String> realmManagementUuid(String realm) {
-        return clients.findUuid(realm, REALM_MANAGEMENT);
-    }
-
-    private boolean isPrivileged(String realm, String userId, Optional<String> realmManagementUuid) {
-        boolean realmRole = users.effectiveRealmRoles(realm, userId).stream().anyMatch(PRIVILEGED_REALM_ROLES::contains);
-        if (realmRole) {
-            return true;
+        if (userIds.isEmpty()) {
+            return Set.of();
         }
+        Set<String> privileged = new HashSet<>();
+        // looked up at the first user without a realm role, then reused
+        Optional<String> realmManagementUuid = null;
+        for (String userId : userIds) {
+            if (hasPrivilegedRealmRole(realm, userId)) {
+                privileged.add(userId);
+                continue;
+            }
+            if (realmManagementUuid == null) {
+                realmManagementUuid = realmManagementUuid(realm);
+            }
+            if (hasRealmManagementRole(realm, userId, realmManagementUuid)) {
+                privileged.add(userId);
+            }
+        }
+        return privileged;
+    }
+
+    private boolean hasPrivilegedRealmRole(String realm, String userId) {
+        return users.effectiveRealmRoles(realm, userId).stream().anyMatch(PRIVILEGED_REALM_ROLES::contains);
+    }
+
+    private boolean hasRealmManagementRole(String realm, String userId, Optional<String> realmManagementUuid) {
         // every realm has this client: absent only if it was deleted
         return realmManagementUuid
                 .map(clientUuid -> !users.effectiveClientRoles(realm, userId, clientUuid).isEmpty())
                 .orElse(false);
+    }
+
+    private Optional<String> realmManagementUuid(String realm) {
+        return clients.findUuid(realm, REALM_MANAGEMENT);
     }
 }

@@ -17,6 +17,8 @@ public interface OrgService {
      * @throws org.orgkeep.api.exceptions.MemberOfAnotherOrgException if the owner is a member of another organisation
      * @throws org.orgkeep.api.exceptions.PrivilegedUserException if the owner holds a realm role of Orgkeep or a role
      *         of the realm-management client
+     * @throws org.orgkeep.api.exceptions.OperationNotAllowedException if the new organisation was disabled before its
+     *         owner became a member: the creation is rolled back
      */
     CreateOrgResponse create(String realm,CreateOrgRequest request);
 
@@ -35,7 +37,7 @@ public interface OrgService {
      * Keycloak lets the members of a disabled organisation log in: disabling it also disables its enabled members
      * (and ends their sessions), except the privileged ones (a realm role of Orgkeep or a role of the realm-management
      * client); enabling it enables again only the members
-     * it disabled. Idempotent.
+     * it disabled. Idempotent: after a failure half way, the same call again finishes the job.
      *
      * @throws org.orgkeep.api.exceptions.OrgNotFoundException if no organisation has this name
      */

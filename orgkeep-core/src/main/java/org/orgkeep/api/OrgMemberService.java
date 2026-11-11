@@ -21,6 +21,8 @@ public interface OrgMemberService {
      * @throws org.orgkeep.api.exceptions.MemberOfAnotherOrgException if the user is a member of another organisation
      * @throws org.orgkeep.api.exceptions.PrivilegedUserException if the user holds a realm role of Orgkeep or a role
      *         of the realm-management client
+     * @throws org.orgkeep.api.exceptions.OperationNotAllowedException if the organisation is disabled, also when it was
+     *         disabled while the user was being added (the membership is then undone)
      */
     OrgMember add(String realm, String orgName, AddMemberRequest request);
 

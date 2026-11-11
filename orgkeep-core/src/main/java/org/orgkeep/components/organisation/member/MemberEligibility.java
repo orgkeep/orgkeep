@@ -1,6 +1,7 @@
 package org.orgkeep.components.organisation.member;
 
 import org.orgkeep.api.exceptions.MemberOfAnotherOrgException;
+import org.orgkeep.api.exceptions.OperationNotAllowedException;
 import org.orgkeep.api.exceptions.PrivilegedUserException;
 import org.orgkeep.api.model.RealmRole;
 import org.orgkeep.repository.keycloak.KeycloakClients;
@@ -9,6 +10,7 @@ import org.orgkeep.repository.keycloak.KeycloakUsers;
 import jakarta.enterprise.context.ApplicationScoped;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.keycloak.representations.idm.OrganizationRepresentation;
 
 import java.util.Arrays;
 import java.util.Collection;
@@ -21,7 +23,7 @@ import java.util.stream.Collectors;
 /**
  * Which existing users may become members of an organisation: the rules shared by the members added by an org admin
  * (OrgMemberServiceImpl.add) and the owner of a new org (OrgServiceImpl.create), and the privileged users that
- * disabling an org leaves enabled.
+ * disabling an org leaves enabled. Nobody joins a disabled organisation.
  * <p>
  * A privileged user works for the realm owner: it holds, effectively (directly, through a composite role or a group),
  * a realm role of Orgkeep ({@link RealmRole}: realm-owner, realm-admin, realm-user) or any role of the realm-management
@@ -94,6 +96,33 @@ public class MemberEligibility {
             }
         }
         return privileged;
+    }
+
+    /**
+     * Nobody joins a disabled organisation: its members are disabled (see OrgService.setEnabled).
+     *
+     * @throws OperationNotAllowedException if the organisation is disabled
+     */
+    public void checkEnabled(OrganizationRepresentation org) {
+        if (!org.isEnabled()) {
+            throw new OperationNotAllowedException("The organisation '%s' is disabled".formatted(org.getName()));
+        }
+    }
+
+    /**
+     * Checked again once the user is a member, on the organisation read again. Disabling an organisation marks it
+     * disabled first, then reads its members: a user who became a member after that read is not disabled, but this
+     * read sees the organisation disabled. Whatever the timing, a new member is either disabled with the org or
+     * refused here. The caller undoes the membership.
+     *
+     * @throws OperationNotAllowedException if the organisation was disabled in the meantime
+     */
+    public void checkStillEnabled(String realm, String orgName) {
+        OrganizationRepresentation org = orgs.getByName(realm, orgName);
+        if (!org.isEnabled()) {
+            log.info("Organisation '{}' in realm '{}' was disabled while a member was being added", orgName, realm);
+        }
+        checkEnabled(org);
     }
 
     private boolean hasPrivilegedRealmRole(String realm, String userId) {

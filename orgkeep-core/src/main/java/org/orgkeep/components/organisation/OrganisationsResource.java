@@ -83,7 +83,8 @@ public class OrganisationsResource {
                     + "log in (an access token already issued lives until it expires). A privileged member (a realm "
                     + "role realm-owner, realm-admin or realm-user, or any role of the realm-management client) is "
                     + "never disabled. Enabling enables again only "
-                    + "the members it disabled. Members cannot be added while it is disabled. Idempotent.")
+                    + "the members it disabled. Members cannot be added while it is disabled. Idempotent: after a "
+                    + "failure half way, the same call again finishes the job.")
     @APIResponseSchema(value = OrgDetails.class, responseCode = "200", responseDescription = "The organisation")
     @APIResponse(responseCode = "404", description = "Unknown organisation")
     public OrgDetails setEnabled(@PathParam("org") String org, @Valid @NotNull UpdateOrgStatusRequest request){

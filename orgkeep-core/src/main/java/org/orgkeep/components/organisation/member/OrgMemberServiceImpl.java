@@ -70,9 +70,7 @@ public class OrgMemberServiceImpl implements OrgMemberService {
     public OrgMember add(String realm, String orgName, AddMemberRequest request) {
         OrganizationRepresentation org = orgs.getByName(realm, orgName);
         // checked before the user is created: the members of a disabled org are disabled (see OrgService.setEnabled)
-        if (!org.isEnabled()) {
-            throw new OperationNotAllowedException("The organisation '%s' is disabled".formatted(orgName));
-        }
+        eligibility.checkEnabled(org);
 
         Optional<String> existingId = users.findIdByEmail(realm, request.email());
         // an existing user may be privileged or a member of another org; a member of this org is refused just below
@@ -80,6 +78,14 @@ public class OrgMemberServiceImpl implements OrgMemberService {
         String userId = existingId.orElseGet(() -> createUser(realm, orgName, request));
         if (!orgs.addMember(realm, org.getId(), userId)) {
             throw new MemberAlreadyExistsException(orgName, request.email());
+        }
+        try {
+            // the org may have been disabled since the first check, after its members were read
+            eligibility.checkStillEnabled(realm, orgName);
+        } catch (OperationNotAllowedException e) {
+            // a member of a disabled org must not stay enabled: the membership is undone, the user is kept
+            orgs.removeMember(realm, org.getId(), userId);
+            throw e;
         }
 
         String usersGroupId = groups.findId(realm, OrgGroups.users(orgName))

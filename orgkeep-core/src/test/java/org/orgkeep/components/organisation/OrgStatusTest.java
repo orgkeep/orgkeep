@@ -7,7 +7,10 @@ import org.orgkeep.api.exceptions.OperationNotAllowedException;
 import org.orgkeep.api.model.AddMemberRequest;
 import org.orgkeep.api.model.CreateOrgRequest;
 import org.orgkeep.fixtures.TestRealm;
+import org.orgkeep.repository.keycloak.KeycloakOrgs;
+import org.orgkeep.repository.keycloak.KeycloakUsers;
 import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.junit.mockito.InjectSpy;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.junit.jupiter.api.AfterEach;
@@ -17,6 +20,7 @@ import org.keycloak.admin.client.Keycloak;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.CredentialRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
+import org.mockito.Mockito;
 
 import java.net.URI;
 import java.net.URLEncoder;
@@ -32,8 +36,12 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 
 /**
  * Enabling and disabling an organisation, checked with real logins: Keycloak 26 lets the members of a disabled
@@ -48,6 +56,10 @@ class OrgStatusTest {
     @Inject RealmProvisioner realmProvisioner;
     @Inject OrgService orgService;
     @Inject OrgMemberService memberService;
+    // Mockito spies on the real repositories, for this test class only: they call Keycloak as usual, and a test can
+    // run something just before or after one call, or make it fail once, to replay a precise interleaving
+    @InjectSpy KeycloakOrgs orgs;
+    @InjectSpy KeycloakUsers users;
 
     @ConfigProperty(name = "quarkus.keycloak.admin-client.server-url")
     String keycloakUrl;
@@ -180,6 +192,110 @@ class OrgStatusTest {
                 new AddMemberRequest("emma@acme.test", "Emma", "Roux")));
         // refused before the user is created
         assertTrue(testRealm.resource().users().searchByEmail("emma@acme.test", true).isEmpty());
+    }
+
+    // The race of #23: the members are read, then someone is added before the org is saved disabled.
+    // The spy runs the add right after the real read of the members. The org is marked disabled before that read,
+    // so the add is refused (before the change, it went through and the new member stayed enabled)
+    @Test
+    void memberAddedAfterTheMembersAreReadIsRefused() {
+        List<Exception> addFailures = new ArrayList<>();
+        Mockito.doAnswer(invocation -> {
+                    Object members = invocation.callRealMethod();
+                    try {
+                        memberService.add(testRealm.name(), ORG, new AddMemberRequest("emma@acme.test", "Emma", "Roux"));
+                    } catch (Exception e) {
+                        addFailures.add(e);
+                    }
+                    return members;
+                })
+                .doCallRealMethod()
+                .when(orgs).members(anyString(), anyString());
+
+        orgService.setEnabled(testRealm.name(), ORG, false);
+
+        assertEquals(1, addFailures.size());
+        assertInstanceOf(OperationNotAllowedException.class, addFailures.getFirst());
+        assertTrue(testRealm.resource().users().searchByEmail("emma@acme.test", true).isEmpty());
+        assertFalse(user(paulId).isEnabled());
+    }
+
+    // The other side of the race: the add checked the org while it was still enabled, then the whole disable ran
+    // before the membership was written (the spy disables the org just before the real addMember). The disable could
+    // not see the new member: the add checks the org again once the user is a member, refuses and undoes the membership
+    @Test
+    void memberJoiningOnceTheOrgIsDisabledIsRefused() {
+        Mockito.doAnswer(invocation -> {
+                    orgService.setEnabled(testRealm.name(), ORG, false);
+                    return invocation.callRealMethod();
+                })
+                .doCallRealMethod()
+                .when(orgs).addMember(anyString(), anyString(), anyString());
+
+        assertThrowsExactly(OperationNotAllowedException.class, () -> memberService.add(testRealm.name(), ORG,
+                new AddMemberRequest("emma@acme.test", "Emma", "Roux")));
+
+        String emmaId = testRealm.resource().users().searchByEmail("emma@acme.test", true).getFirst().getId();
+        assertEquals(List.of(), orgs.organisationsOf(testRealm.name(), emmaId), "the membership is undone");
+        assertFalse(user(paulId).isEnabled());
+    }
+
+    // The same for the owner of a new org, disabled while it is being created: the creation fails and is rolled back
+    @Test
+    void ownerJoiningANewOrgOnceItIsDisabledFailsTheCreation() {
+        Mockito.doAnswer(invocation -> {
+                    orgService.setEnabled(testRealm.name(), "beta", false);
+                    return invocation.callRealMethod();
+                })
+                .doCallRealMethod()
+                .when(orgs).addMember(anyString(), anyString(), anyString());
+
+        assertThrowsExactly(OperationNotAllowedException.class, () -> orgService.create(testRealm.name(),
+                new CreateOrgRequest("beta", Set.of(), "olga@beta.test", null, "Olga", "Test")));
+
+        assertTrue(orgs.findByName(testRealm.name(), "beta").isEmpty());
+    }
+
+    // Keycloak fails while the members are being disabled (the spy throws for Claire once): the org is already
+    // disabled, Claire is not. Calling again finishes the job instead of returning early because the org is disabled,
+    // and every member disabled by the two calls is enabled again with the org
+    @Test
+    void disablingAgainFinishesAHalfDoneDisable() {
+        String claireId = member("claire");
+        Mockito.doThrow(new IllegalStateException("Keycloak unavailable"))
+                .doCallRealMethod()
+                .when(users).setEnabled(anyString(), eq(claireId), eq(false));
+
+        assertThrows(IllegalStateException.class, () -> orgService.setEnabled(testRealm.name(), ORG, false));
+        assertFalse(orgService.get(testRealm.name(), ORG).enabled(), "the org is marked disabled first");
+        assertTrue(user(claireId).isEnabled());
+
+        orgService.setEnabled(testRealm.name(), ORG, false);
+        assertFalse(user(claireId).isEnabled());
+        assertFalse(user(paulId).isEnabled());
+
+        orgService.setEnabled(testRealm.name(), ORG, true);
+        assertTrue(user(claireId).isEnabled());
+        assertTrue(user(paulId).isEnabled());
+    }
+
+    // The same when enabling: the org is enabled first, a member left disabled is enabled by the next call, even
+    // though the org is already enabled
+    @Test
+    void enablingAgainFinishesAHalfDoneEnable() {
+        String claireId = member("claire");
+        orgService.setEnabled(testRealm.name(), ORG, false);
+        Mockito.doThrow(new IllegalStateException("Keycloak unavailable"))
+                .doCallRealMethod()
+                .when(users).setEnabled(anyString(), eq(claireId), eq(true));
+
+        assertThrows(IllegalStateException.class, () -> orgService.setEnabled(testRealm.name(), ORG, true));
+        assertTrue(orgService.get(testRealm.name(), ORG).enabled(), "the org is marked enabled first");
+        assertFalse(user(claireId).isEnabled());
+
+        orgService.setEnabled(testRealm.name(), ORG, true);
+        assertTrue(user(claireId).isEnabled());
+        assertTrue(user(paulId).isEnabled());
     }
 
     private UserRepresentation user(String userId) {

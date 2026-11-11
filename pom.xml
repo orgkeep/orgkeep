@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+The parent of the modules of Orgkeep, and the aggregator that builds them together (the reactor orders them by their
+dependencies: the core before the dashboard). One version for all: they are released together, with one tag.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>org.orgkeep</groupId>
+    <artifactId>orgkeep-parent</artifactId>
+    <version>0.2.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>Orgkeep</name>
+    <description>Multi-tenant B2B on top of Keycloak</description>
+    <url>https://orgkeep.org</url>
+
+    <modules>
+        <module>orgkeep-core</module>
+        <module>orgkeep-dashboard</module>
+        <module>orgkeep-theme</module>
+    </modules>
+
+    <licenses>
+        <license>
+            <name>Apache-2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+        </license>
+    </licenses>
+
+    <!-- where the maven-release-plugin commits, tags and pushes. The modules inherit it as it is: without the
+         attributes, Maven would append their artifactId to each URL. -->
+    <scm child.scm.connection.inherit.append.path="false"
+         child.scm.developerConnection.inherit.append.path="false"
+         child.scm.url.inherit.append.path="false">
+        <connection>scm:git:https://github.com/orgkeep/orgkeep.git</connection>
+        <developerConnection>scm:git:git@github.com:orgkeep/orgkeep.git</developerConnection>
+        <url>https://github.com/orgkeep/orgkeep</url>
+        <tag>HEAD</tag>
+    </scm>
+
+    <properties>
+        <maven.compiler.release>25</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+        <quarkus.platform.version>3.40.1</quarkus.platform.version>
+        <!-- 1.18.40+ is required to compile on JDK 25 -->
+        <lombok.version>1.18.42</lombok.version>
+        <compiler-plugin.version>3.15.0</compiler-plugin.version>
+        <surefire-plugin.version>3.5.4</surefire-plugin.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>io.quarkus.platform</groupId>
+                <artifactId>quarkus-bom</artifactId>
+                <version>${quarkus.platform.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!-- the dashboard embeds the core of the same version -->
+            <dependency>
+                <groupId>org.orgkeep</groupId>
+                <artifactId>orgkeep-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.projectlombok</groupId>
+                <artifactId>lombok</artifactId>
+                <version>${lombok.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <!-- each Quarkus module declares it again, with <extensions>true</extensions> -->
+                <plugin>
+                    <groupId>io.quarkus.platform</groupId>
+                    <artifactId>quarkus-maven-plugin</artifactId>
+                    <version>${quarkus.platform.version}</version>
+                    <executions>
+                        <execution>
+                            <goals>
+                                <goal>build</goal>
+                                <goal>generate-code</goal>
+                                <goal>generate-code-tests</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+                <!-- the annotation processors are declared by each module: the core has MapStruct, the dashboard not -->
+                <plugin>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>${compiler-plugin.version}</version>
+                    <configuration>
+                        <release>${maven.compiler.release}</release>
+                        <parameters>true</parameters>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>${surefire-plugin.version}</version>
+                    <configuration>
+                        <systemPropertyVariables>
+                            <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
+                            <maven.home>${maven.home}</maven.home>
+                        </systemPropertyVariables>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <artifactId>maven-failsafe-plugin</artifactId>
+                    <version>${surefire-plugin.version}</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+
+        <plugins>
+            <!-- mvn release:prepare, from this directory: one version for every module, tag v<version> (which starts
+                 the Release workflow on GitHub), next SNAPSHOT, then push. No release:perform: nothing is deployed
+                 to a Maven repository. -->
+            <plugin>
+                <artifactId>maven-release-plugin</artifactId>
+                <version>3.1.1</version>
+                <configuration>
+                    <autoVersionSubmodules>true</autoVersionSubmodules>
+                    <tagNameFormat>v@{project.version}</tagNameFormat>
+                    <signTag>true</signTag>
+                    <scmReleaseCommitComment>Release @{releaseLabel}</scmReleaseCommitComment>
+                    <scmDevelopmentCommitComment>Next development version</scmDevelopmentCommitComment>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

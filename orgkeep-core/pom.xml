@@ -1,52 +1,24 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
-    <groupId>org.orgkeep</groupId>
+    <parent>
+        <groupId>org.orgkeep</groupId>
+        <artifactId>orgkeep-parent</artifactId>
+        <version>0.2.0-SNAPSHOT</version>
+    </parent>
     <artifactId>orgkeep-core</artifactId>
-    <version>0.2.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
-    <licenses>
-        <license>
-            <name>Apache-2.0</name>
-            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
-        </license>
-    </licenses>
-
-    <!-- where the maven-release-plugin commits, tags and pushes -->
-    <scm>
-        <connection>scm:git:https://github.com/orgkeep/orgkeep-core.git</connection>
-        <developerConnection>scm:git:git@github.com:orgkeep/orgkeep-core.git</developerConnection>
-        <url>https://github.com/orgkeep/orgkeep-core</url>
-        <tag>HEAD</tag>
-    </scm>
-
     <properties>
-        <compiler-plugin.version>3.15.0</compiler-plugin.version>
-        <maven.compiler.release>25</maven.compiler.release>
-
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <skipITs>true</skipITs>
 
-        <quarkus.platform.version>3.40.1</quarkus.platform.version>
-        <!-- 1.18.40+ is required to compile on JDK 25 -->
-        <lombok.version>1.18.42</lombok.version>
         <mapstruct.version>1.6.3</mapstruct.version>
         <jandex.version>3.6.0</jandex.version>
         <testcontainers.version>2.0.5</testcontainers.version>
-        <surefire-plugin.version>3.5.4</surefire-plugin.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
-            <dependency>
-                <groupId>io.quarkus.platform</groupId>
-                <artifactId>quarkus-bom</artifactId>
-                <version>${quarkus.platform.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
             <dependency>
                 <groupId>org.testcontainers</groupId>
                 <artifactId>testcontainers-bom</artifactId>
@@ -118,7 +90,6 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <version>${lombok.version}</version>
         </dependency>
 
         <!-- TESTING DEPS -->
@@ -172,32 +143,10 @@
 
     <build>
         <plugins>
-            <!-- mvn release:prepare: release version, tag v<version> (which starts the Release workflow on GitHub),
-                 next SNAPSHOT, then push. No release:perform: nothing is deployed to a Maven repository. -->
-            <plugin>
-                <artifactId>maven-release-plugin</artifactId>
-                <version>3.1.1</version>
-                <configuration>
-                    <tagNameFormat>v@{project.version}</tagNameFormat>
-                    <signTag>true</signTag>
-                    <scmReleaseCommitComment>Release @{releaseLabel}</scmReleaseCommitComment>
-                    <scmDevelopmentCommitComment>Next development version</scmDevelopmentCommitComment>
-                </configuration>
-            </plugin>
             <plugin>
                 <groupId>io.quarkus.platform</groupId>
                 <artifactId>quarkus-maven-plugin</artifactId>
-                <version>${quarkus.platform.version}</version>
                 <extensions>true</extensions>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>build</goal>
-                            <goal>generate-code</goal>
-                            <goal>generate-code-tests</goal>
-                        </goals>
-                    </execution>
-                </executions>
             </plugin>
             <!--
             Writes META-INF/jandex.idx into the jar: the index of its classes and annotations. Quarkus only discovers
@@ -219,10 +168,7 @@
             </plugin>
             <plugin>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>${compiler-plugin.version}</version>
                 <configuration>
-                    <release>${maven.compiler.release}</release>
-                    <parameters>true</parameters>
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>
@@ -244,18 +190,12 @@
             </plugin>
             <plugin>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>${surefire-plugin.version}</version>
                 <configuration>
                     <argLine>@{argLine}</argLine>
-                    <systemPropertyVariables>
-                        <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
-                        <maven.home>${maven.home}</maven.home>
-                    </systemPropertyVariables>
                 </configuration>
             </plugin>
             <plugin>
                 <artifactId>maven-failsafe-plugin</artifactId>
-                <version>${surefire-plugin.version}</version>
                 <executions>
                     <execution>
                         <goals>
@@ -277,7 +217,7 @@
     </build>
 
     <profiles>
-        <!-- mvn package -Pdocker : also builds the image orgkeep/orgkeep-core:<version> (needs a Docker daemon) -->
+        <!-- mvn package -Pdocker : also builds the image ghcr.io/orgkeep/orgkeep-core:<version> (needs a Docker daemon) -->
         <profile>
             <id>docker</id>
             <properties>

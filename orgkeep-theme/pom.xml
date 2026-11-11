@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>org.orgkeep</groupId>
+    <artifactId>orgkeep-theme</artifactId>
+    <version>0.2.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+    <description>Keycloak login theme with the look of Orgkeep</description>
+
+    <licenses>
+        <license>
+            <name>Apache-2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+        </license>
+    </licenses>
+
+    <!-- where the maven-release-plugin commits, tags and pushes -->
+    <scm>
+        <connection>scm:git:https://github.com/orgkeep/orgkeep-theme.git</connection>
+        <developerConnection>scm:git:git@github.com:orgkeep/orgkeep-theme.git</developerConnection>
+        <url>https://github.com/orgkeep/orgkeep-theme</url>
+        <tag>HEAD</tag>
+    </scm>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <build>
+        <!-- no version in the file name: copied as it is in /opt/keycloak/providers/ -->
+        <finalName>orgkeep-theme</finalName>
+        <plugins>
+            <!-- mvn release:prepare: release version, tag v<version> (which starts the Release workflow on GitHub),
+                 next SNAPSHOT, then push. No release:perform: nothing is deployed to a Maven repository. -->
+            <plugin>
+                <artifactId>maven-release-plugin</artifactId>
+                <version>3.1.1</version>
+                <configuration>
+                    <tagNameFormat>v@{project.version}</tagNameFormat>
+                    <signTag>true</signTag>
+                    <scmReleaseCommitComment>Release @{releaseLabel}</scmReleaseCommitComment>
+                    <scmDevelopmentCommitComment>Next development version</scmDevelopmentCommitComment>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

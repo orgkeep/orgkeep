@@ -1,0 +1,26 @@
+/* Orgkeep colors on the Account console of Keycloak (PatternFly 5), like the login pages */
+
+:root {
+    --orgkeep-primary: #228be6;
+    --orgkeep-primary-hover: #1c7ed6;
+    --orgkeep-border: #dee2e6;
+    --orgkeep-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+    --pf-v5-global--primary-color--100: var(--orgkeep-primary);
+    --pf-v5-global--primary-color--200: var(--orgkeep-primary-hover);
+    --pf-v5-global--link--Color: var(--orgkeep-primary);
+    --pf-v5-global--link--Color--hover: var(--orgkeep-primary-hover);
+    --pf-v5-global--FontFamily--text: var(--orgkeep-font);
+    --pf-v5-global--FontFamily--heading: var(--orgkeep-font);
+}
+
+/* white header, like the AppLayout of the dashboard: the banner has dark text */
+.pf-v5-c-masthead {
+    --pf-v5-c-masthead--BackgroundColor: #ffffff;
+    border-bottom: 1px solid var(--orgkeep-border);
+}
+
+.pf-v5-c-masthead .pf-v5-c-button.pf-m-plain,
+.pf-v5-c-masthead .pf-v5-c-menu-toggle {
+    color: #212529;
+}

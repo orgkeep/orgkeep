@@ -12,7 +12,9 @@ import org.keycloak.representations.idm.MemberRepresentation;
 import org.keycloak.representations.idm.OrganizationRepresentation;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -82,17 +84,18 @@ public class KeycloakOrgs {
     /**
      * Every member of the organisation. Keycloak pages them, 10 by default even without paging parameters
      * (the deprecated getAll() returned the first 10 only): read every page.
+     * Keyed by id: a member added while the pages are read can shift one onto the next page.
      */
     public List<MemberRepresentation> members(String realm, String orgId) {
-        List<MemberRepresentation> members = new ArrayList<>();
+        Map<String, MemberRepresentation> members = new LinkedHashMap<>();
         List<MemberRepresentation> page;
         int first = 0;
         do {
             page = organisation(realm, orgId).members().list(first, PAGE_SIZE);
-            members.addAll(page);
+            page.forEach(member -> members.putIfAbsent(member.getId(), member));
             first += PAGE_SIZE;
         } while (page.size() == PAGE_SIZE);
-        return members;
+        return new ArrayList<>(members.values());
     }
 
     /** Counted by Keycloak: the members are not loaded. */

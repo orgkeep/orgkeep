@@ -100,7 +100,6 @@ class OrgAdminResourceTest {
                 .body("email", hasItem(OWNER_EMAIL));
     }
 
-    // the emails themselves are tested in InvitationMailerTest: here the security, the status codes and the JSON
     // Keycloak pages the members of an org (10 by default): the list has them all
     @Test
     @TestSecurity(user = "alice", roles = "org-it-members-org:org-admin")
@@ -115,6 +114,7 @@ class OrgAdminResourceTest {
                 .body("size()", equalTo(12));
     }
 
+    // the emails themselves are tested in InvitationMailerTest: here the security, the status codes and the JSON
     @Test
     @TestSecurity(user = "alice", roles = "org-it-members-org:org-admin")
     void listTellsWhoHasNotFollowedTheInvitation() {

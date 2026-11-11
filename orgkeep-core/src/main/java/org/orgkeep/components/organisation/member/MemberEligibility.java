@@ -139,26 +139,13 @@ public class MemberEligibility {
         if (org.isEnabled()) {
             return AfterJoin.ORG_ENABLED;
         }
-        if (disabledMembers(org).contains(userId)) {
+        if (DisabledMembers.of(org).contains(userId)) {
             log.info("Organisation '{}' in realm '{}' was disabled while user {} was being added, with that user",
                     orgName, realm, userId);
             return AfterJoin.DISABLED_WITH_THE_ORG;
         }
         log.info("Organisation '{}' in realm '{}' was disabled while user {} was being added", orgName, realm, userId);
         return AfterJoin.ORG_DISABLED;
-    }
-
-    /**
-     * The members disabled with the organisation are listed in this attribute of the Keycloak organisation (user ids,
-     * one per value), to enable again only them. Not on the users: the user profile of Keycloak 24+ drops the user
-     * attributes it does not declare. Written by OrgServiceImpl.setEnabled.
-     */
-    public static final String DISABLED_MEMBERS_ATTRIBUTE = "disabled-members";
-
-    public static List<String> disabledMembers(OrganizationRepresentation org) {
-        return org.getAttributes() == null
-                ? List.of()
-                : org.getAttributes().getOrDefault(DISABLED_MEMBERS_ATTRIBUTE, List.of());
     }
 
     private boolean hasPrivilegedRealmRole(String realm, String userId) {

@@ -67,7 +67,9 @@ public class OrgAdminResource {
     @DELETE
     @Path("/{userId}")
     @Operation(summary = "Remove a member",
-            description = "Removes the user from the organisation, its groups and its roles. The user itself is kept.")
+            description = "Removes the user from the organisation, its groups and its roles. The user itself is kept. "
+                    + "A member disabled with its disabled organisation is enabled again: it belongs to no "
+                    + "organisation any more.")
     @APIResponse(responseCode = "204", description = "Member removed")
     @APIResponse(responseCode = "404", description = "Unknown organisation or not a member")
     @APIResponse(responseCode = "409", description = "The user is an owner of the organisation")

@@ -6,7 +6,8 @@ import org.orgkeep.api.RealmProvisioner;
 import org.orgkeep.api.exceptions.OperationNotAllowedException;
 import org.orgkeep.api.model.AddMemberRequest;
 import org.orgkeep.api.model.CreateOrgRequest;
-import org.orgkeep.components.organisation.member.MemberEligibility;
+import org.orgkeep.api.model.OrgMember;
+import org.orgkeep.components.organisation.member.DisabledMembers;
 import org.orgkeep.fixtures.TestRealm;
 import org.orgkeep.repository.keycloak.KeycloakOrgs;
 import org.orgkeep.repository.keycloak.KeycloakUsers;
@@ -234,7 +235,9 @@ class OrgStatusTest {
 
     // The other side of the race: the add checked the org while it was still enabled, then the whole disable ran
     // before the membership was written (the spy disables the org just before the real addMember). The disable could
-    // not see the new member: the add checks the org again once the user is a member, refuses and undoes the membership
+    // not see the new member: the add checks the org again once the user is a member, refuses and undoes the membership.
+    // On one instance this is the "disable entirely before" order the lock allows; the spy runs the disable on the same
+    // thread, inside the lock held by the add, which the reentrant lock lets through
     @Test
     void memberJoiningOnceTheOrgIsDisabledIsRefused() {
         Mockito.doAnswer(invocation -> {
@@ -257,7 +260,9 @@ class OrgStatusTest {
 
     // "Both sides win": the membership is written, then the whole disable runs (the spy disables the org just after
     // the real addMember) and counts Emma among the members it disables. The add then sees the org disabled, but with
-    // Emma listed: the add came first, it goes through. Emma is a disabled member and comes back with the org
+    // Emma listed: the add came first, it goes through. Emma is a disabled member and comes back with the org.
+    // Impossible on one instance (the lock makes the disable wait for the add): this stands for a disable from another
+    // instance, run here on the same thread, which the reentrant lock lets through
     @Test
     void memberDisabledWithTheOrgWhileBeingAddedStaysAMember() {
         Mockito.doAnswer(invocation -> {
@@ -268,19 +273,100 @@ class OrgStatusTest {
                 .doCallRealMethod()
                 .when(orgs).addMember(anyString(), anyString(), anyString());
 
-        String emmaId = memberService.add(testRealm.name(), ORG, new AddMemberRequest("emma@acme.test", "Emma", "Roux")).id();
+        OrgMember emma = memberService.add(testRealm.name(), ORG, new AddMemberRequest("emma@acme.test", "Emma", "Roux"));
 
-        assertEquals(List.of(ORG), orgs.organisationsOf(testRealm.name(), emmaId));
-        assertTrue(disabledMembers().contains(emmaId));
-        assertFalse(user(emmaId).isEnabled());
+        assertFalse(emma.enabled(), "the member returned is reported disabled");
+        assertEquals(List.of(ORG), orgs.organisationsOf(testRealm.name(), emma.id()));
+        assertTrue(disabledMembers().contains(emma.id()));
+        assertFalse(user(emma.id()).isEnabled());
 
         orgService.setEnabled(testRealm.name(), ORG, true);
-        assertTrue(user(emmaId).isEnabled());
+        assertTrue(user(emma.id()).isEnabled());
         assertTrue(user(paulId).isEnabled());
     }
 
+    // The same, but the disable fails right after writing its list (the spy makes the first user.setEnabled(false)
+    // throw): Emma is listed, not disabled yet. The add trusts the list, not her state, and disables her itself: a
+    // listed member is never left enabled in a disabled org
+    @Test
+    void memberListedByTheDisableIsDisabledByTheAdd() {
+        Mockito.doThrow(new IllegalStateException("Keycloak unavailable"))
+                .doCallRealMethod()
+                .when(users).setEnabled(anyString(), anyString(), eq(false));
+        Mockito.doAnswer(invocation -> {
+                    Object added = invocation.callRealMethod();
+                    assertThrows(IllegalStateException.class,
+                            () -> orgService.setEnabled(testRealm.name(), ORG, false));
+                    return added;
+                })
+                .doCallRealMethod()
+                .when(orgs).addMember(anyString(), anyString(), anyString());
+
+        OrgMember emma = memberService.add(testRealm.name(), ORG, new AddMemberRequest("emma@acme.test", "Emma", "Roux"));
+
+        assertTrue(disabledMembers().contains(emma.id()));
+        assertFalse(emma.enabled());
+        assertFalse(user(emma.id()).isEnabled());
+    }
+
+    // With the lock, an add and a disable on one instance never overlap. On two threads: the add is held inside (the
+    // spy blocks it just before the real addMember), the disable must wait for it, then sees Emma as a plain member:
+    // she is disabled and listed, and the add answered normally
+    @Test
+    void disableWaitsForAnAddInProgress() throws Exception {
+        CountDownLatch addInside = new CountDownLatch(1);
+        CountDownLatch releaseAdd = new CountDownLatch(1);
+        Mockito.doAnswer(invocation -> {
+                    addInside.countDown();
+                    releaseAdd.await();
+                    return invocation.callRealMethod();
+                })
+                .doCallRealMethod()
+                .when(orgs).addMember(anyString(), anyString(), anyString());
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> add = inRequest(executor, () -> memberService.add(testRealm.name(), ORG,
+                    new AddMemberRequest("emma@acme.test", "Emma", "Roux")));
+            assertTrue(addInside.await(30, TimeUnit.SECONDS));
+
+            Future<?> disable = inRequest(executor, () -> orgService.setEnabled(testRealm.name(), ORG, false));
+            await().atMost(Duration.ofSeconds(30))
+                    .until(() -> orgLocks.lockOf(testRealm.name(), ORG).hasQueuedThreads());
+
+            releaseAdd.countDown();
+            add.get(30, TimeUnit.SECONDS);
+            disable.get(30, TimeUnit.SECONDS);
+        } finally {
+            releaseAdd.countDown();
+            executor.shutdownNow();
+        }
+
+        String emmaId = testRealm.resource().users().searchByEmail("emma@acme.test", true).getFirst().getId();
+        assertEquals(List.of(ORG), orgs.organisationsOf(testRealm.name(), emmaId));
+        assertTrue(disabledMembers().contains(emmaId));
+        assertFalse(user(emmaId).isEnabled());
+    }
+
+    // A member disabled with the org and then removed from it leaves the list, enabled again: she belongs to no org,
+    // and enabling the org would not touch her any more
+    @Test
+    void removedMemberLeavesTheDisabledMembers() {
+        String claireId = member("claire");
+        orgService.setEnabled(testRealm.name(), ORG, false);
+        assertTrue(disabledMembers().contains(claireId));
+
+        memberService.remove(testRealm.name(), ORG, claireId);
+
+        assertFalse(disabledMembers().contains(claireId));
+        assertTrue(disabledMembers().contains(paulId), "the other members stay listed");
+        assertTrue(user(claireId).isEnabled());
+        assertFalse(user(paulId).isEnabled());
+    }
+
     // The same for the owner of a new org: the disable counted Olga, the creation fails all the same and its rollback
-    // deletes the org with its list of disabled members. Olga is enabled again first, otherwise nothing would
+    // deletes the org with its list of disabled members. Olga is enabled again first, otherwise nothing would.
+    // Like above, a disable from another instance, replayed on the same thread
     @Test
     void ownerDisabledWithANewOrgIsEnabledAgainBeforeTheRollback() {
         Mockito.doAnswer(invocation -> {
@@ -362,7 +448,8 @@ class OrgStatusTest {
         assertTrue(user(paulId).isEnabled());
     }
 
-    // The same for the owner of a new org, disabled while it is being created: the creation fails and is rolled back
+    // The same for the owner of a new org, disabled while it is being created: the creation fails and is rolled back.
+    // The "disable entirely before the owner joins" order of the lock, replayed on the same thread
     @Test
     void ownerJoiningANewOrgOnceItIsDisabledFailsTheCreation() {
         Mockito.doAnswer(invocation -> {
@@ -438,7 +525,7 @@ class OrgStatusTest {
 
     /** The ids listed in the attribute disabled-members of the org. */
     private List<String> disabledMembers() {
-        return MemberEligibility.disabledMembers(orgs.getByName(testRealm.name(), ORG));
+        return DisabledMembers.of(orgs.getByName(testRealm.name(), ORG));
     }
 
     private UserRepresentation user(String userId) {

@@ -19,6 +19,7 @@ import org.orgkeep.repository.keycloak.KeycloakClients;
 import org.orgkeep.repository.keycloak.KeycloakGroups;
 import org.orgkeep.repository.keycloak.KeycloakOrgs;
 import org.orgkeep.repository.keycloak.KeycloakUsers;
+import org.orgkeep.components.organisation.member.DisabledMembers;
 import org.orgkeep.components.organisation.member.MemberEligibility;
 import org.orgkeep.components.organisation.member.MemberMapper;
 import io.vertx.core.eventbus.EventBus;
@@ -31,11 +32,8 @@ import org.keycloak.representations.idm.RoleRepresentation;
 
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -274,7 +272,7 @@ public class OrgServiceImpl implements OrgService {
      */
     private void enable(String realm, String orgName) {
         OrganizationRepresentation org = orgs.getByName(realm, orgName);
-        List<String> disabled = MemberEligibility.disabledMembers(org);
+        List<String> disabled = DisabledMembers.of(org);
         if (org.isEnabled() && disabled.isEmpty()) {
             return;
         }
@@ -299,7 +297,9 @@ public class OrgServiceImpl implements OrgService {
             disable(realm, orgName);
             return;
         }
-        removeDisabledMembers(realm, current, disabled);
+        if (DisabledMembers.remove(current, disabled)) {
+            orgs.update(realm, current);
+        }
         log.info("Organisation '{}' enabled in realm '{}' ({} member(s) enabled again)", orgName, realm, enabledAgain);
     }
 
@@ -310,30 +310,9 @@ public class OrgServiceImpl implements OrgService {
      */
     private void addDisabledMembers(String realm, String orgName, List<String> userIds) {
         OrganizationRepresentation org = orgs.getByName(realm, orgName);
-        Set<String> disabled = new LinkedHashSet<>(MemberEligibility.disabledMembers(org));
-        if (disabled.addAll(userIds)) {
-            attributes(org).put(MemberEligibility.DISABLED_MEMBERS_ATTRIBUTE, new ArrayList<>(disabled));
+        if (DisabledMembers.add(org, userIds)) {
             orgs.update(realm, org);
         }
-    }
-
-    /** Removes these users from the list kept on the org, just read again by the caller (see addDisabledMembers). */
-    private void removeDisabledMembers(String realm, OrganizationRepresentation org, List<String> userIds) {
-        List<String> disabled = new ArrayList<>(MemberEligibility.disabledMembers(org));
-        disabled.removeAll(userIds);
-        if (disabled.isEmpty()) {
-            attributes(org).remove(MemberEligibility.DISABLED_MEMBERS_ATTRIBUTE);
-        } else {
-            attributes(org).put(MemberEligibility.DISABLED_MEMBERS_ATTRIBUTE, disabled);
-        }
-        orgs.update(realm, org);
-    }
-
-    private static Map<String, List<String>> attributes(OrganizationRepresentation org) {
-        if (org.getAttributes() == null) {
-            org.setAttributes(new HashMap<>());
-        }
-        return org.getAttributes();
     }
 
     @Override
@@ -389,14 +368,19 @@ public class OrgServiceImpl implements OrgService {
         String ownerId = users.findIdByEmail(realm, request.ownerEmail())
                 .orElseGet(() -> createOwner(realm, request));
 
-        // the org was just created: the owner cannot be a member yet, the result can be ignored
-        orgs.addMember(realm, orgId, ownerId);
-        // the new org may have been disabled meanwhile (see MemberEligibility.afterJoin): the creation fails and is
-        // rolled back, which removes the membership
-        MemberEligibility.AfterJoin afterJoin = eligibility.afterJoin(realm, request.name(), ownerId);
+        // Under the lock of the org (see OrgLocks): a disable of the org on this instance runs entirely before (the
+        // org is seen disabled, without the owner) or entirely after (the owner is disabled and listed like any member)
+        MemberEligibility.AfterJoin afterJoin = orgLocks.call(realm, request.name(), () -> {
+            // the org was just created: the owner cannot be a member yet, the result can be ignored
+            orgs.addMember(realm, orgId, ownerId);
+            // the new org may have been disabled meanwhile (see MemberEligibility.afterJoin): the creation fails and
+            // is rolled back, which removes the membership
+            return eligibility.afterJoin(realm, request.name(), ownerId);
+        });
         if (afterJoin == MemberEligibility.AfterJoin.DISABLED_WITH_THE_ORG) {
-            // the disable listed the owner, and disabled it or is about to: the rollback deletes the org and its list,
-            // so the owner would stay disabled with no record. Enabled again first, as it was before
+            // only with a disable from another instance of the core, which the lock does not reach. It listed the
+            // owner, and disabled it or is about to: the rollback deletes the org and its list, so the owner would
+            // stay disabled with no record. Enabled again first, as it was before
             users.setEnabled(realm, ownerId, true);
         }
         if (afterJoin != MemberEligibility.AfterJoin.ORG_ENABLED) {

@@ -10,6 +10,7 @@ import org.orgkeep.api.model.OrgClients;
 import org.orgkeep.api.model.OrgGroups;
 import org.orgkeep.api.model.OrgMember;
 import org.orgkeep.api.model.OrgRole;
+import org.orgkeep.components.organisation.OrgLocks;
 import org.orgkeep.components.organisation.member.invitation.InvitationMailer;
 import org.orgkeep.repository.keycloak.KeycloakClients;
 import org.orgkeep.repository.keycloak.KeycloakGroups;
@@ -38,6 +39,7 @@ public class OrgMemberServiceImpl implements OrgMemberService {
     private final MemberMapper memberMapper;
     private final InvitationMailer invitations;
     private final EventBus eventBus;
+    private final OrgLocks orgLocks;
 
     @Override
     public List<OrgMember> list(String realm, String orgName) {
@@ -76,15 +78,9 @@ public class OrgMemberServiceImpl implements OrgMemberService {
         // an existing user may be privileged or a member of another org; a member of this org is refused just below
         existingId.ifPresent(userId -> eligibility.checkReusable(realm, orgName, userId, request.email()));
         String userId = existingId.orElseGet(() -> createUser(realm, orgName, request));
-        if (!orgs.addMember(realm, org.getId(), userId)) {
-            throw new MemberAlreadyExistsException(orgName, request.email());
-        }
-        // The org may have been disabled since the first check (see MemberEligibility.afterJoin). If the disable
-        // counted the user among its members (DISABLED_WITH_THE_ORG), the add came first: it goes through, and the
-        // member, disabled with the org, comes back with it. It still joins the users group below, like any member
-        if (eligibility.afterJoin(realm, orgName, userId) == MemberEligibility.AfterJoin.ORG_DISABLED) {
-            throw undoMembership(realm, org, userId);
-        }
+        // Under the lock of the org (see OrgLocks): a disable of the org on this instance runs entirely before (the
+        // org is seen disabled, without the user) or entirely after (the user is disabled and listed like any member)
+        orgLocks.run(realm, orgName, () -> join(realm, org, userId, request.email()));
 
         String usersGroupId = groups.findId(realm, OrgGroups.users(orgName))
                 .orElseThrow(() -> new IllegalStateException(
@@ -129,7 +125,51 @@ public class OrgMemberServiceImpl implements OrgMemberService {
                 .forEach(group -> groups.leave(realm, userId, group.getId()));
 
         orgs.removeMember(realm, org.getId(), userId);
+        leaveDisabledMembers(realm, orgName, userId);
         log.info("User {} removed from organisation '{}' in realm '{}'", userId, orgName, realm);
+    }
+
+    /**
+     * Makes the user a member, then checks the org again (see MemberEligibility.afterJoin):
+     * <ul>
+     *     <li>still enabled: done;</li>
+     *     <li>disabled meanwhile, with the user listed in disabled-members (only with a disable from another instance
+     *     of the core, which the lock does not reach): the add came first and goes through. The user is disabled and
+     *     logged out here too, whatever the disable has done yet: the list is what enables it again with the org, so
+     *     a listed member must never be left enabled;</li>
+     *     <li>disabled without the user: the membership is undone and the add refused.</li>
+     * </ul>
+     */
+    private void join(String realm, OrganizationRepresentation org, String userId, String email) {
+        if (!orgs.addMember(realm, org.getId(), userId)) {
+            throw new MemberAlreadyExistsException(org.getName(), email);
+        }
+        switch (eligibility.afterJoin(realm, org.getName(), userId)) {
+            case ORG_ENABLED -> {
+                // nothing more to do
+            }
+            case DISABLED_WITH_THE_ORG -> {
+                users.setEnabled(realm, userId, false);
+                users.logout(realm, userId);
+            }
+            case ORG_DISABLED -> throw undoMembership(realm, org, userId);
+        }
+    }
+
+    /**
+     * A member disabled with the org is enabled again and leaves the list: it belongs to no org any more, and nothing
+     * else would ever enable it again. Enabled first: if the update of the list fails, a stale entry only enables
+     * again a user already enabled. Under the lock of the org, which is written whole.
+     */
+    private void leaveDisabledMembers(String realm, String orgName, String userId) {
+        orgLocks.run(realm, orgName, () -> {
+            OrganizationRepresentation org = orgs.getByName(realm, orgName);
+            if (DisabledMembers.of(org).contains(userId)) {
+                users.setEnabled(realm, userId, true);
+                DisabledMembers.remove(org, List.of(userId));
+                orgs.update(realm, org);
+            }
+        });
     }
 
     /**

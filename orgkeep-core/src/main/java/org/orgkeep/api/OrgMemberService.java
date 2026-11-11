@@ -18,8 +18,9 @@ public interface OrgMemberService {
      * and to the default group /{org}/user-groups/users.
      * <p>
      * An organisation disabled while the user is being added: if the disable counted the user among its members, the
-     * add goes through (the member is disabled with the org, and enabled again with it); otherwise the membership is
-     * undone and the call refused. A user created by a refused call is kept, and has already been sent the
+     * add goes through and the member returned is disabled (enabled again with the org); otherwise the membership is
+     * undone and the call refused. Within one instance of the core, the disable runs entirely before or after the
+     * add; the first case only happens with a disable from another instance. A user created by a refused call is kept, and has already been sent the
      * invitation email (UserCreated): a retry reuses it.
      *
      * @throws org.orgkeep.api.exceptions.MemberAlreadyExistsException if the user is already a member
@@ -33,7 +34,8 @@ public interface OrgMemberService {
 
     /**
      * Removes the user from the organisation, from every group of the organisation
-     * and from the roles of the org client. The user itself is kept.
+     * and from the roles of the org client. The user itself is kept. A member disabled with the organisation is
+     * enabled again and leaves its list of disabled members: it belongs to no organisation any more.
      *
      * @throws org.orgkeep.api.exceptions.MemberNotFoundException if the user is not a member
      * @throws org.orgkeep.api.exceptions.OperationNotAllowedException if the user is an owner of the organisation

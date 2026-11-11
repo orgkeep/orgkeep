@@ -63,6 +63,8 @@ jobs:
 
       # The labels are in the Dockerfile, except the commit (revision), which replaces the one of the Keycloak image.
       # The revision is the commit of the tag, not the one of main when the workflow is run by hand.
+      # GitHub shows the description of a multi-arch package from an annotation of the index, not from the labels of
+      # the images: same text as the description label of the Dockerfile.
       - name: Build and push the image
         uses: docker/build-push-action@v6
         with:
@@ -70,6 +72,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           labels: org.opencontainers.image.revision=${{ steps.version.outputs.revision }}
+          annotations: index:org.opencontainers.image.description=Keycloak with the Orgkeep theme
           tags: |
             ghcr.io/orgkeep/orgkeep-keycloak:${{ steps.version.outputs.version }}
             ghcr.io/orgkeep/orgkeep-keycloak:latest

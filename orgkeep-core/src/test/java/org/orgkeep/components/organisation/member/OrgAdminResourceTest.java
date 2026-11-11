@@ -101,6 +101,20 @@ class OrgAdminResourceTest {
     }
 
     // the emails themselves are tested in InvitationMailerTest: here the security, the status codes and the JSON
+    // Keycloak pages the members of an org (10 by default): the list has them all
+    @Test
+    @TestSecurity(user = "alice", roles = "org-it-members-org:org-admin")
+    void listReturnsEveryMemberBeyondTheFirstPage() {
+        for (int i = 1; i <= 11; i++) {
+            memberService.add(testRealm.name(), ORG, new AddMemberRequest("member" + i + "@it-members-org.test", "Member" + i, "Test"));
+        }
+
+        // the owner and the 11 members
+        given().when().get(BASE, ORG)
+                .then().statusCode(200)
+                .body("size()", equalTo(12));
+    }
+
     @Test
     @TestSecurity(user = "alice", roles = "org-it-members-org:org-admin")
     void listTellsWhoHasNotFollowedTheInvitation() {

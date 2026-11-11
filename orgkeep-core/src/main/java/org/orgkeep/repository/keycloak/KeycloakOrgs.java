@@ -79,8 +79,20 @@ public class KeycloakOrgs {
         }
     }
 
+    /**
+     * Every member of the organisation. Keycloak pages them, 10 by default even without paging parameters
+     * (the deprecated getAll() returned the first 10 only): read every page.
+     */
     public List<MemberRepresentation> members(String realm, String orgId) {
-        return organisation(realm, orgId).members().getAll();
+        List<MemberRepresentation> members = new ArrayList<>();
+        List<MemberRepresentation> page;
+        int first = 0;
+        do {
+            page = organisation(realm, orgId).members().list(first, PAGE_SIZE);
+            members.addAll(page);
+            first += PAGE_SIZE;
+        } while (page.size() == PAGE_SIZE);
+        return members;
     }
 
     /** Counted by Keycloak: the members are not loaded. */

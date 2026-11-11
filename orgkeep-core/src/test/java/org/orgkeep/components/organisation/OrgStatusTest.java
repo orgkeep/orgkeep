@@ -24,6 +24,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -140,6 +141,24 @@ class OrgStatusTest {
 
         orgService.setEnabled(testRealm.name(), ORG, true);
         assertTrue(user(frankId).isEnabled());
+    }
+
+    // Keycloak pages the members of an org (10 by default): an org with more must have every member disabled,
+    // not only the first page
+    @Test
+    void everyMemberIsDisabledBeyondTheFirstPage() {
+        List<String> memberIds = new ArrayList<>(List.of(paulId));
+        for (int i = 1; i <= 11; i++) {
+            memberIds.add(memberService.add(testRealm.name(), ORG,
+                    new AddMemberRequest("member" + i + "@acme.test", "Member" + i, "Test")).id());
+        }
+
+        orgService.setEnabled(testRealm.name(), ORG, false);
+        List<String> stillEnabled = memberIds.stream().filter(userId -> user(userId).isEnabled()).toList();
+        assertEquals(List.of(), stillEnabled);
+
+        orgService.setEnabled(testRealm.name(), ORG, true);
+        assertTrue(memberIds.stream().allMatch(userId -> user(userId).isEnabled()));
     }
 
     // a second call changes nothing: disabling twice must not forget who was disabled by the first call

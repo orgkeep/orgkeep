@@ -2,8 +2,8 @@
 # JVM image of Orgkeep: the core and its dashboard in one application, built from the fast-jar layout of
 # target/quarkus-app (the front is built by Quinoa during mvn package and served by the application).
 #
-# Through Maven (recommended), after mvn install in orgkeep-core:
-#   mvn package -Pdocker
+# Through Maven (recommended), from the root of the repository (builds the core first):
+#   mvn package -Pdocker -pl orgkeep-dashboard -am
 # By hand, from the orgkeep-dashboard directory, after mvn package (tagged with the version of the pom, like Maven
 # does):
 #   docker build -f src/main/docker/Dockerfile.jvm \

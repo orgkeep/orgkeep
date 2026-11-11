@@ -1,6 +1,6 @@
 # Orgkeep theme
 
-A Keycloak 26 theme in the look of [Orgkeep](https://github.com/orgkeep/orgkeep-core), named `orgkeep`, with three
+A Keycloak 26 theme in the look of [Orgkeep](../README.md), named `orgkeep`, with three
 types:
 
 | Type | Where Keycloak takes it from | What Orgkeep does with it |
@@ -21,7 +21,8 @@ template of the login flows is copied.
 Three forms, the same content:
 
 - **Docker image** `ghcr.io/orgkeep/orgkeep-keycloak`: the official Keycloak image with the theme added, configured
-  like the official one (used by the demo stack of [orgkeep-examples](https://github.com/orgkeep/orgkeep-examples)):
+  like the official one (used by the demo stack of [orgkeep-examples](https://github.com/orgkeep/orgkeep-examples)).
+  To build it, from this directory:
 
   ```
   docker build -t ghcr.io/orgkeep/orgkeep-keycloak:$(mvn -q help:evaluate -Dexpression=project.version -DforceStdout) .
@@ -30,23 +31,23 @@ Three forms, the same content:
 
 - **Folder**: copy or mount [`src/main/resources/theme/orgkeep`](src/main/resources/theme/orgkeep) in
   `/opt/keycloak/themes/orgkeep`. No `kc.sh build` needed;
-- **Jar**: `mvn package` gives `target/orgkeep-theme.jar`, to put in `/opt/keycloak/providers/`. Keycloak needs a
+- **Jar**: `mvn package` in this directory gives `target/orgkeep-theme.jar`, to put in `/opt/keycloak/providers/`. Keycloak needs a
   build afterwards (`kc.sh build`, or `start` without `--optimized`, which builds by itself).
 
 Then, in Orgkeep: `ORGKEEP_DASHBOARD_LOGIN_THEME=orgkeep`.
 
 ## Work on it
 
-`mvn quarkus:dev` in orgkeep-core or orgkeep-dashboard, cloned next to this repository, mounts these sources in the
-Keycloak of the dev mode, without any cache: a change of CSS or template shows at the next page load
+`mvn quarkus:dev` in [orgkeep-core](../orgkeep-core) or [orgkeep-dashboard](../orgkeep-dashboard) mounts these
+sources in the Keycloak of the dev mode, without any cache: a change of CSS or template shows at the next page load
 (http://localhost:8284 for the login page of the dashboard). To see the emails and the account console, choose the
 theme `orgkeep` on the realm `demo` in the Keycloak console; the emails arrive in Mailpit (http://localhost:8025).
 
 ## Contributing
 
-Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Commits are signed off (DCO), no contributor
+Contributions are welcome: see [CONTRIBUTING.md](../CONTRIBUTING.md). Commits are signed off (DCO), no contributor
 license agreement.
 
 ## License
 
-[Apache License 2.0](LICENSE).
+[Apache License 2.0](../LICENSE).

@@ -8,16 +8,16 @@ organisation bought, in the standard `resource_access` claim plus a claim per pr
 The core is the REST API that does all this on top of Keycloak 26 (its native Organizations included). It owns the
 integrity of what it writes in Keycloak and needs no database of its own: everything is stored in Keycloak.
 
-- **Core alone** (this repository, image `ghcr.io/orgkeep/orgkeep-core`): integrate Orgkeep through its REST API,
+- **Core alone** (this module, image `ghcr.io/orgkeep/orgkeep-core`): integrate Orgkeep through its REST API,
   with your own screens and tools.
-- **Core + dashboard** ([orgkeep-dashboard](https://github.com/orgkeep/orgkeep-dashboard), image
-  `ghcr.io/orgkeep/orgkeep`): the same API, plus a web UI for the realm owner and the org admins.
+- **Core + dashboard** ([orgkeep-dashboard](../orgkeep-dashboard), image `ghcr.io/orgkeep/orgkeep`): the same API,
+  plus a web UI for the realm owner and the org admins.
 
 To try it without building anything: the demo stack of
 [orgkeep-examples](https://github.com/orgkeep/orgkeep-examples) (`docker compose up`).
 
 > **Status: early preview (0.x).** Orgkeep is ready to be tried, not yet to run in production. Feedback is welcome
-> in the [issues](https://github.com/orgkeep/orgkeep-core/issues).
+> in the [issues](https://github.com/orgkeep/orgkeep/issues).
 > - No upgrade path between 0.x versions: a change of format applies to new objects only, and a realm may have to
 >   be created again.
 > - Known limitations: no service accounts yet (machine-to-machine access for the organisations); Orgkeep calls
@@ -31,6 +31,8 @@ To try it without building anything: the demo stack of
   Services).
 
 ## Run it in dev mode
+
+From this directory:
 
 ```
 mvn quarkus:dev
@@ -46,8 +48,7 @@ Demo accounts, all with the password `password`: `realm-owner` (the realm owner)
 organisation `acme`), `org-user` (a member of `acme`), `paul` and `emma` (members of teams of `acme` with products in
 the catalogs `prod` and `sandbox`). Ready-made requests in [`src/test/http/demo.http`](src/test/http/demo.http).
 
-The dev mode mounts the login theme from [orgkeep-theme](https://github.com/orgkeep/orgkeep-theme), cloned next to
-this repository (`../orgkeep-theme`).
+The dev mode mounts the login theme from its sources, in the module [orgkeep-theme](../orgkeep-theme).
 
 Tests: `mvn test` (they start their own Keycloak and work in throwaway realms).
 
@@ -149,9 +150,9 @@ Swagger UI when enabled.
 
 ## Contributing
 
-Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Commits are signed off (DCO), no contributor
+Contributions are welcome: see [CONTRIBUTING.md](../CONTRIBUTING.md). Commits are signed off (DCO), no contributor
 license agreement.
 
 ## License
 
-[Apache License 2.0](LICENSE).
+[Apache License 2.0](../LICENSE).

@@ -1,0 +1,48 @@
+name: Bug report
+description: Something in Orgkeep does not work as it should
+type: Bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for the report. A security issue never goes in a public issue: report it privately instead (see
+        SECURITY.md).
+  - type: dropdown
+    id: part
+    attributes:
+      label: Where?
+      options:
+        - The API (orgkeep-core)
+        - The dashboard (orgkeep-dashboard)
+        - The Keycloak theme (orgkeep-theme)
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to reproduce it
+      description: The steps, the request or the screen, as short as possible. The demo stack of orgkeep-examples is
+        a good place to reproduce.
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Orgkeep (image tag or commit) and Keycloak.
+      placeholder: Orgkeep 0.1.0, Keycloak 26.6.1
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Optional. The error in the logs of Orgkeep or of Keycloak, without secrets or tokens.
+      render: text

@@ -1,0 +1,9 @@
+# A bug report or a feature request: no blank issue
+blank_issues_enabled: false
+contact_links:
+  - name: A security issue
+    url: https://github.com/orgkeep/orgkeep/security/advisories/new
+    about: Never in a public issue. Report it privately.
+  - name: A problem with the examples or the demo stack
+    url: https://github.com/orgkeep/orgkeep-examples/issues/new
+    about: Open it in orgkeep-examples.

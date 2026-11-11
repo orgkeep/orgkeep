@@ -1,0 +1,27 @@
+name: Feature request
+description: A feature Orgkeep does not have yet
+type: Feature
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time. The need matters more than the solution: a good description of what you are
+        trying to do helps more than a design.
+  - type: textarea
+    id: need
+    attributes:
+      label: What do you need?
+      description: What you are trying to do, for whom (realm owner, org admins, org users, your APIs), and why it
+        matters to you.
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: How do you do it today?
+      description: A workaround, another tool, the Keycloak console... or nothing at all.
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you propose?
+      description: Optional. An idea of the solution, in the API, the dashboard or the tokens.

@@ -1,0 +1,12 @@
+# How GitHub sorts the notes it generates for a release (the pull requests merged since the previous tag), by the
+# labels of the pull requests. A pull request goes in the first category that matches.
+changelog:
+  categories:
+    - title: API (orgkeep-core)
+      labels: [core]
+    - title: Dashboard
+      labels: [dashboard]
+    - title: Keycloak theme
+      labels: [theme]
+    - title: Other changes
+      labels: ["*"]

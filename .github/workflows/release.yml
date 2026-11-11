@@ -72,15 +72,17 @@ jobs:
           -Dquarkus.docker.buildx.platform=linux/amd64,linux/arm64
           -Dquarkus.container-image.labels.\"org.opencontainers.image.revision\"=${{ steps.version.outputs.revision }}
 
-      # GitHub shows the description of a multi-arch package from an annotation of the index, not from the labels of
-      # the images, and Quarkus cannot set annotations: each index is written again with it, for both tags, without
-      # rebuilding (same images). Same texts as the description labels in the application.properties.
-      - name: Add the descriptions to the indexes
+      # For a multi-arch package, GitHub reads the description and the repository it links the package to from
+      # annotations of the index, not from the labels of the images, and Quarkus cannot set annotations: each index is
+      # written again with them, for both tags, without rebuilding (same images). Same texts as the labels in the
+      # application.properties.
+      - name: Add the description and the repository to the indexes
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           describe() {
             docker buildx imagetools create \
+              --annotation "index:org.opencontainers.image.source=https://github.com/orgkeep/orgkeep" \
               --annotation "index:org.opencontainers.image.description=$2" \
               -t "ghcr.io/orgkeep/$1:$VERSION" -t "ghcr.io/orgkeep/$1:latest" \
               "ghcr.io/orgkeep/$1:$VERSION"
@@ -89,7 +91,8 @@ jobs:
           describe orgkeep "Orgkeep: multi-tenant B2B on Keycloak, the core API and its dashboard"
 
       # The labels are in the Dockerfile, except the commit (revision), which replaces the one of the Keycloak image.
-      # Here the description annotation is set by the action: same text as the description label of the Dockerfile.
+      # Here the annotations of the index (repository and description) are set by the action: same values as the
+      # labels of the Dockerfile.
       - name: Build and push the Keycloak image with the theme
         uses: docker/build-push-action@v6
         with:
@@ -97,18 +100,26 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           labels: org.opencontainers.image.revision=${{ steps.version.outputs.revision }}
-          annotations: index:org.opencontainers.image.description=Keycloak with the Orgkeep theme
+          annotations: |
+            index:org.opencontainers.image.source=https://github.com/orgkeep/orgkeep
+            index:org.opencontainers.image.description=Keycloak with the Orgkeep theme
           tags: |
             ghcr.io/orgkeep/orgkeep-keycloak:${{ steps.version.outputs.version }}
             ghcr.io/orgkeep/orgkeep-keycloak:latest
 
-      # Run again by hand, the release may already exist: only the jar is replaced
+      # The notes: the header of .github/release-notes.md, with the version, then the notes GitHub generates from the
+      # pull requests since the previous tag, sorted by .github/release.yml.
+      # Run again by hand, the release may already exist: only the jar is replaced, the notes are kept.
       - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           if gh release view "$TAG" > /dev/null 2>&1; then
             gh release upload "$TAG" orgkeep-theme/target/orgkeep-theme.jar --clobber
           else
-            gh release create "$TAG" --verify-tag --generate-notes orgkeep-theme/target/orgkeep-theme.jar
+            sed "s/{{version}}/$VERSION/g" .github/release-notes.md > "$RUNNER_TEMP/notes.md"
+            gh release create "$TAG" --verify-tag --title "Orgkeep $VERSION" \
+              --notes-file "$RUNNER_TEMP/notes.md" --generate-notes \
+              orgkeep-theme/target/orgkeep-theme.jar
           fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

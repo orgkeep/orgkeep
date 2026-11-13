@@ -178,6 +178,25 @@ class InMemoryResourceLocksTest {
         assertEquals(0, locks.size());
     }
 
+    // the rank of a user lock comes from the factory used, never from the key: an email may contain "/id:"
+    @Test
+    void userRankDoesNotDependOnTheContentOfTheKey() {
+        LockRequest tricky = LockRequest.userByEmail("b", "x/id:y@acme.test", EXCLUSIVE);
+        assertTrue(!tricky.byId());
+        assertTrue(LockRequest.userById("a", "u1", EXCLUSIVE).byId());
+        // the email ranks before the id, whatever the realm and the text of the key ("a/id:u1" < "b/email:x/id:...")
+        assertTrue(LockRequest.RANK.compare(tricky, LockRequest.userById("a", "u1", EXCLUSIVE)) < 0);
+
+        try (HeldLocks held = locks.acquire(LockRequest.userById("a", "u1", EXCLUSIVE))) {
+            assertThrows(IllegalStateException.class, () -> held.add(tricky),
+                    "an email ranks before an id even when its text contains /id:");
+        }
+        try (HeldLocks held = locks.acquire(tricky)) {
+            held.add(LockRequest.userById("a", "u1", EXCLUSIVE));
+        }
+        assertEquals(0, locks.size());
+    }
+
     // the lock of the user is held by another thread (the same thread would get it again, reentrantly)
     @Test
     void aBusyAddKeepsTheLocksTakenBefore() throws Exception {

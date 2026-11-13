@@ -47,6 +47,7 @@ public class TeamProductsResource {
             + "quota of product or no feature for a metered product, quota of feature for a simple product or for a "
             + "feature that is not a metered feature given by the team")
     @APIResponse(responseCode = "404", description = "Unknown organisation, user group or catalog, or product not assigned to the organisation")
+    @APIResponse(responseCode = "409", description = "A change is in progress on the organisation or the user group, try again later")
     public TeamProduct grant(@PathParam("org") String org, @PathParam("group") String group,
                              @PathParam("catalog") String catalog, @PathParam("product") String product,
                              @Valid @NotNull GrantProductRequest request){
@@ -58,6 +59,7 @@ public class TeamProductsResource {
             description = "Its members lose the product, unless another team gives it. Idempotent.")
     @APIResponse(responseCode = "204", description = "Product no longer given by the team")
     @APIResponse(responseCode = "404", description = "Unknown organisation, user group or catalog")
+    @APIResponse(responseCode = "409", description = "A change is in progress on the organisation or the user group, try again later")
     public void revoke(@PathParam("org") String org, @PathParam("group") String group,
                        @PathParam("catalog") String catalog, @PathParam("product") String product){
         teamService.revokeProduct(currentRealm.name(), org, group, catalog, product);

@@ -57,26 +57,35 @@ public class UserGroupServiceImpl implements UserGroupService {
 
     @Override
     public UserGroup create(String realm, String orgName, CreateUserGroupRequest request) {
-        orgs.getByName(realm, orgName);
-        if (groups.findId(realm, OrgGroups.userGroup(orgName, request.name())).isPresent()) {
-            throw new UserGroupAlreadyExistsException(orgName, request.name());
-        }
+        // a short write: ORG shared (refused while the org is being disabled or deleted), the team exclusively (two
+        // creations of the same name do not both pass the check below)
+        try (HeldLocks ignored = locks.acquire(LockRequest.org(realm, orgName, LockMode.SHARED),
+                LockRequest.team(realm, orgName, request.name(), LockMode.EXCLUSIVE))) {
+            orgs.getByName(realm, orgName);
+            if (groups.findId(realm, OrgGroups.userGroup(orgName, request.name())).isPresent()) {
+                throw new UserGroupAlreadyExistsException(orgName, request.name());
+            }
 
-        String groupId = groups.createChild(realm, userGroupsId(realm, orgName), request.name());
-        log.info("User group '{}' created in organisation '{}' of realm '{}'", request.name(), orgName, realm);
-        // a new group grants nothing and has no member
-        return new UserGroup(groupId, request.name(), false, Set.of(), List.of(), List.of());
+            String groupId = groups.createChild(realm, userGroupsId(realm, orgName), request.name());
+            log.info("User group '{}' created in organisation '{}' of realm '{}'", request.name(), orgName, realm);
+            // a new group grants nothing and has no member
+            return new UserGroup(groupId, request.name(), false, Set.of(), List.of(), List.of());
+        }
     }
 
     @Override
     public void delete(String realm, String orgName, String groupName) {
-        orgs.getByName(realm, orgName);
-        if (OrgGroups.isPredefined(groupName)) {
-            throw new OperationNotAllowedException(
-                    "The user group '%s' comes with the organisation and cannot be deleted".formatted(groupName));
+        // the team exclusively: no write on its attributes or members runs while it is deleted
+        try (HeldLocks ignored = locks.acquire(LockRequest.org(realm, orgName, LockMode.SHARED),
+                LockRequest.team(realm, orgName, groupName, LockMode.EXCLUSIVE))) {
+            orgs.getByName(realm, orgName);
+            if (OrgGroups.isPredefined(groupName)) {
+                throw new OperationNotAllowedException(
+                        "The user group '%s' comes with the organisation and cannot be deleted".formatted(groupName));
+            }
+            groups.delete(realm, groupId(realm, orgName, groupName));
+            log.info("User group '{}' deleted from organisation '{}' of realm '{}'", groupName, orgName, realm);
         }
-        groups.delete(realm, groupId(realm, orgName, groupName));
-        log.info("User group '{}' deleted from organisation '{}' of realm '{}'", groupName, orgName, realm);
     }
 
     @Override

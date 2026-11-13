@@ -34,7 +34,8 @@ public class TeamCatalogRolesResource {
                     + "organisation has a product. Idempotent.")
     @APIResponse(responseCode = "204", description = "Catalog role given")
     @APIResponse(responseCode = "404", description = "Unknown organisation, user group, catalog or catalog role")
-    @APIResponse(responseCode = "409", description = "Role reserved to the realm owner, or no product of the organisation in this catalog")
+    @APIResponse(responseCode = "409", description = "Role reserved to the realm owner, no product of the organisation in this catalog, "
+            + "or a change in progress on the organisation or the user group")
     public void grant(@PathParam("org") String org, @PathParam("group") String group,
                       @PathParam("catalog") String catalog, @PathParam("role") String role){
         teamService.grantCatalogRole(currentRealm.name(), org, group, catalog, role);
@@ -44,6 +45,7 @@ public class TeamCatalogRolesResource {
     @Operation(summary = "Take a catalog role away from a team", description = "Idempotent.")
     @APIResponse(responseCode = "204", description = "Catalog role no longer given by the team")
     @APIResponse(responseCode = "404", description = "Unknown organisation, user group, catalog or catalog role")
+    @APIResponse(responseCode = "409", description = "A change is in progress on the organisation or the user group, try again later")
     public void revoke(@PathParam("org") String org, @PathParam("group") String group,
                        @PathParam("catalog") String catalog, @PathParam("role") String role){
         teamService.revokeCatalogRole(currentRealm.name(), org, group, catalog, role);

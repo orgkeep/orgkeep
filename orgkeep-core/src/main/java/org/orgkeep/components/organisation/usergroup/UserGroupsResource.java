@@ -51,7 +51,8 @@ public class UserGroupsResource {
     @APIResponseSchema(value = UserGroup.class, responseCode = "201", responseDescription = "User group created")
     @APIResponse(responseCode = "400", description = "Invalid request")
     @APIResponse(responseCode = "404", description = "Unknown organisation")
-    @APIResponse(responseCode = "409", description = "The organisation has a user group with this name")
+    @APIResponse(responseCode = "409", description = "The organisation has a user group with this name, "
+            + "or a change is in progress on the organisation or the group")
     public UserGroup create(@PathParam("org") String org, @Valid @NotNull CreateUserGroupRequest request){
         return userGroupService.create(currentRealm.name(), org, request);
     }
@@ -62,7 +63,8 @@ public class UserGroupsResource {
             + "The groups admin and users cannot be deleted.")
     @APIResponse(responseCode = "204", description = "User group deleted")
     @APIResponse(responseCode = "404", description = "Unknown organisation or user group")
-    @APIResponse(responseCode = "409", description = "Predefined group (admin, users)")
+    @APIResponse(responseCode = "409", description = "Predefined group (admin, users), "
+            + "or a change is in progress on the organisation or the group")
     public void delete(@PathParam("org") String org, @PathParam("group") String group){
         userGroupService.delete(currentRealm.name(), org, group);
     }

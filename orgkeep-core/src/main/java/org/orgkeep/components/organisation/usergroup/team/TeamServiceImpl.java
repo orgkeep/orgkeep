@@ -23,6 +23,10 @@ import org.orgkeep.api.model.TeamProduct;
 import org.orgkeep.components.catalog.CatalogSetup;
 import org.orgkeep.components.catalog.product.ProductMapper;
 import org.orgkeep.components.catalog.role.CatalogRoleMapper;
+import org.orgkeep.components.lock.HeldLocks;
+import org.orgkeep.components.lock.LockMode;
+import org.orgkeep.components.lock.LockRequest;
+import org.orgkeep.components.lock.ResourceLocks;
 import org.orgkeep.repository.keycloak.KeycloakClients;
 import org.orgkeep.repository.keycloak.KeycloakGroups;
 import org.orgkeep.repository.keycloak.KeycloakOrgs;
@@ -56,6 +60,7 @@ public class TeamServiceImpl implements TeamService {
     private final ProductMapper productMapper;
     private final CatalogRoleMapper catalogRoleMapper;
     private final TeamMapper teamMapper;
+    private final ResourceLocks locks;
 
     /** The assignments of the org, then one call per catalog for the display names of its products and roles. */
     @Override
@@ -108,6 +113,16 @@ public class TeamServiceImpl implements TeamService {
     @Override
     public TeamProduct grantProduct(String realm, String orgName, String team, String catalog, String product,
                                     GrantProductRequest request) {
+        // a short write: ORG shared (refused while the org is being disabled or deleted, or a product renegotiated),
+        // the team exclusively (its attributes are read then written as a whole)
+        try (HeldLocks ignored = locks.acquire(LockRequest.org(realm, orgName, LockMode.SHARED),
+                LockRequest.team(realm, orgName, team, LockMode.EXCLUSIVE))) {
+            return grantProductLocked(realm, orgName, team, catalog, product, request);
+        }
+    }
+
+    private TeamProduct grantProductLocked(String realm, String orgName, String team, String catalog, String product,
+                                           GrantProductRequest request) {
         orgs.getByName(realm, orgName);
         String teamId = teamId(realm, orgName, team);
         String clientUuid = catalogSetup.get(realm, catalog).clientUuid();
@@ -180,21 +195,31 @@ public class TeamServiceImpl implements TeamService {
 
     @Override
     public void revokeProduct(String realm, String orgName, String team, String catalog, String product) {
-        orgs.getByName(realm, orgName);
-        if (!OrgGroups.isUserGroupName(team)) {
-            throw new UserGroupNotFoundException(orgName, team);
+        try (HeldLocks ignored = locks.acquire(LockRequest.org(realm, orgName, LockMode.SHARED),
+                LockRequest.team(realm, orgName, team, LockMode.EXCLUSIVE))) {
+            orgs.getByName(realm, orgName);
+            if (!OrgGroups.isUserGroupName(team)) {
+                throw new UserGroupNotFoundException(orgName, team);
+            }
+            // the full group, read under the lock: its attributes are needed
+            GroupRepresentation group = groups.find(realm, OrgGroups.userGroup(orgName, team))
+                    .orElseThrow(() -> new UserGroupNotFoundException(orgName, team));
+            String clientUuid = catalogSetup.get(realm, catalog).clientUuid();
+            alignment.clear(realm, clientUuid, group, catalog, product);
+            log.info("Product '{}' of catalog '{}' no longer given by team '{}' of organisation '{}' in realm '{}'",
+                    product, catalog, team, orgName, realm);
         }
-        // the full group: its attributes are needed
-        GroupRepresentation group = groups.find(realm, OrgGroups.userGroup(orgName, team))
-                .orElseThrow(() -> new UserGroupNotFoundException(orgName, team));
-        String clientUuid = catalogSetup.get(realm, catalog).clientUuid();
-        alignment.clear(realm, clientUuid, group, catalog, product);
-        log.info("Product '{}' of catalog '{}' no longer given by team '{}' of organisation '{}' in realm '{}'",
-                product, catalog, team, orgName, realm);
     }
 
     @Override
     public void grantCatalogRole(String realm, String orgName, String team, String catalog, String role) {
+        try (HeldLocks ignored = locks.acquire(LockRequest.org(realm, orgName, LockMode.SHARED),
+                LockRequest.team(realm, orgName, team, LockMode.EXCLUSIVE))) {
+            grantCatalogRoleLocked(realm, orgName, team, catalog, role);
+        }
+    }
+
+    private void grantCatalogRoleLocked(String realm, String orgName, String team, String catalog, String role) {
         orgs.getByName(realm, orgName);
         String teamId = teamId(realm, orgName, team);
         String clientUuid = catalogSetup.get(realm, catalog).clientUuid();
@@ -219,12 +244,15 @@ public class TeamServiceImpl implements TeamService {
 
     @Override
     public void revokeCatalogRole(String realm, String orgName, String team, String catalog, String role) {
-        orgs.getByName(realm, orgName);
-        String teamId = teamId(realm, orgName, team);
-        String clientUuid = catalogSetup.get(realm, catalog).clientUuid();
-        // only a catalog role: a product is taken away with its quota and features (revokeProduct)
-        getCatalogRole(realm, clientUuid, catalog, role);
-        clients.revokeFromGroup(realm, clientUuid, teamId, role);
+        try (HeldLocks ignored = locks.acquire(LockRequest.org(realm, orgName, LockMode.SHARED),
+                LockRequest.team(realm, orgName, team, LockMode.EXCLUSIVE))) {
+            orgs.getByName(realm, orgName);
+            String teamId = teamId(realm, orgName, team);
+            String clientUuid = catalogSetup.get(realm, catalog).clientUuid();
+            // only a catalog role: a product is taken away with its quota and features (revokeProduct)
+            getCatalogRole(realm, clientUuid, catalog, role);
+            clients.revokeFromGroup(realm, clientUuid, teamId, role);
+        }
     }
 
     private RoleRepresentation getCatalogRole(String realm, String clientUuid, String catalog, String role) {

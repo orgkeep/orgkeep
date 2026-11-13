@@ -4,6 +4,7 @@ import org.orgkeep.api.ProductService;
 import org.orgkeep.api.exceptions.FeatureNotFoundException;
 import org.orgkeep.api.exceptions.InvalidRequestException;
 import org.orgkeep.api.exceptions.OperationNotAllowedException;
+import org.orgkeep.api.exceptions.ProductAlreadyAssignedException;
 import org.orgkeep.api.exceptions.ProductNotAssignedException;
 import org.orgkeep.api.exceptions.ProductNotFoundException;
 import org.orgkeep.api.exceptions.ResourceBusyException;
@@ -328,9 +329,10 @@ public class ProductServiceImpl implements ProductService {
             groups.replaceAttributes(realm, groupId, attributes);
             log.info("Product '{}' of catalog '{}' renegotiated by organisation '{}' in realm '{}'", product, catalog, orgName, realm);
         } else {
-            String catalogGroupId = groups.findId(realm, OrgGroups.catalog(orgName, catalog))
-                    .orElseGet(() -> groups.createChild(realm, catalogsGroupId(realm, orgName), catalog));
-            groupId = groups.createChild(realm, catalogGroupId, product, attributes);
+            String catalogGroupId = catalogGroupId(realm, orgName, catalog);
+            // a name already taken here means the product was assigned since the check above
+            groupId = groups.createChildIfAbsent(realm, catalogGroupId, product, attributes)
+                    .orElseThrow(() -> new ProductAlreadyAssignedException(orgName, catalog, product));
             try {
                 clients.grantToGroup(realm, ids.clientUuid(), groupId, product);
             } catch (RuntimeException e) {
@@ -339,9 +341,17 @@ public class ProductServiceImpl implements ProductService {
                 throw e;
             }
             log.info("Product '{}' of catalog '{}' assigned to organisation '{}' in realm '{}'", product, catalog, orgName, realm);
+            // a first assignment needs no alignment: a team can only give a product already assigned, and
+            // unassign erases the choices of the teams
+            return orgProduct(catalog, product, groupId, request, params);
         }
         // the teams giving the product follow what the org negotiated: quota, bought features, parameters
         teamAlignment.align(realm, orgName, catalog, product);
+        return orgProduct(catalog, product, groupId, request, params);
+    }
+
+    private OrgProduct orgProduct(String catalog, String product, String groupId, AssignProductRequest request,
+                                  Map<String, String> params) {
         return new OrgProduct(catalog, product, groupId, request.quota(), request.cycle(),
                 request.boughtFeatures().stream().distinct().sorted().toList(), new TreeMap<>(request.featureQuotas()), params);
     }
@@ -538,6 +548,21 @@ public class ProductServiceImpl implements ProductService {
         if (clients.findRole(realm, ids.clientUuid(), product).isPresent()) {
             clients.deleteRole(realm, ids.clientUuid(), product);
         }
+    }
+
+    /**
+     * The group of the catalogue in the org, created if missing. A name taken between the read and the create means
+     * another call (console, another instance) created it: it is reused.
+     */
+    private String catalogGroupId(String realm, String orgName, String catalog) {
+        Optional<String> existing = groups.findId(realm, OrgGroups.catalog(orgName, catalog));
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+        return groups.createChildIfAbsent(realm, catalogsGroupId(realm, orgName), catalog, Map.of())
+                .or(() -> groups.findId(realm, OrgGroups.catalog(orgName, catalog)))
+                .orElseThrow(() -> new IllegalStateException(
+                        "Group %s is in conflict and not found".formatted(OrgGroups.catalog(orgName, catalog))));
     }
 
     private String catalogsGroupId(String realm, String orgName) {

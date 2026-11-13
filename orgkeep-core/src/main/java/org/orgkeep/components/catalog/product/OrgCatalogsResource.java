@@ -38,7 +38,8 @@ public class OrgCatalogsResource {
     @APIResponseSchema(value = OrgProduct.class, responseCode = "200", responseDescription = "Product assigned")
     @APIResponse(responseCode = "400", description = "Invalid request, unknown bought feature, quotas that do not fit the kind of the product, or parameters that do not fit the schema")
     @APIResponse(responseCode = "404", description = "Unknown organisation, catalog or product")
-    @APIResponse(responseCode = "409", description = "A change is in progress on the organisation, try again later")
+    @APIResponse(responseCode = "409", description = "A change is in progress on the organisation, try again later, "
+            + "or the product was assigned to the organisation by another call meanwhile")
     public OrgProduct assign(@PathParam("org") String org, @PathParam("catalog") String catalog,
                              @PathParam("product") String product, @Valid @NotNull AssignProductRequest request){
         return productService.assign(currentRealm.name(), org, catalog, product, request);

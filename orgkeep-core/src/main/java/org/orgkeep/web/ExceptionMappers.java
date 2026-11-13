@@ -3,6 +3,7 @@ package org.orgkeep.web;
 import org.orgkeep.api.exceptions.AlreadyExistsException;
 import org.orgkeep.api.exceptions.InvalidRequestException;
 import org.orgkeep.api.exceptions.OperationNotAllowedException;
+import org.orgkeep.api.exceptions.ResourceBusyException;
 import org.orgkeep.api.exceptions.ResourceNotFoundException;
 import jakarta.ws.rs.core.Response;
 import org.jboss.resteasy.reactive.RestResponse;
@@ -27,6 +28,11 @@ public class ExceptionMappers {
 
     @ServerExceptionMapper
     public RestResponse<ErrorResponse> mapNotAllowed(OperationNotAllowedException e) {
+        return RestResponse.status(Response.Status.CONFLICT, new ErrorResponse(e.getMessage()));
+    }
+
+    @ServerExceptionMapper
+    public RestResponse<ErrorResponse> mapResourceBusy(ResourceBusyException e) {
         return RestResponse.status(Response.Status.CONFLICT, new ErrorResponse(e.getMessage()));
     }
 

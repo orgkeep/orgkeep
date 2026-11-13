@@ -116,6 +116,7 @@ writes these settings on the realm at every startup; otherwise the realm keeps i
 | `ORGKEEP_SMTP_USERNAME` / `ORGKEEP_SMTP_PASSWORD` | none | Authentication, enabled when the username is set |
 | `ORGKEEP_SMTP_STARTTLS` / `ORGKEEP_SMTP_SSL` | `false` | |
 | `ORGKEEP_INVITATION_LINK_LIFESPAN` | `72h` | Validity of the link of the invitation email |
+| `ORGKEEP_LOCKS_MAX_WAIT` | `2s` | How long a short write (adding or removing a member, creating an organisation) waits for a change in progress on the same organisation before answering `409`. Enabling, disabling and deleting an organisation never wait |
 
 ### Dashboard client
 

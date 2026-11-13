@@ -32,6 +32,8 @@ public interface OrgkeepConfig {
 
     Invitation invitation();
 
+    Locks locks();
+
     enum Mode { ON_PREM, SAAS }
 
     interface Owner {
@@ -96,6 +98,15 @@ public interface OrgkeepConfig {
         /** Validity of the link of the invitation email. */
         @WithDefault("72h")
         Duration linkLifespan();
+    }
+
+    interface Locks {
+        /**
+         * How long a short write waits for a resource held by another change before the call is refused with a 409.
+         * Heavy operations on an organisation (enable, disable, delete) do not wait at all.
+         */
+        @WithDefault("2s")
+        Duration maxWait();
     }
 
     interface SwaggerUi {

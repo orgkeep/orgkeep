@@ -3,6 +3,7 @@ package org.orgkeep.components.organisation.member;
 import org.orgkeep.api.OrgMemberService;
 import org.orgkeep.api.model.AddMemberRequest;
 import org.orgkeep.api.model.OrgMember;
+import org.orgkeep.api.model.UpdateMemberStatusRequest;
 import org.orgkeep.web.CurrentRealm;
 import org.orgkeep.web.security.OrgPermissions;
 import io.quarkus.security.PermissionsAllowed;
@@ -11,9 +12,11 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
+import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import lombok.RequiredArgsConstructor;
+import org.eclipse.microprofile.jwt.JsonWebToken;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponseSchema;
@@ -38,6 +41,8 @@ import java.util.List;
 public class OrgAdminResource {
     private final OrgMemberService memberService;
     private final CurrentRealm currentRealm;
+    // a client proxy of a request scoped bean: each call reads the token of the current request
+    private final JsonWebToken jwt;
 
     @GET
     @Operation(summary = "List the members of the organisation")
@@ -76,6 +81,30 @@ public class OrgAdminResource {
             + "progress on it (try again later)")
     public void remove(@PathParam("org") String org, @PathParam("userId") String userId){
         memberService.remove(currentRealm.name(), org, userId);
+    }
+
+    @PUT
+    @Path("/{userId}/enabled")
+    @Operation(summary = "Disable or enable a member",
+            description = "Disabling a member also closes their sessions: their refresh tokens stop working, an access "
+                    + "token already issued stays valid until it expires (token introspection sees the member as "
+                    + "inactive at once). Calling it again with the same value changes nothing. Refused (409): on "
+                    + "oneself, on an owner of the organisation (another org admin may be disabled), on a privileged "
+                    + "account, while the organisation is disabled or being enabled again (both directions), while "
+                    + "another change is in progress on it. A member disabled here stays disabled when the "
+                    + "organisation is disabled then enabled again. Removing a disabled member leaves them disabled; "
+                    + "adding them to an organisation, or making them its owner, enables them again. Known limit: a "
+                    + "user disabled by the realm owner in the Keycloak console looks the same, and can be enabled "
+                    + "again here; Orgkeep assumes nobody edits users through the console.")
+    @APIResponseSchema(value = OrgMember.class, responseCode = "200", responseDescription = "The member, up to date")
+    @APIResponse(responseCode = "400", description = "Invalid request")
+    @APIResponse(responseCode = "404", description = "Unknown organisation or not a member")
+    @APIResponse(responseCode = "409", description = "The member is the caller, an owner, or a privileged user; the "
+            + "organisation is disabled or still being enabled; or a change is in progress (try again later)")
+    public OrgMember setEnabled(@PathParam("org") String org, @PathParam("userId") String userId,
+                                @Valid @NotNull UpdateMemberStatusRequest request){
+        // the token proxy is request scoped: read here, on the thread of the request, never kept in a field
+        return memberService.setEnabled(currentRealm.name(), org, userId, request.enabled(), jwt.getSubject());
     }
 
     @POST

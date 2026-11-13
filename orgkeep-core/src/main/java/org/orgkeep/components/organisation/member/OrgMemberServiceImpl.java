@@ -102,7 +102,7 @@ public class OrgMemberServiceImpl implements OrgMemberService {
         // Under the shared lock of the org, held by add: a disable of the org on this instance runs entirely before
         // (the org is seen disabled, without the user) or entirely after (the user is disabled and listed like any
         // member)
-        join(realm, org, userId, request.email());
+        join(realm, org, userId, request.email(), existingId.isPresent());
 
         String usersGroupId = groups.findId(realm, OrgGroups.users(orgName))
                 .orElseThrow(() -> new IllegalStateException(
@@ -153,6 +153,65 @@ public class OrgMemberServiceImpl implements OrgMemberService {
     }
 
     /**
+     * The cheap refusals come first, without a lock, in the decided order: not a member (404), the caller itself, an
+     * owner, a privileged user. Then ORG is locked shared and the user exclusively, and what a concurrent change may
+     * have altered is read again: the state of the org and the membership.
+     * <p>
+     * The org is never written: while it is disabled, or while the list of its disabled members is not empty (an
+     * enable that did not finish), the call is refused in both directions. Otherwise the member would have to enter
+     * or leave that list, which means rewriting the whole org under ORG exclusive.
+     */
+    @Override
+    public OrgMember setEnabled(String realm, String orgName, String userId, boolean enabled, String callerId) {
+        OrganizationRepresentation org = orgs.getByName(realm, orgName);
+        if (!orgs.isMember(realm, org.getId(), userId)) {
+            throw new MemberNotFoundException(orgName, userId);
+        }
+        if (userId.equals(callerId)) {
+            throw new OperationNotAllowedException("You cannot change your own status");
+        }
+        Optional<String> clientUuid = clients.findUuid(realm, OrgClients.clientId(orgName));
+        boolean owner = clientUuid.isPresent()
+                && clients.directRolesOf(realm, clientUuid.get(), userId).contains(OrgRole.ORG_OWNER.getRoleName());
+        if (owner) {
+            throw new OperationNotAllowedException("An owner of the organisation '%s' cannot be disabled".formatted(orgName));
+        }
+        // a neutral message: it does not say which role of the realm the user holds
+        if (!eligibility.privilegedAmong(realm, List.of(userId)).isEmpty()) {
+            throw new OperationNotAllowedException("The status of this member cannot be changed");
+        }
+
+        try (HeldLocks ignored = locks.acquire(LockRequest.org(realm, orgName, LockMode.SHARED),
+                LockRequest.userById(realm, userId, LockMode.EXCLUSIVE))) {
+            OrganizationRepresentation current = orgs.getByName(realm, orgName);
+            if (!current.isEnabled() || !DisabledMembers.of(current).isEmpty()) {
+                throw MemberEligibility.disabledOrg(orgName);
+            }
+            // a remove may have passed between the first check and the locks
+            if (!orgs.isMember(realm, current.getId(), userId)) {
+                throw new MemberNotFoundException(orgName, userId);
+            }
+            users.setEnabled(realm, userId, enabled);
+            if (!enabled) {
+                // the refresh tokens stop working; an access token already issued lives until it expires
+                users.logout(realm, userId);
+            }
+            log.info("Member {} of organisation '{}' in realm '{}' {}", userId, orgName, realm,
+                    enabled ? "enabled" : "disabled");
+        }
+        return memberOf(realm, orgName, userId);
+    }
+
+    /** One member, as {@link #list} renders it. Never an owner here: setEnabled refuses owners before. */
+    private OrgMember memberOf(String realm, String orgName, String userId) {
+        Set<String> adminIds = groups.findId(realm, OrgGroups.admin(orgName))
+                .map(adminGroupId -> groups.memberIds(realm, adminGroupId))
+                .orElse(Set.of());
+        UserRepresentation user = users.get(realm, userId);
+        return memberMapper.toOrgMember(user, roleOf(userId, Set.of(), adminIds), invitations.isPending(realm, user));
+    }
+
+    /**
      * Whether removing this member rewrites the org: it is disabled, or the member is listed among the members
      * disabled with it (leaveDisabledMembers). With no member (the first, possibly stale read): the org is disabled or
      * lists any disabled member.
@@ -193,7 +252,8 @@ public class OrgMemberServiceImpl implements OrgMemberService {
     /**
      * Makes the user a member, then checks the org again (see MemberEligibility.afterJoin):
      * <ul>
-     *     <li>still enabled: done;</li>
+     *     <li>still enabled: done. An existing user who was disabled (removed from its org while disabled, or
+     *     disabled in the console) is enabled again: joining an org is a decision of an org admin;</li>
      *     <li>disabled meanwhile, with the user listed in disabled-members (only with a disable from another instance
      *     of the core, which the lock does not reach): the add came first and goes through. The user is disabled and
      *     logged out here too, whatever the disable has done yet: the list is what enables it again with the org, so
@@ -201,19 +261,28 @@ public class OrgMemberServiceImpl implements OrgMemberService {
      *     <li>disabled without the user: the membership is undone and the add refused.</li>
      * </ul>
      */
-    private void join(String realm, OrganizationRepresentation org, String userId, String email) {
+    private void join(String realm, OrganizationRepresentation org, String userId, String email, boolean existingUser) {
         if (!orgs.addMember(realm, org.getId(), userId)) {
             throw new MemberAlreadyExistsException(org.getName(), email);
         }
         switch (eligibility.afterJoin(realm, org.getName(), userId)) {
             case ORG_ENABLED -> {
-                // nothing more to do
+                if (existingUser) {
+                    enableAgain(realm, userId);
+                }
             }
             case DISABLED_WITH_THE_ORG -> {
                 users.setEnabled(realm, userId, false);
                 users.logout(realm, userId);
             }
             case ORG_DISABLED -> throw undoMembership(realm, org, userId);
+        }
+    }
+
+    private void enableAgain(String realm, String userId) {
+        if (Boolean.FALSE.equals(users.get(realm, userId).isEnabled())) {
+            users.setEnabled(realm, userId, true);
+            log.info("Disabled user {} enabled again by joining an organisation in realm '{}'", userId, realm);
         }
     }
 

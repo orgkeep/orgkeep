@@ -415,6 +415,11 @@ public class OrgServiceImpl implements OrgService {
         if (afterJoin != MemberEligibility.AfterJoin.ORG_ENABLED) {
             throw MemberEligibility.disabledOrg(request.name());
         }
+        // an existing owner disabled earlier (removed from its org while disabled) is enabled again, like a member
+        // added by an org admin (OrgMemberServiceImpl.add)
+        if (Boolean.FALSE.equals(users.get(realm, ownerId).isEnabled())) {
+            users.setEnabled(realm, ownerId, true);
+        }
         clients.grantToUser(realm, clientUuid, ownerId, OrgRole.ORG_OWNER.getRoleName());
         return ownerId;
     }

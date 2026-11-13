@@ -9,6 +9,7 @@ import org.orgkeep.web.security.OrgPermissions;
 import io.quarkus.security.PermissionsAllowed;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import io.quarkus.security.UnauthorizedException;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
@@ -98,13 +99,21 @@ public class OrgAdminResource {
                     + "again here; Orgkeep assumes nobody edits users through the console.")
     @APIResponseSchema(value = OrgMember.class, responseCode = "200", responseDescription = "The member, up to date")
     @APIResponse(responseCode = "400", description = "Invalid request")
+    @APIResponse(responseCode = "401", description = "Not authenticated, or the token has no subject")
     @APIResponse(responseCode = "404", description = "Unknown organisation or not a member")
     @APIResponse(responseCode = "409", description = "The member is the caller, an owner, or a privileged user; the "
             + "organisation is disabled or still being enabled; or a change is in progress (try again later)")
     public OrgMember setEnabled(@PathParam("org") String org, @PathParam("userId") String userId,
                                 @Valid @NotNull UpdateMemberStatusRequest request){
-        // the token proxy is request scoped: read here, on the thread of the request, never kept in a field
-        return memberService.setEnabled(currentRealm.name(), org, userId, request.enabled(), jwt.getSubject());
+        // The injected JsonWebToken is the access token of the call, a request scoped proxy: read here, on the thread
+        // of the request, never kept in a field. Every token the core accepts has a sub (SubjectInTokensTest): a
+        // lightweight one, which has none, is already refused by LightweightTokenFilter. Without it the caller
+        // cannot be told from the member (the check on oneself), so the call is refused.
+        String callerId = jwt.getSubject();
+        if (callerId == null || callerId.isBlank()) {
+            throw new UnauthorizedException("The token has no subject");
+        }
+        return memberService.setEnabled(currentRealm.name(), org, userId, request.enabled(), callerId);
     }
 
     @POST

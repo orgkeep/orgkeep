@@ -167,6 +167,10 @@ public class OrgMemberServiceImpl implements OrgMemberService {
         if (!orgs.isMember(realm, org.getId(), userId)) {
             throw new MemberNotFoundException(orgName, userId);
         }
+        // a caller without id cannot be told from the member: a programming error, the resource refuses it before
+        if (callerId == null || callerId.isBlank()) {
+            throw new IllegalArgumentException("callerId is required");
+        }
         if (userId.equals(callerId)) {
             throw new OperationNotAllowedException("You cannot change your own status");
         }
@@ -174,7 +178,7 @@ public class OrgMemberServiceImpl implements OrgMemberService {
         boolean owner = clientUuid.isPresent()
                 && clients.directRolesOf(realm, clientUuid.get(), userId).contains(OrgRole.ORG_OWNER.getRoleName());
         if (owner) {
-            throw new OperationNotAllowedException("An owner of the organisation '%s' cannot be disabled".formatted(orgName));
+            throw new OperationNotAllowedException("The status of an owner of the organisation '%s' cannot be changed".formatted(orgName));
         }
         // a neutral message: it does not say which role of the realm the user holds
         if (!eligibility.privilegedAmong(realm, List.of(userId)).isEmpty()) {
@@ -185,7 +189,8 @@ public class OrgMemberServiceImpl implements OrgMemberService {
                 LockRequest.userById(realm, userId, LockMode.EXCLUSIVE))) {
             OrganizationRepresentation current = orgs.getByName(realm, orgName);
             if (!current.isEnabled() || !DisabledMembers.of(current).isEmpty()) {
-                throw MemberEligibility.disabledOrg(orgName);
+                throw new OperationNotAllowedException(
+                        "The organisation '%s' is disabled or being enabled again".formatted(orgName));
             }
             // a remove may have passed between the first check and the locks
             if (!orgs.isMember(realm, current.getId(), userId)) {

@@ -431,7 +431,7 @@
     "disable": {
       "button": "Disable",
       "title": "Disable {{member}}?",
-      "message": "The member can no longer log in and their sessions are closed. A token already issued stays valid until it expires. The member stays in the organisation, its teams and products.",
+      "message": "The member can no longer log in and their sessions are closed. A token already issued stays valid until it expires. The member stays in the organisation, their teams and products.",
       "confirm": "Disable"
     },
     "enable": {

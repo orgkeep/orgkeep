@@ -203,7 +203,11 @@ class MemberStatusTest {
     @TestSecurity(user = "alice", roles = "org-acme:org-admin")
     @OidcSecurity(claims = @Claim(key = "sub", value = "alice-id"))
     void ownerCannotBeDisabledByAnAdmin() {
-        setEnabledOverRest(ownerId, false).then().statusCode(409).body("message", containsString("owner"));
+        setEnabledOverRest(ownerId, false).then().statusCode(409)
+                .body("message", equalTo("The status of an owner of the organisation 'acme' cannot be changed"));
+        // the message holds for both directions
+        setEnabledOverRest(ownerId, true).then().statusCode(409)
+                .body("message", containsString("cannot be changed"));
         assertTrue(user(ownerId).isEnabled());
     }
 
@@ -274,6 +278,16 @@ class MemberStatusTest {
                 .then().statusCode(400);
     }
 
+    // a token without sub (the claim is not there, as with a client that lost the sub mapper): the caller cannot be
+    // told from the member, the call is refused instead of letting an admin disable themselves
+    @Test
+    @TestSecurity(user = "alice", roles = "org-acme:org-admin")
+    @OidcSecurity(claims = @Claim(key = "email", value = "alice@acme.test"))
+    void tokenWithoutSubjectGets401() {
+        setEnabledOverRest(paulId, false).then().statusCode(401);
+        assertTrue(user(paulId).isEnabled());
+    }
+
     @Test
     @TestSecurity(user = "carol", roles = "org-acme:org-user")
     @OidcSecurity(claims = @Claim(key = "sub", value = "carol-id"))
@@ -315,6 +329,15 @@ class MemberStatusTest {
         assertTrue(refused.getMessage().contains("own status"));
     }
 
+    @Test
+    void callerWithoutIdIsRefused() {
+        assertThrows(IllegalArgumentException.class,
+                () -> memberService.setEnabled(testRealm.name(), ORG, paulId, false, null));
+        assertThrows(IllegalArgumentException.class,
+                () -> memberService.setEnabled(testRealm.name(), ORG, paulId, false, " "));
+        assertTrue(user(paulId).isEnabled());
+    }
+
     // not a member comes first: even for oneself, a user of no org learns nothing
     @Test
     void nonMemberIsReportedBeforeAnythingElse() {
@@ -349,8 +372,9 @@ class MemberStatusTest {
         assertThrows(IllegalStateException.class, () -> orgService.setEnabled(testRealm.name(), ORG, true));
         assertTrue(orgService.get(testRealm.name(), ORG).enabled());
 
-        assertThrowsExactly(OperationNotAllowedException.class,
+        OperationNotAllowedException refused = assertThrowsExactly(OperationNotAllowedException.class,
                 () -> memberService.setEnabled(testRealm.name(), ORG, paulId, false, "alice-id"));
+        assertEquals("The organisation 'acme' is disabled or being enabled again", refused.getMessage());
         assertThrowsExactly(OperationNotAllowedException.class,
                 () -> memberService.setEnabled(testRealm.name(), ORG, claireId, true, "alice-id"));
     }

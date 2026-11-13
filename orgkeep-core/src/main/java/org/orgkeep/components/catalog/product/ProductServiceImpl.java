@@ -146,7 +146,9 @@ public class ProductServiceImpl implements ProductService {
                 product, request.displayName(), request.description() == null ? "" : request.description(),
                 request.params()));
         // one organisation at a time, each under its own lock: a busy one is skipped, the others are done, and the
-        // same call repeated finishes the job (the writes are idempotent)
+        // same call repeated finishes the job (the writes are idempotent). A 400 from withParams (values of an org
+        // changed since the check above) stops the loop: the orgs already done keep the new schema, and the call
+        // repeated after the org is fixed finishes the job, like for a 409
         List<String> busy = new ArrayList<>();
         assignments.forEach((org, path) -> {
             try (HeldLocks ignored = locks.acquire(LockRequest.org(realm, org, LockMode.EXCLUSIVE))) {
@@ -265,6 +267,9 @@ public class ProductServiceImpl implements ProductService {
                     }
                 });
                 teamAlignment.forgetFeature(realm, org, catalog, product, feature);
+                // the role is deleted last: the teams of this org lose it now (aligned on the bought features, the
+                // role mappings and the pools of the feature go), not only once every org has been done
+                teamAlignment.align(realm, org, catalog, product);
             } catch (ResourceBusyException e) {
                 log.warn("Feature '{}' of product '{}' in catalog '{}' not removed in organisation '{}' of realm '{}': "
                         + "a change is in progress", feature, product, catalog, org, realm);

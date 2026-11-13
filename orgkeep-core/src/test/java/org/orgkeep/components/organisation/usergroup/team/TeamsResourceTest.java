@@ -14,6 +14,11 @@ import org.orgkeep.api.model.CreateUserGroupRequest;
 import org.orgkeep.api.model.Feature;
 import org.orgkeep.api.model.FeatureQuota;
 import org.orgkeep.api.model.QuotaCycle;
+import org.orgkeep.api.exceptions.ResourceBusyException;
+import org.orgkeep.components.lock.HeldLocks;
+import org.orgkeep.components.lock.LockMode;
+import org.orgkeep.components.lock.LockRequest;
+import org.orgkeep.components.lock.ResourceLocks;
 import org.orgkeep.fixtures.TestRealm;
 import org.orgkeep.web.CurrentRealm;
 import io.quarkus.test.InjectMock;
@@ -30,8 +35,14 @@ import org.mockito.Mockito;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static io.restassured.RestAssured.given;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.nullValue;
@@ -53,6 +64,7 @@ class TeamsResourceTest {
     @Inject ProductService productService;
     @Inject CatalogRoleService catalogRoleService;
     @Inject UserGroupService userGroupService;
+    @Inject ResourceLocks locks;
     @InjectMock CurrentRealm currentRealm;
 
     private TestRealm testRealm;
@@ -151,6 +163,33 @@ class TeamsResourceTest {
         // reserved to the realm owner
         given().when().put(TEAM_ROLE, ORG, "ops", "prod", "anonymous")
                 .then().statusCode(409);
+    }
+
+    // a change in progress on the team: 409 with the neutral message (no name of org or team)
+    @Test
+    @TestSecurity(user = "bob", roles = ADMIN)
+    void writeOnABusyTeamGets409() throws Exception {
+        CountDownLatch taken = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        Future<?> held = executor.submit(() -> {
+            try (HeldLocks ignored = locks.acquire(LockRequest.team(testRealm.name(), ORG, "ops", LockMode.EXCLUSIVE))) {
+                taken.countDown();
+                release.await();
+            }
+            return null;
+        });
+        try {
+            assertTrue(taken.await(30, TimeUnit.SECONDS));
+            given().contentType(ContentType.JSON).body("{}")
+                    .when().put(TEAM_PRODUCT, ORG, "ops", "prod", "billing")
+                    .then().statusCode(409)
+                    .body("message", equalTo(ResourceBusyException.MESSAGE));
+        } finally {
+            release.countDown();
+            held.get(30, TimeUnit.SECONDS);
+            executor.shutdownNow();
+        }
     }
 
     // what the org admin reads to configure the teams

@@ -67,6 +67,23 @@ public class KeycloakGroups {
         return createdId(keycloak.realm(realm).groups().group(parentId).subGroup(group));
     }
 
+    /**
+     * Like {@link #createChild(String, String, String, Map)}, but a name already taken under the parent is not an
+     * error: Keycloak answers 409, which gives an empty result.
+     *
+     * @return the id of the new sub group, empty if the parent already has a sub group of this name
+     */
+    public Optional<String> createChildIfAbsent(String realm, String parentId, String name, Map<String, List<String>> attributes) {
+        GroupRepresentation group = group(name);
+        group.setAttributes(attributes);
+        try (Response response = keycloak.realm(realm).groups().group(parentId).subGroup(group)) {
+            if (KeycloakErrors.isConflict(response)) {
+                return Optional.empty();
+            }
+            return Optional.of(CreatedResponseUtil.getCreatedId(response));
+        }
+    }
+
     /** Direct sub groups, full representations: attributes included. */
     public List<GroupRepresentation> children(String realm, String parentId) {
         // Keycloak pages sub groups (10 by default): read every page

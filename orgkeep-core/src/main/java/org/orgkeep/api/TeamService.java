@@ -41,11 +41,16 @@ public interface TeamService {
      * @throws org.orgkeep.api.exceptions.ProductNotAssignedException if the product is not assigned to the org
      * @throws org.orgkeep.api.exceptions.InvalidRequestException for a feature the org did not buy, a cycle without quota,
      *                                                           or, for a metered product, a quota of team or no feature
+     * @throws org.orgkeep.api.exceptions.ResourceBusyException if a change is in progress on the team or the org
      */
     TeamProduct grantProduct(String realm, String orgName, String team, String catalog, String product,
                              GrantProductRequest request);
 
-    /** The team no longer gives the product. Idempotent. */
+    /**
+     * The team no longer gives the product. Idempotent.
+     *
+     * @throws org.orgkeep.api.exceptions.ResourceBusyException if a change is in progress on the team or the org
+     */
     void revokeProduct(String realm, String orgName, String team, String catalog, String product);
 
     /**
@@ -54,9 +59,14 @@ public interface TeamService {
      * @throws org.orgkeep.api.exceptions.CatalogRoleNotFoundException if the catalog has no such catalog role
      * @throws org.orgkeep.api.exceptions.OperationNotAllowedException for a role reserved to the realm owner, or a catalog
      *                                                               where the org has no product
+     * @throws org.orgkeep.api.exceptions.ResourceBusyException if a change is in progress on the team or the org
      */
     void grantCatalogRole(String realm, String orgName, String team, String catalog, String role);
 
-    /** The team no longer gives the catalog role. Idempotent. */
+    /**
+     * The team no longer gives the catalog role. Idempotent.
+     *
+     * @throws org.orgkeep.api.exceptions.ResourceBusyException if a change is in progress on the team or the org
+     */
     void revokeCatalogRole(String realm, String orgName, String team, String catalog, String role);
 }

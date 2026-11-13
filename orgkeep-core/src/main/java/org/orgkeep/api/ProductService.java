@@ -36,6 +36,9 @@ public interface ProductService {
      *
      * @throws org.orgkeep.api.exceptions.InvalidRequestException if the schema is inconsistent, or does not fit the
      *                                                             values of an org (a new required parameter without default)
+     * @throws org.orgkeep.api.exceptions.ResourceBusyException if a change is in progress on some of the orgs the
+     *                                                         product is assigned to: the others are updated, repeat
+     *                                                         the call
      */
     Product update(String realm, String catalog, String product, UpdateProductRequest request);
 
@@ -61,6 +64,9 @@ public interface ProductService {
      * @throws org.orgkeep.api.exceptions.FeatureNotFoundException if the product has no such feature
      * @throws org.orgkeep.api.exceptions.OperationNotAllowedException for a metered feature bought by an org, or the last
      *                                                               metered feature of an assigned product
+     * @throws org.orgkeep.api.exceptions.ResourceBusyException if a change is in progress on some of the orgs the
+     *                                                         product is assigned to: the others are done and the
+     *                                                         feature is kept, repeat the call
      */
     Product deleteFeature(String realm, String catalog, String product, String feature);
 
@@ -73,6 +79,9 @@ public interface ProductService {
      * @throws org.orgkeep.api.exceptions.InvalidRequestException if a bought feature is not a feature of the product,
      *                                                             the quotas do not fit its kind, or the parameters do
      *                                                             not fit its schema
+     * @throws org.orgkeep.api.exceptions.ProductAlreadyAssignedException if another call assigned the product to the
+     *                                                                   org between the check and the creation
+     * @throws org.orgkeep.api.exceptions.ResourceBusyException if a change is in progress on the org (a single try)
      */
     OrgProduct assign(String realm, String orgName, String catalog, String product, AssignProductRequest request);
 
@@ -81,6 +90,7 @@ public interface ProductService {
      *
      * @throws org.orgkeep.api.exceptions.OrgNotFoundException if no organisation has this name
      * @throws org.orgkeep.api.exceptions.ProductNotAssignedException if the org does not have this product
+     * @throws org.orgkeep.api.exceptions.ResourceBusyException if a change is in progress on the org (a single try)
      */
     void unassign(String realm, String orgName, String catalog, String product);
 

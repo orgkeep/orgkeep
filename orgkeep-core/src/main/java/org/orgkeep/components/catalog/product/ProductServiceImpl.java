@@ -561,6 +561,7 @@ public class ProductServiceImpl implements ProductService {
         }
         return groups.createChildIfAbsent(realm, catalogsGroupId(realm, orgName), catalog, Map.of())
                 .or(() -> groups.findId(realm, OrgGroups.catalog(orgName, catalog)))
+                // conflict, then gone again before the re-read: a 500 is acceptable for such an unlikely race
                 .orElseThrow(() -> new IllegalStateException(
                         "Group %s is in conflict and not found".formatted(OrgGroups.catalog(orgName, catalog))));
     }

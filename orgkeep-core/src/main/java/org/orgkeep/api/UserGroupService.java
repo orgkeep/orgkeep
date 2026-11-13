@@ -17,6 +17,7 @@ public interface UserGroupService {
     /**
      * @throws org.orgkeep.api.exceptions.OrgNotFoundException if no organisation has this name
      * @throws org.orgkeep.api.exceptions.UserGroupAlreadyExistsException if the org has a group with this name
+     * @throws org.orgkeep.api.exceptions.ResourceBusyException if a change is in progress on the org or the group
      */
     UserGroup create(String realm, String orgName, CreateUserGroupRequest request);
 
@@ -25,6 +26,7 @@ public interface UserGroupService {
      *
      * @throws org.orgkeep.api.exceptions.UserGroupNotFoundException if the org has no group with this name
      * @throws org.orgkeep.api.exceptions.OperationNotAllowedException for a predefined group (admin, users)
+     * @throws org.orgkeep.api.exceptions.ResourceBusyException if a change is in progress on the org or the group
      */
     void delete(String realm, String orgName, String groupName);
 

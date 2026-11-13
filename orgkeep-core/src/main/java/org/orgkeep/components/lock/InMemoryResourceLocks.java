@@ -8,8 +8,9 @@ import org.orgkeep.config.OrgkeepConfig;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
@@ -62,8 +63,16 @@ public class InMemoryResourceLocks implements ResourceLocks {
         return held;
     }
 
+    /**
+     * The requests in acquisition order. The same key asked twice in one call is merged into the strongest mode, so
+     * the result does not depend on the order of the arguments (shared then exclusive would be an upgrade).
+     */
     private static List<LockRequest> sorted(LockRequest... requests) {
-        return Arrays.stream(requests).sorted(LockRequest.RANK).toList();
+        Map<String, LockRequest> byKey = new HashMap<>();
+        for (LockRequest request : requests) {
+            byKey.merge(request.registryKey(), request, (a, b) -> a.mode() == LockMode.EXCLUSIVE ? a : b);
+        }
+        return byKey.values().stream().sorted(LockRequest.RANK).toList();
     }
 
     /** Package-private for the tests, which check that an entry is removed at the last release. */
@@ -73,6 +82,7 @@ public class InMemoryResourceLocks implements ResourceLocks {
 
     /** The lock of a key and the number of calls holding or waiting for it. */
     private static final class Entry {
+        // non-fair on purpose: even so, a reader waits behind a queued writer, and tryLock() ignores fairness anyway
         final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
         int users;
     }
@@ -113,6 +123,10 @@ public class InMemoryResourceLocks implements ResourceLocks {
 
         @Override
         public HeldLocks add(LockRequest... requests) {
+            if (closed) {
+                // a lock taken now would never be released: close() returns early once called
+                throw new IllegalStateException("Locks cannot be added after close");
+            }
             List<LockRequest> sorted = sorted(requests);
             if (last != null && !sorted.isEmpty() && LockRequest.RANK.compare(sorted.getFirst(), last) <= 0) {
                 throw new IllegalStateException("A lock added late must rank after the locks already held: "
@@ -126,13 +140,17 @@ public class InMemoryResourceLocks implements ResourceLocks {
         void lockAll(List<LockRequest> requests) {
             int before = taken.size();
             long deadline = System.nanoTime() + wait.toNanos();
+            boolean done = false;
             try {
                 for (LockRequest request : requests) {
                     lockOne(request, deadline);
                 }
-            } catch (RuntimeException e) {
-                releaseFrom(before);
-                throw e;
+                done = true;
+            } finally {
+                // also on an Error (out of memory...): the locks must never stay held
+                if (!done) {
+                    releaseFrom(before);
+                }
             }
         }
 

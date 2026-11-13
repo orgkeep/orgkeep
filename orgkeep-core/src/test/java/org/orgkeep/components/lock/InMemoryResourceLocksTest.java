@@ -213,6 +213,30 @@ class InMemoryResourceLocksTest {
         assertEquals(0, locks.size(), "removed at the last release, and a second close changes nothing");
     }
 
+    // a lock added once the call is closed would never be released
+    @Test
+    void addAfterCloseIsRefused() {
+        HeldLocks held = locks.acquire(org("a", SHARED));
+        held.close();
+
+        assertThrows(IllegalStateException.class, () -> held.add(LockRequest.userById(REALM, "u1", EXCLUSIVE)));
+        assertEquals(0, locks.size(), "nothing was taken");
+    }
+
+    // the same key twice in one call is merged into the strongest mode, whatever the order of the arguments
+    @Test
+    void sameKeyTwiceInOneCallTakesTheStrongestMode() throws Exception {
+        for (LockRequest[] requests : new LockRequest[][] {
+                {org("a", SHARED), org("a", EXCLUSIVE)},
+                {org("a", EXCLUSIVE), org("a", SHARED)}}) {
+            try (HeldLocks held = locks.acquire(requests)) {
+                assertEquals(1, locks.size());
+                assertBusyOnAnotherThread(() -> locks.tryAcquire(org("a", SHARED)));
+            }
+            assertEquals(0, locks.size());
+        }
+    }
+
     private static LockRequest org(String org, LockMode mode) {
         return LockRequest.org(REALM, org, mode);
     }

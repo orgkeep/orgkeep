@@ -7,11 +7,12 @@ import org.orgkeep.api.model.UpdateOrgStatusRequest;
 import org.orgkeep.components.lock.HeldLocks;
 import org.orgkeep.components.lock.LockMode;
 import org.orgkeep.components.lock.LockRequest;
-import org.orgkeep.components.lock.ResourceLocks;
+import org.orgkeep.components.lock.InMemoryResourceLocks;
 import org.orgkeep.fixtures.TestRealm;
 import org.orgkeep.web.CurrentRealm;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.junit.mockito.InjectSpy;
 import io.quarkus.test.security.TestSecurity;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
@@ -49,7 +50,8 @@ class OrganisationsResourceTest {
 
     @Inject Keycloak keycloak;
     @Inject OrgMemberService memberService;
-    @Inject ResourceLocks locks;
+    // a spy on the real bean for this test class: calls go through, and a test can check that nothing was locked
+    @InjectSpy InMemoryResourceLocks locks;
     @InjectMock CurrentRealm currentRealm;
 
     private TestRealm testRealm;
@@ -295,26 +297,34 @@ class OrganisationsResourceTest {
         }
     }
 
-    // the other side: a call refused for its role takes no lock, and an add (a short write) of the org admin is
-    // refused with the same 409 while the org is locked
+    // a call refused for its role or its org never reaches the service: the lock registry (a spy) is not called at all,
+    // so such a call can never block a legitimate one
     @Test
     @TestSecurity(user = "alice", roles = "org-" + ORG + ":org-admin")
-    void forbiddenCallsTakeNoLockAndAnAddIsRefusedWhileTheOrgIsLocked() {
+    void forbiddenCallsTakeNoLock() {
+        given().contentType(ContentType.JSON).body(new UpdateOrgStatusRequest(true))
+                .when().put(BASE + "/{org}/enabled", ORG)
+                .then().statusCode(403);
+        given().when().delete(BASE + "/{org}", ORG)
+                .then().statusCode(403);
+        given().contentType(ContentType.JSON)
+                .body(new AddMemberRequest("paul@elsewhere.test", "Paul", "Test"))
+                .when().post("/api/organisations/{org}/members", "other-org")
+                .then().statusCode(403);
+
+        Mockito.verifyNoInteractions(locks);
+    }
+
+    // an add (a short write) of the org admin is refused with the same 409 while the org is locked, and creates no user
+    @Test
+    @TestSecurity(user = "alice", roles = "org-" + ORG + ":org-admin")
+    void anAddIsRefusedWhileTheOrgIsLocked() {
         try (HeldLocks held = locks.tryAcquire(LockRequest.org(testRealm.name(), ORG, LockMode.EXCLUSIVE))) {
-            // 403, not 409: the role is checked before the service, so before any lock
-            given().contentType(ContentType.JSON).body(new UpdateOrgStatusRequest(true))
-                    .when().put(BASE + "/{org}/enabled", ORG)
-                    .then().statusCode(403);
             given().contentType(ContentType.JSON)
                     .body(new AddMemberRequest("paul@elsewhere.test", "Paul", "Test"))
                     .when().post("/api/organisations/{org}/members", ORG)
                     .then().statusCode(409)
                     .body("message", equalTo("A change is in progress, try again later"));
-            // an org admin of another org is refused too, whatever the lock
-            given().contentType(ContentType.JSON)
-                    .body(new AddMemberRequest("paul@elsewhere.test", "Paul", "Test"))
-                    .when().post("/api/organisations/{org}/members", "other-org")
-                    .then().statusCode(403);
         }
         assertTrue(testRealm.resource().users().searchByEmail("paul@elsewhere.test", true).isEmpty(),
                 "no user was created for the refused add");

@@ -11,6 +11,8 @@ import org.orgkeep.api.model.CreateOrgRequest;
 import org.orgkeep.api.model.OrgMember;
 import org.orgkeep.components.lock.HeldLocks;
 import org.orgkeep.components.lock.InMemoryResourceLocks;
+import org.orgkeep.components.lock.LockMode;
+import org.orgkeep.components.lock.ResourceLocks;
 import org.orgkeep.components.lock.LockRequest;
 import org.orgkeep.components.organisation.member.DisabledMembers;
 import org.orgkeep.fixtures.TestRealm;
@@ -49,6 +51,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -78,6 +81,7 @@ class OrgStatusTest {
     // run something just before or after one call, or make it fail once, to replay a precise interleaving
     @InjectSpy KeycloakOrgs orgs;
     @InjectSpy KeycloakUsers users;
+    @Inject ResourceLocks locks;
 
     @ConfigProperty(name = "quarkus.keycloak.admin-client.server-url")
     String keycloakUrl;
@@ -241,7 +245,7 @@ class OrgStatusTest {
     // The other side of the race: the add checked the org while it was still enabled, then the whole disable ran
     // before the membership was written (the spy disables the org just before the real addMember). The disable could
     // not see the new member: the add checks the org again once the user is a member, refuses and undoes the membership.
-    // On one instance the lock makes the disable wait for the add (it is refused instead): the disable run here, on the
+    // On one instance the lock refuses the disable while the add runs: the disable run here, on the
     // same thread, inside the add, stands for a disable from another instance, which does not share the locks. They
     // are replaced by locks that do nothing for this test (see installLocksOfAnotherInstance)
     @Test
@@ -480,12 +484,22 @@ class OrgStatusTest {
     // remove picks its lock mode on a first read of the org (enabled, nothing listed: shared), then reads the org again
     // once locked. Here a whole disable runs between the two reads (the spy disables the org on another thread right
     // after the first read, and waits for it): the shared lock is no longer enough, remove releases it and takes the
-    // exclusive one, then removes Claire. She is enabled again and leaves the list; Paul stays listed
+    // exclusive one, then removes Claire. She is enabled again and leaves the list; Paul stays listed.
+    // The lock really is exclusive when the org is written: a spy on removeMember (called under the lock) tries a
+    // shared lock of the org from another thread, which must be refused. With the shared lock kept, it would succeed
     @Test
     void removeAfterADisableFinishedBetweenTheReadAndTheLockTakesTheExclusiveLock() throws Exception {
         String claireId = member("claire");
         ExecutorService executor = Executors.newSingleThreadExecutor();
+        AtomicBoolean orgHeldExclusively = new AtomicBoolean();
         try {
+            Mockito.doAnswer(invocation -> {
+                        orgHeldExclusively.set(isBusyForAnotherThread(executor,
+                                LockRequest.org(testRealm.name(), ORG, LockMode.SHARED)));
+                        return invocation.callRealMethod();
+                    })
+                    .doCallRealMethod()
+                    .when(orgs).removeMember(anyString(), anyString(), eq(claireId));
             Mockito.doAnswer(invocation -> {
                         Object org = invocation.callRealMethod();
                         // only the first read of remove: the next ones call the real method
@@ -502,6 +516,7 @@ class OrgStatusTest {
             executor.shutdownNow();
         }
 
+        assertTrue(orgHeldExclusively.get(), "the org was locked exclusively while the member was removed");
         assertTrue(user(claireId).isEnabled(), "disabled by the disable, enabled again by the remove");
         assertFalse(disabledMembers().contains(claireId));
         assertTrue(disabledMembers().contains(paulId), "the other members stay listed");
@@ -736,6 +751,17 @@ class OrgStatusTest {
         assertTrue(user(paulId).isEnabled());
     }
 
+    /** Whether another thread is refused this lock right now (a single try, released at once if it is granted). */
+    private boolean isBusyForAnotherThread(ExecutorService executor, LockRequest request) throws Exception {
+        return executor.submit(() -> {
+            try (HeldLocks ignored = locks.tryAcquire(request)) {
+                return false;
+            } catch (ResourceBusyException e) {
+                return true;
+            }
+        }).get(30, TimeUnit.SECONDS);
+    }
+
     /** The spy blocks the call that reads the members of the org (a disable in progress) until the test lets it go. */
     private void blockOnMembersRead(CountDownLatch inside, CountDownLatch release) {
         Mockito.doAnswer(invocation -> {
@@ -756,7 +782,9 @@ class OrgStatusTest {
     private static void installLocksOfAnotherInstance() {
         // QuarkusMock needs a mock of the class of the bean (InMemoryResourceLocks, the only ResourceLocks), not of
         // the interface: every acquire and tryAcquire answers a HeldLocks that holds nothing
-        InMemoryResourceLocks noLocks = Mockito.mock(InMemoryResourceLocks.class, invocation -> NOTHING_HELD);
+        InMemoryResourceLocks noLocks = Mockito.mock(InMemoryResourceLocks.class,
+                invocation -> invocation.getMethod().getReturnType() == HeldLocks.class
+                        ? NOTHING_HELD : Mockito.RETURNS_DEFAULTS.answer(invocation));
         QuarkusMock.installMockForType(noLocks, InMemoryResourceLocks.class);
     }
 

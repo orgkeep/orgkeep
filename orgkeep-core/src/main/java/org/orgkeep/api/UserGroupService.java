@@ -35,6 +35,8 @@ public interface UserGroupService {
      *
      * @throws org.orgkeep.api.exceptions.UserGroupNotFoundException if the org has no group with this name
      * @throws org.orgkeep.api.exceptions.MemberNotFoundException if the user is not a member of the organisation
+     * @throws org.orgkeep.api.exceptions.ResourceBusyException if a change is in progress on the org, the group or
+     *         the user, after a short wait
      */
     void addMember(String realm, String orgName, String groupName, String userId);
 
@@ -43,6 +45,8 @@ public interface UserGroupService {
      *
      * @throws org.orgkeep.api.exceptions.UserGroupNotFoundException if the org has no group with this name
      * @throws org.orgkeep.api.exceptions.OperationNotAllowedException for the group users: every member stays in it
+     * @throws org.orgkeep.api.exceptions.ResourceBusyException if a change is in progress on the org, the group or
+     *         the user, after a short wait
      */
     void removeMember(String realm, String orgName, String groupName, String userId);
 }

@@ -29,6 +29,8 @@ public interface OrgMemberService {
      *         of the realm-management client
      * @throws org.orgkeep.api.exceptions.OperationNotAllowedException if the organisation is disabled, also when it was
      *         disabled while the user was being added (the membership is then undone)
+     * @throws org.orgkeep.api.exceptions.ResourceBusyException if a change is in progress on the organisation or on
+     *         the user, after a short wait
      */
     OrgMember add(String realm, String orgName, AddMemberRequest request);
 
@@ -39,6 +41,8 @@ public interface OrgMemberService {
      *
      * @throws org.orgkeep.api.exceptions.MemberNotFoundException if the user is not a member
      * @throws org.orgkeep.api.exceptions.OperationNotAllowedException if the user is an owner of the organisation
+     * @throws org.orgkeep.api.exceptions.ResourceBusyException if a change is in progress on the organisation or on
+     *         the user, after a short wait
      */
     void remove(String realm, String orgName, String userId);
 

@@ -19,6 +19,8 @@ public interface OrgService {
      *         of the realm-management client
      * @throws org.orgkeep.api.exceptions.OperationNotAllowedException if the new organisation was disabled before its
      *         owner became a member: the creation is rolled back
+     * @throws org.orgkeep.api.exceptions.ResourceBusyException if a change is in progress on an organisation of this
+     *         name or on the owner, after a short wait
      */
     CreateOrgResponse create(String realm,CreateOrgRequest request);
 
@@ -40,9 +42,15 @@ public interface OrgService {
      * it disabled. Idempotent: after a failure half way, the same call again finishes the job.
      *
      * @throws org.orgkeep.api.exceptions.OrgNotFoundException if no organisation has this name
+     * @throws org.orgkeep.api.exceptions.ResourceBusyException if a change is in progress on the organisation
+     *         (single try, no wait)
      */
     OrgDetails setEnabled(String realm, String orgName, boolean enabled);
 
-    /** @throws org.orgkeep.api.exceptions.OrgNotFoundException if no organisation has this name */
+    /**
+     * @throws org.orgkeep.api.exceptions.OrgNotFoundException if no organisation has this name
+     * @throws org.orgkeep.api.exceptions.ResourceBusyException if a change is in progress on the organisation
+     *         (single try, no wait)
+     */
     void delete(String realm, String orgName);
 }

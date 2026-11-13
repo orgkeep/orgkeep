@@ -33,10 +33,17 @@ public interface CatalogRoleService {
      *
      * @throws org.orgkeep.api.exceptions.UserNotFoundException if the user does not exist
      * @throws org.orgkeep.api.exceptions.OperationNotAllowedException if the user is not a member of an organisation
+     * @throws org.orgkeep.api.exceptions.ResourceBusyException if a change is in progress on the user, after a short
+     *         wait
      */
     void grant(String realm, String catalog, String role, String userId);
 
-    /** Revokes the role granted directly to the user, idempotent. */
+    /**
+     * Revokes the role granted directly to the user, idempotent.
+     *
+     * @throws org.orgkeep.api.exceptions.ResourceBusyException if a change is in progress on the user, after a short
+     *         wait
+     */
     void revoke(String realm, String catalog, String role, String userId);
 
     /** The users holding the role directly, sorted by username (not those getting it through a team). */

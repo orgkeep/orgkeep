@@ -6,6 +6,7 @@ import org.orgkeep.api.exceptions.InvalidRequestException;
 import org.orgkeep.api.exceptions.OperationNotAllowedException;
 import org.orgkeep.api.exceptions.ProductNotAssignedException;
 import org.orgkeep.api.exceptions.ProductNotFoundException;
+import org.orgkeep.api.exceptions.ResourceBusyException;
 import org.orgkeep.api.exceptions.RoleNameTakenException;
 import org.orgkeep.api.model.AssignProductRequest;
 import org.orgkeep.api.model.CatalogRoles;
@@ -18,6 +19,10 @@ import org.orgkeep.api.model.Product;
 import org.orgkeep.api.model.UpdateFeatureRequest;
 import org.orgkeep.api.model.UpdateProductRequest;
 import org.orgkeep.components.catalog.CatalogSetup;
+import org.orgkeep.components.lock.HeldLocks;
+import org.orgkeep.components.lock.LockMode;
+import org.orgkeep.components.lock.LockRequest;
+import org.orgkeep.components.lock.ResourceLocks;
 import org.orgkeep.components.organisation.usergroup.team.TeamAlignment;
 import org.orgkeep.components.organisation.usergroup.team.TeamClaims;
 import org.orgkeep.repository.keycloak.KeycloakClientScopes;
@@ -36,7 +41,6 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -59,6 +63,7 @@ public class ProductServiceImpl implements ProductService {
     private final CatalogSetup catalogSetup;
     private final TeamAlignment teamAlignment;
     private final ProductMapper productMapper;
+    private final ResourceLocks locks;
 
     @Override
     public Product create(String realm, String catalog, CreateProductRequest request) {
@@ -132,20 +137,35 @@ public class ProductServiceImpl implements ProductService {
         getProductRole(realm, catalog, ids, product);
 
         // the values of the orgs follow the new schema: all checked before anything changes
-        Map<String, Map<String, List<String>>> newAttributes = new LinkedHashMap<>();
         Map<String, String> assignments = assignments(realm, catalog, ids.clientUuid(), product);
-        Set<String> assignedOrgs = assignments.keySet();
         assignments.forEach((org, path) -> groups.findId(realm, path)
-                .ifPresent(groupId -> newAttributes.put(groupId,
-                        withParams(org, groups.attributes(realm, groupId), request.params()))));
+                .ifPresent(groupId -> withParams(org, groups.attributes(realm, groupId), request.params())));
 
         // Keycloak ignores a null field on update: an empty description removes the current one
         clients.updateRole(realm, ids.clientUuid(), product, productMapper.toRoleRepresentation(
                 product, request.displayName(), request.description() == null ? "" : request.description(),
                 request.params()));
-        newAttributes.forEach((groupId, attributes) -> groups.replaceAttributes(realm, groupId, attributes));
-        // the teams carry a copy of the parameter values of their org
-        assignedOrgs.forEach(org -> teamAlignment.align(realm, org, catalog, product));
+        // one organisation at a time, each under its own lock: a busy one is skipped, the others are done, and the
+        // same call repeated finishes the job (the writes are idempotent)
+        List<String> busy = new ArrayList<>();
+        assignments.forEach((org, path) -> {
+            try (HeldLocks ignored = locks.acquire(LockRequest.org(realm, org, LockMode.EXCLUSIVE))) {
+                // read again under the lock: the values may have been renegotiated since the check above
+                groups.findId(realm, path).ifPresent(groupId -> {
+                    groups.replaceAttributes(realm, groupId,
+                            withParams(org, groups.attributes(realm, groupId), request.params()));
+                    // the teams carry a copy of the parameter values of their org
+                    teamAlignment.align(realm, org, catalog, product);
+                });
+            } catch (ResourceBusyException e) {
+                log.warn("Product '{}' of catalog '{}' not updated in organisation '{}' of realm '{}': a change is in progress",
+                        product, catalog, org, realm);
+                busy.add(org);
+            }
+        });
+        if (!busy.isEmpty()) {
+            throw ResourceBusyException.inSomeOrganisations();
+        }
         log.info("Product '{}' of catalog '{}' updated in realm '{}'", product, catalog, realm);
         return get(realm, catalog, product);
     }
@@ -229,30 +249,52 @@ public class ProductServiceImpl implements ProductService {
             checkMeteredFeatureCanGo(realm, product, feature, roles, assignments);
         }
 
+        // the orgs that bought it no longer have it, and their teams that listed it forget it. One organisation at a
+        // time, each under its own lock: a busy one is skipped and the others are done. The role is deleted last and
+        // only if no organisation was skipped, so that the same call repeated finishes the job (once the role is gone,
+        // the call would answer 404 and the skipped organisations would keep a feature that no longer exists)
+        List<String> busy = new ArrayList<>();
+        assignments.forEach((org, path) -> {
+            try (HeldLocks ignored = locks.acquire(LockRequest.org(realm, org, LockMode.EXCLUSIVE))) {
+                groups.findId(realm, path).ifPresent(groupId -> {
+                    Map<String, List<String>> attributes = new HashMap<>(groups.attributes(realm, groupId));
+                    List<String> bought = new ArrayList<>(attributes.getOrDefault(OrgGroups.BOUGHT_FEATURES_ATTRIBUTE, List.of()));
+                    if (bought.remove(feature)) {
+                        attributes.put(OrgGroups.BOUGHT_FEATURES_ATTRIBUTE, bought);
+                        groups.replaceAttributes(realm, groupId, attributes);
+                    }
+                });
+                teamAlignment.forgetFeature(realm, org, catalog, product, feature);
+            } catch (ResourceBusyException e) {
+                log.warn("Feature '{}' of product '{}' in catalog '{}' not removed in organisation '{}' of realm '{}': "
+                        + "a change is in progress", feature, product, catalog, org, realm);
+                busy.add(org);
+            }
+        });
+        if (!busy.isEmpty()) {
+            throw ResourceBusyException.inSomeOrganisations();
+        }
         // Keycloak removes the role from the groups holding it: the teams lose it at once
         clients.deleteRole(realm, ids.clientUuid(), roleName);
         if (metered) {
             scopes.removeMappers(realm, ids.scopeId(),
                     List.of(productMapper.toFeatureMapper(catalog, product, feature).getName()));
         }
-        // the orgs that bought it no longer have it, and their teams that listed it forget it
-        assignments.forEach((org, path) -> {
-            groups.findId(realm, path).ifPresent(groupId -> {
-                Map<String, List<String>> attributes = new HashMap<>(groups.attributes(realm, groupId));
-                List<String> bought = new ArrayList<>(attributes.getOrDefault(OrgGroups.BOUGHT_FEATURES_ATTRIBUTE, List.of()));
-                if (bought.remove(feature)) {
-                    attributes.put(OrgGroups.BOUGHT_FEATURES_ATTRIBUTE, bought);
-                    groups.replaceAttributes(realm, groupId, attributes);
-                }
-            });
-            teamAlignment.forgetFeature(realm, org, catalog, product, feature);
-        });
         log.info("Feature '{}' removed from product '{}' of catalog '{}' in realm '{}'", feature, product, catalog, realm);
         return get(realm, catalog, product);
     }
 
     @Override
     public OrgProduct assign(String realm, String orgName, String catalog, String product, AssignProductRequest request) {
+        // a heavy operation on the org: exclusive, a single immediate try. No team of the org is written meanwhile,
+        // and a change in progress on the org is answered with a 409 at once
+        try (HeldLocks ignored = locks.tryAcquire(LockRequest.org(realm, orgName, LockMode.EXCLUSIVE))) {
+            return assignLocked(realm, orgName, catalog, product, request);
+        }
+    }
+
+    private OrgProduct assignLocked(String realm, String orgName, String catalog, String product,
+                                    AssignProductRequest request) {
         orgs.getByName(realm, orgName);
         CatalogSetup.Ids ids = catalogSetup.get(realm, catalog);
         RoleRepresentation productRole = getProductRole(realm, catalog, ids, product);
@@ -349,17 +391,20 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     public void unassign(String realm, String orgName, String catalog, String product) {
-        orgs.getByName(realm, orgName);
-        String groupId = groups.findId(realm, OrgGroups.assignment(orgName, catalog, product))
-                .orElseThrow(() -> new ProductNotAssignedException(orgName, catalog, product));
+        // a heavy operation on the org, like assign: exclusive, a single immediate try
+        try (HeldLocks ignored = locks.tryAcquire(LockRequest.org(realm, orgName, LockMode.EXCLUSIVE))) {
+            orgs.getByName(realm, orgName);
+            String groupId = groups.findId(realm, OrgGroups.assignment(orgName, catalog, product))
+                    .orElseThrow(() -> new ProductNotAssignedException(orgName, catalog, product));
 
-        groups.delete(realm, groupId);
-        // the teams no longer give it, and without any product in the catalog, no catalog role of it either
-        teamAlignment.revoke(realm, orgName, catalog, product);
-        if (!teamAlignment.hasAssignment(realm, orgName, catalog)) {
-            teamAlignment.revokeCatalogRoles(realm, orgName, catalog);
+            groups.delete(realm, groupId);
+            // the teams no longer give it, and without any product in the catalog, no catalog role of it either
+            teamAlignment.revoke(realm, orgName, catalog, product);
+            if (!teamAlignment.hasAssignment(realm, orgName, catalog)) {
+                teamAlignment.revokeCatalogRoles(realm, orgName, catalog);
+            }
+            log.info("Product '{}' of catalog '{}' unassigned from organisation '{}' in realm '{}'", product, catalog, orgName, realm);
         }
-        log.info("Product '{}' of catalog '{}' unassigned from organisation '{}' in realm '{}'", product, catalog, orgName, realm);
     }
 
     @Override

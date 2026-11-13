@@ -73,6 +73,8 @@ public class ProductsResource {
     @APIResponseSchema(value = Product.class, responseCode = "200", responseDescription = "Product updated")
     @APIResponse(responseCode = "400", description = "Inconsistent schema, or a schema the values of an organisation do not fit")
     @APIResponse(responseCode = "404", description = "Unknown catalog or product")
+    @APIResponse(responseCode = "409", description = "A change was in progress on some organisations, which were skipped: "
+            + "repeat the call")
     public Product update(@PathParam("catalog") String catalog, @PathParam("product") String product,
                           @Valid @NotNull UpdateProductRequest request){
         return productService.update(currentRealm.name(), catalog, product, request);
@@ -108,7 +110,8 @@ public class ProductsResource {
     @Operation(summary = "Remove a feature of the product", description = "The organisations that bought it lose it.")
     @APIResponseSchema(value = Product.class, responseCode = "200", responseDescription = "The product, with its features")
     @APIResponse(responseCode = "404", description = "Unknown catalog, product or feature")
-    @APIResponse(responseCode = "409", description = "A metered feature bought by an organisation, or the last metered feature of an assigned product")
+    @APIResponse(responseCode = "409", description = "A metered feature bought by an organisation, the last metered feature of an assigned product, "
+            + "or a change in progress on some organisations (the feature is kept: repeat the call)")
     public Product deleteFeature(@PathParam("catalog") String catalog, @PathParam("product") String product,
                                  @PathParam("feature") String feature){
         return productService.deleteFeature(currentRealm.name(), catalog, product, feature);

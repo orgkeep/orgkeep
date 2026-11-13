@@ -38,6 +38,7 @@ public class OrgCatalogsResource {
     @APIResponseSchema(value = OrgProduct.class, responseCode = "200", responseDescription = "Product assigned")
     @APIResponse(responseCode = "400", description = "Invalid request, unknown bought feature, quotas that do not fit the kind of the product, or parameters that do not fit the schema")
     @APIResponse(responseCode = "404", description = "Unknown organisation, catalog or product")
+    @APIResponse(responseCode = "409", description = "A change is in progress on the organisation, try again later")
     public OrgProduct assign(@PathParam("org") String org, @PathParam("catalog") String catalog,
                              @PathParam("product") String product, @Valid @NotNull AssignProductRequest request){
         return productService.assign(currentRealm.name(), org, catalog, product, request);
@@ -47,6 +48,7 @@ public class OrgCatalogsResource {
     @Operation(summary = "Unassign a product", description = "The members of the organisation lose the product.")
     @APIResponse(responseCode = "204", description = "Product unassigned")
     @APIResponse(responseCode = "404", description = "Unknown organisation or product not assigned")
+    @APIResponse(responseCode = "409", description = "A change is in progress on the organisation, try again later")
     public void unassign(@PathParam("org") String org, @PathParam("catalog") String catalog,
                          @PathParam("product") String product){
         productService.unassign(currentRealm.name(), org, catalog, product);

@@ -12,6 +12,12 @@ import java.util.Locale;
  * read back from the key, which holds an email that may contain anything, "/id:" included.
  */
 public record LockRequest(ResourceType type, String key, LockMode mode, boolean byId) {
+    public LockRequest {
+        if (byId && type != ResourceType.USER) {
+            throw new IllegalArgumentException("Only a USER lock can be by id, not " + type);
+        }
+    }
+
     /** Acquisition order: the type, then for a user the email before the id, then the key. */
     static final Comparator<LockRequest> RANK = Comparator
             .comparing(LockRequest::type)

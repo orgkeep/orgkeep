@@ -166,6 +166,30 @@ class UserLocksTest {
         }
     }
 
+    // The id lock taken once the user is found: a user of no org (added, then removed) whose id is locked cannot be
+    // added to an org nor made the owner of a new one, and nothing is written. The email is not locked here
+    @Test
+    void existingUserLockedByIdCannotBeAddedNorMadeOwner() throws Exception {
+        String paulId = add("acme").id();
+        memberService.remove(testRealm.name(), "acme", paulId);
+
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try (LockHolder holder = new LockHolder(executor,
+                LockRequest.userById(testRealm.name(), paulId, LockMode.EXCLUSIVE))) {
+            assertThrowsExactly(ResourceBusyException.class, () -> add("globex"));
+            assertEquals(List.of(), orgs.organisationsOf(testRealm.name(), paulId));
+
+            assertThrowsExactly(ResourceBusyException.class, () -> orgService.create(testRealm.name(),
+                    new CreateOrgRequest("beta", Set.of(), EMAIL, null, "Paul", "Test")));
+            assertTrue(orgs.findByName(testRealm.name(), "beta").isEmpty());
+        } finally {
+            executor.shutdownNow();
+        }
+        // released: the same add goes through
+        add("globex");
+        assertEquals(List.of("globex"), orgs.organisationsOf(testRealm.name(), paulId));
+    }
+
     // A user being removed from its org cannot join a team of it meanwhile (it would keep the rights of the team):
     // the removal is held right before the membership is removed, and holds the user
     @Test

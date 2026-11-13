@@ -12,6 +12,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.Callable;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -182,7 +183,9 @@ class InMemoryResourceLocksTest {
     @Test
     void userRankDoesNotDependOnTheContentOfTheKey() {
         LockRequest tricky = LockRequest.userByEmail("b", "x/id:y@acme.test", EXCLUSIVE);
-        assertTrue(!tricky.byId());
+        assertFalse(tricky.byId());
+        assertThrows(IllegalArgumentException.class,
+                () -> new LockRequest(ResourceType.ORG, "a/acme", EXCLUSIVE, true));
         assertTrue(LockRequest.userById("a", "u1", EXCLUSIVE).byId());
         // the email ranks before the id, whatever the realm and the text of the key ("a/id:u1" < "b/email:x/id:...")
         assertTrue(LockRequest.RANK.compare(tricky, LockRequest.userById("a", "u1", EXCLUSIVE)) < 0);

@@ -98,7 +98,7 @@ class SubjectInTokensTest {
     // sub of the callers of the core does not depend on a mapper on the login client: adding one would change the
     // lightweight format for nothing
     @Test
-    void lightweightLoginClientTokenIsMarkedAndRefusedByTheCoreInsteadOfLackingASubjectSilently() throws Exception {
+    void lightweightLoginClientTokenIsMarked() throws Exception {
         allowPasswordGrant(testRealm.name());
         loginClientService.update(testRealm.name(),
                 new UpdateLoginClientRequest(List.of(), List.of(), List.of(), null, true));

@@ -105,8 +105,9 @@ public class OrgAdminResource {
             + "organisation is disabled or still being enabled; or a change is in progress (try again later)")
     public OrgMember setEnabled(@PathParam("org") String org, @PathParam("userId") String userId,
                                 @Valid @NotNull UpdateMemberStatusRequest request){
-        // The injected JsonWebToken is the access token of the call, a request scoped proxy: read here, on the thread
-        // of the request, never kept in a field. Every token the core accepts has a sub (SubjectInTokensTest): a
+        // The injected JsonWebToken is the token of the call (the access token of a bearer call, the ID token of a
+        // dashboard session), a request scoped proxy: read here, on the thread of the request, never kept in a field.
+        // Every token the core accepts has a sub (SubjectInTokensTest; an ID token always has one): a
         // lightweight one, which has none, is already refused by LightweightTokenFilter. Without it the caller
         // cannot be told from the member (the check on oneself), so the call is refused.
         String callerId = jwt.getSubject();

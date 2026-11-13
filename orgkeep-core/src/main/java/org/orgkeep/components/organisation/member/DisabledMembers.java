@@ -15,7 +15,7 @@ import java.util.Set;
  * user profile of Keycloak 24+ drops the user attributes it does not declare.
  * <p>
  * These methods only change the representation: the caller saves it (KeycloakOrgs.update), under the lock of the
- * organisation (OrgLocks).
+ * organisation (an exclusive ResourceLocks lock on it).
  */
 public final class DisabledMembers {
     public static final String ATTRIBUTE = "disabled-members";

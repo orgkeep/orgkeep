@@ -4,6 +4,10 @@ import org.orgkeep.api.OrgMemberService;
 import org.orgkeep.api.model.AddMemberRequest;
 import org.orgkeep.api.model.CreateOrgRequest;
 import org.orgkeep.api.model.UpdateOrgStatusRequest;
+import org.orgkeep.components.lock.HeldLocks;
+import org.orgkeep.components.lock.LockMode;
+import org.orgkeep.components.lock.LockRequest;
+import org.orgkeep.components.lock.ResourceLocks;
 import org.orgkeep.fixtures.TestRealm;
 import org.orgkeep.web.CurrentRealm;
 import io.quarkus.test.InjectMock;
@@ -45,6 +49,7 @@ class OrganisationsResourceTest {
 
     @Inject Keycloak keycloak;
     @Inject OrgMemberService memberService;
+    @Inject ResourceLocks locks;
     @InjectMock CurrentRealm currentRealm;
 
     private TestRealm testRealm;
@@ -266,6 +271,53 @@ class OrganisationsResourceTest {
                 .then().statusCode(204);
         given().when().get(BASE + "/{org}", ORG)
                 .then().statusCode(404);
+    }
+
+    // A change in progress is simulated by holding the lock of the org on the test thread: the HTTP request is served
+    // by another thread, so it finds the org busy. Disabling, deleting and creating an org of this name are refused with
+    // the generic message (no org name in it)
+    @Test
+    @TestSecurity(user = "owner", roles = "realm-owner")
+    void changesAreRefusedWith409WhileAChangeIsInProgress() {
+        try (HeldLocks held = locks.tryAcquire(LockRequest.org(testRealm.name(), ORG, LockMode.EXCLUSIVE))) {
+            given().contentType(ContentType.JSON).body(new UpdateOrgStatusRequest(false))
+                    .when().put(BASE + "/{org}/enabled", ORG)
+                    .then().statusCode(409)
+                    .body("message", equalTo("A change is in progress, try again later"));
+            given().when().delete(BASE + "/{org}", ORG)
+                    .then().statusCode(409)
+                    .body("message", equalTo("A change is in progress, try again later"));
+            // create waits up to max-wait for the lock, then answers the same 409
+            given().contentType(ContentType.JSON).body(request())
+                    .when().post(BASE)
+                    .then().statusCode(409)
+                    .body("message", equalTo("A change is in progress, try again later"));
+        }
+    }
+
+    // the other side: a call refused for its role takes no lock, and an add (a short write) of the org admin is
+    // refused with the same 409 while the org is locked
+    @Test
+    @TestSecurity(user = "alice", roles = "org-" + ORG + ":org-admin")
+    void forbiddenCallsTakeNoLockAndAnAddIsRefusedWhileTheOrgIsLocked() {
+        try (HeldLocks held = locks.tryAcquire(LockRequest.org(testRealm.name(), ORG, LockMode.EXCLUSIVE))) {
+            // 403, not 409: the role is checked before the service, so before any lock
+            given().contentType(ContentType.JSON).body(new UpdateOrgStatusRequest(true))
+                    .when().put(BASE + "/{org}/enabled", ORG)
+                    .then().statusCode(403);
+            given().contentType(ContentType.JSON)
+                    .body(new AddMemberRequest("paul@elsewhere.test", "Paul", "Test"))
+                    .when().post("/api/organisations/{org}/members", ORG)
+                    .then().statusCode(409)
+                    .body("message", equalTo("A change is in progress, try again later"));
+            // an org admin of another org is refused too, whatever the lock
+            given().contentType(ContentType.JSON)
+                    .body(new AddMemberRequest("paul@elsewhere.test", "Paul", "Test"))
+                    .when().post("/api/organisations/{org}/members", "other-org")
+                    .then().statusCode(403);
+        }
+        assertTrue(testRealm.resource().users().searchByEmail("paul@elsewhere.test", true).isEmpty(),
+                "no user was created for the refused add");
     }
 
     private String create() {

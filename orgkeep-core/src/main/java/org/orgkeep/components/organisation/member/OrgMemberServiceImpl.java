@@ -10,7 +10,10 @@ import org.orgkeep.api.model.OrgClients;
 import org.orgkeep.api.model.OrgGroups;
 import org.orgkeep.api.model.OrgMember;
 import org.orgkeep.api.model.OrgRole;
-import org.orgkeep.components.organisation.OrgLocks;
+import org.orgkeep.components.lock.HeldLocks;
+import org.orgkeep.components.lock.LockMode;
+import org.orgkeep.components.lock.LockRequest;
+import org.orgkeep.components.lock.ResourceLocks;
 import org.orgkeep.components.organisation.member.invitation.InvitationMailer;
 import org.orgkeep.repository.keycloak.KeycloakClients;
 import org.orgkeep.repository.keycloak.KeycloakGroups;
@@ -39,7 +42,7 @@ public class OrgMemberServiceImpl implements OrgMemberService {
     private final MemberMapper memberMapper;
     private final InvitationMailer invitations;
     private final EventBus eventBus;
-    private final OrgLocks orgLocks;
+    private final ResourceLocks locks;
 
     @Override
     public List<OrgMember> list(String realm, String orgName) {
@@ -68,8 +71,19 @@ public class OrgMemberServiceImpl implements OrgMemberService {
         return adminIds.contains(userId) ? OrgRole.ORG_ADMIN : OrgRole.ORG_USER;
     }
 
+    /**
+     * A short write: ORG is locked shared from the start, before any user is created, and for the whole call (see
+     * ResourceLocks). Compatible with other adds, but refused (409, after a short wait) while a heavy operation holds
+     * the org exclusively: a disable or a deletion in progress. So no user is created for an org being deleted.
+     */
     @Override
     public OrgMember add(String realm, String orgName, AddMemberRequest request) {
+        try (HeldLocks ignored = locks.acquire(LockRequest.org(realm, orgName, LockMode.SHARED))) {
+            return addLocked(realm, orgName, request);
+        }
+    }
+
+    private OrgMember addLocked(String realm, String orgName, AddMemberRequest request) {
         OrganizationRepresentation org = orgs.getByName(realm, orgName);
         // checked before the user is created: the members of a disabled org are disabled (see OrgService.setEnabled)
         eligibility.checkEnabled(org);
@@ -78,9 +92,10 @@ public class OrgMemberServiceImpl implements OrgMemberService {
         // an existing user may be privileged or a member of another org; a member of this org is refused just below
         existingId.ifPresent(userId -> eligibility.checkReusable(realm, orgName, userId, request.email()));
         String userId = existingId.orElseGet(() -> createUser(realm, orgName, request));
-        // Under the lock of the org (see OrgLocks): a disable of the org on this instance runs entirely before (the
-        // org is seen disabled, without the user) or entirely after (the user is disabled and listed like any member)
-        orgLocks.run(realm, orgName, () -> join(realm, org, userId, request.email()));
+        // Under the shared lock of the org, held by add: a disable of the org on this instance runs entirely before
+        // (the org is seen disabled, without the user) or entirely after (the user is disabled and listed like any
+        // member)
+        join(realm, org, userId, request.email());
 
         String usersGroupId = groups.findId(realm, OrgGroups.users(orgName))
                 .orElseThrow(() -> new IllegalStateException(
@@ -102,9 +117,45 @@ public class OrgMemberServiceImpl implements OrgMemberService {
         invitations.resend(realm, userId);
     }
 
+    /**
+     * A short write. ORG is locked shared, unless removing the member has to write the org (see
+     * {@link #leaveDisabledMembers}): then exclusively. The mode is chosen on a first read of the org, which may be
+     * stale (a disable may finish between that read and the lock), so the org is read again once the lock is held. If
+     * the shared lock turns out not to be enough, everything is released and taken again exclusively, once: a lock
+     * is never upgraded in place.
+     */
     @Override
     public void remove(String realm, String orgName, String userId) {
-        OrganizationRepresentation org = orgs.getByName(realm, orgName);
+        LockMode mode = writesTheOrg(orgs.getByName(realm, orgName), null) ? LockMode.EXCLUSIVE : LockMode.SHARED;
+        HeldLocks held = locks.acquire(LockRequest.org(realm, orgName, mode));
+        try {
+            OrganizationRepresentation org = orgs.getByName(realm, orgName);
+            if (mode == LockMode.SHARED && writesTheOrg(org, userId)) {
+                held.close();
+                held = locks.acquire(LockRequest.org(realm, orgName, LockMode.EXCLUSIVE));
+                // no new decision on a new read: under the exclusive lock the org is stable
+                org = orgs.getByName(realm, orgName);
+            }
+            removeLocked(realm, org, userId);
+        } finally {
+            held.close();
+        }
+    }
+
+    /**
+     * Whether removing this member rewrites the org: it is disabled, or the member is listed among the members
+     * disabled with it (leaveDisabledMembers). With no member (the first, possibly stale read): the org is disabled or
+     * lists any disabled member.
+     */
+    private static boolean writesTheOrg(OrganizationRepresentation org, String userId) {
+        if (!org.isEnabled()) {
+            return true;
+        }
+        return userId == null ? !DisabledMembers.of(org).isEmpty() : DisabledMembers.of(org).contains(userId);
+    }
+
+    private void removeLocked(String realm, OrganizationRepresentation org, String userId) {
+        String orgName = org.getName();
         if (!orgs.isMember(realm, org.getId(), userId)) {
             throw new MemberNotFoundException(orgName, userId);
         }
@@ -159,17 +210,16 @@ public class OrgMemberServiceImpl implements OrgMemberService {
     /**
      * A member disabled with the org is enabled again and leaves the list: it belongs to no org any more, and nothing
      * else would ever enable it again. Enabled first: if the update of the list fails, a stale entry only enables
-     * again a user already enabled. Under the lock of the org, which is written whole.
+     * again a user already enabled. The org is written whole: called under its exclusive lock when it has to write
+     * (see {@link #remove}), under the shared one only when there is nothing to write.
      */
     private void leaveDisabledMembers(String realm, String orgName, String userId) {
-        orgLocks.run(realm, orgName, () -> {
-            OrganizationRepresentation org = orgs.getByName(realm, orgName);
-            if (DisabledMembers.of(org).contains(userId)) {
-                users.setEnabled(realm, userId, true);
-                DisabledMembers.remove(org, List.of(userId));
-                orgs.update(realm, org);
-            }
-        });
+        OrganizationRepresentation org = orgs.getByName(realm, orgName);
+        if (DisabledMembers.of(org).contains(userId)) {
+            users.setEnabled(realm, userId, true);
+            DisabledMembers.remove(org, List.of(userId));
+            orgs.update(realm, org);
+        }
     }
 
     /**

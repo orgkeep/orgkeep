@@ -59,7 +59,7 @@ public class OrgAdminResource {
     @APIResponse(responseCode = "400", description = "Invalid request")
     @APIResponse(responseCode = "404", description = "Unknown organisation")
     @APIResponse(responseCode = "409", description = "The user is already a member, cannot be added to this "
-            + "organisation, or the organisation is disabled")
+            + "organisation, the organisation is disabled, or a change is in progress on it (try again later)")
     public OrgMember add(@PathParam("org") String org, @Valid @NotNull AddMemberRequest request){
         return memberService.add(currentRealm.name(), org, request);
     }
@@ -72,7 +72,8 @@ public class OrgAdminResource {
                     + "organisation any more.")
     @APIResponse(responseCode = "204", description = "Member removed")
     @APIResponse(responseCode = "404", description = "Unknown organisation or not a member")
-    @APIResponse(responseCode = "409", description = "The user is an owner of the organisation")
+    @APIResponse(responseCode = "409", description = "The user is an owner of the organisation, or a change is in "
+            + "progress on it (try again later)")
     public void remove(@PathParam("org") String org, @PathParam("userId") String userId){
         memberService.remove(currentRealm.name(), org, userId);
     }

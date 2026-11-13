@@ -4,15 +4,21 @@ import org.orgkeep.api.OrgMemberService;
 import org.orgkeep.api.OrgService;
 import org.orgkeep.api.RealmProvisioner;
 import org.orgkeep.api.exceptions.OperationNotAllowedException;
+import org.orgkeep.api.exceptions.OrgAlreadyExistsException;
+import org.orgkeep.api.exceptions.ResourceBusyException;
 import org.orgkeep.api.model.AddMemberRequest;
 import org.orgkeep.api.model.CreateOrgRequest;
 import org.orgkeep.api.model.OrgMember;
+import org.orgkeep.components.lock.HeldLocks;
+import org.orgkeep.components.lock.InMemoryResourceLocks;
+import org.orgkeep.components.lock.LockRequest;
 import org.orgkeep.components.organisation.member.DisabledMembers;
 import org.orgkeep.fixtures.TestRealm;
 import org.orgkeep.repository.keycloak.KeycloakOrgs;
 import org.orgkeep.repository.keycloak.KeycloakUsers;
 import io.quarkus.arc.Arc;
 import io.quarkus.arc.ManagedContext;
+import io.quarkus.test.junit.QuarkusMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
 import jakarta.inject.Inject;
@@ -38,13 +44,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-
-import static org.awaitility.Awaitility.await;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -52,6 +57,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 
@@ -72,7 +78,6 @@ class OrgStatusTest {
     // run something just before or after one call, or make it fail once, to replay a precise interleaving
     @InjectSpy KeycloakOrgs orgs;
     @InjectSpy KeycloakUsers users;
-    @Inject OrgLocks orgLocks;
 
     @ConfigProperty(name = "quarkus.keycloak.admin-client.server-url")
     String keycloakUrl;
@@ -236,10 +241,12 @@ class OrgStatusTest {
     // The other side of the race: the add checked the org while it was still enabled, then the whole disable ran
     // before the membership was written (the spy disables the org just before the real addMember). The disable could
     // not see the new member: the add checks the org again once the user is a member, refuses and undoes the membership.
-    // On one instance this is the "disable entirely before" order the lock allows; the spy runs the disable on the same
-    // thread, inside the lock held by the add, which the reentrant lock lets through
+    // On one instance the lock makes the disable wait for the add (it is refused instead): the disable run here, on the
+    // same thread, inside the add, stands for a disable from another instance, which does not share the locks. They
+    // are replaced by locks that do nothing for this test (see installLocksOfAnotherInstance)
     @Test
     void memberJoiningOnceTheOrgIsDisabledIsRefused() {
+        installLocksOfAnotherInstance();
         Mockito.doAnswer(invocation -> {
                     orgService.setEnabled(testRealm.name(), ORG, false);
                     return invocation.callRealMethod();
@@ -261,10 +268,11 @@ class OrgStatusTest {
     // "Both sides win": the membership is written, then the whole disable runs (the spy disables the org just after
     // the real addMember) and counts Emma among the members it disables. The add then sees the org disabled, but with
     // Emma listed: the add came first, it goes through. Emma is a disabled member and comes back with the org.
-    // Impossible on one instance (the lock makes the disable wait for the add): this stands for a disable from another
-    // instance, run here on the same thread, which the reentrant lock lets through
+    // Impossible on one instance (the lock refuses the disable while the add runs): this stands for a disable from
+    // another instance, run here on the same thread, with locks that do nothing
     @Test
     void memberDisabledWithTheOrgWhileBeingAddedStaysAMember() {
+        installLocksOfAnotherInstance();
         Mockito.doAnswer(invocation -> {
                     Object added = invocation.callRealMethod();
                     orgService.setEnabled(testRealm.name(), ORG, false);
@@ -290,6 +298,7 @@ class OrgStatusTest {
     // listed member is never left enabled in a disabled org
     @Test
     void memberListedByTheDisableIsDisabledByTheAdd() {
+        installLocksOfAnotherInstance();
         Mockito.doThrow(new IllegalStateException("Keycloak unavailable"))
                 .doCallRealMethod()
                 .when(users).setEnabled(anyString(), anyString(), eq(false));
@@ -309,11 +318,11 @@ class OrgStatusTest {
         assertFalse(user(emma.id()).isEnabled());
     }
 
-    // With the lock, an add and a disable on one instance never overlap. On two threads: the add is held inside (the
-    // spy blocks it just before the real addMember), the disable must wait for it, then sees Emma as a plain member:
-    // she is disabled and listed, and the add answered normally
+    // With the locks, an add and a disable on one instance never overlap. On two threads: the add is held inside (the
+    // spy blocks it just before the real addMember, ORG is locked shared), the disable is refused at once (a single
+    // try, ORG exclusive) and nothing was written by it. The add ends normally: Emma is a plain member, not disabled
     @Test
-    void disableWaitsForAnAddInProgress() throws Exception {
+    void disableIsRefusedWhileAnAddIsInProgress() throws Exception {
         CountDownLatch addInside = new CountDownLatch(1);
         CountDownLatch releaseAdd = new CountDownLatch(1);
         Mockito.doAnswer(invocation -> {
@@ -330,13 +339,11 @@ class OrgStatusTest {
                     new AddMemberRequest("emma@acme.test", "Emma", "Roux")));
             assertTrue(addInside.await(30, TimeUnit.SECONDS));
 
-            Future<?> disable = inRequest(executor, () -> orgService.setEnabled(testRealm.name(), ORG, false));
-            await().atMost(Duration.ofSeconds(30))
-                    .until(() -> orgLocks.lockOf(testRealm.name(), ORG).hasQueuedThreads());
+            assertThrowsExactly(ResourceBusyException.class,
+                    () -> orgService.setEnabled(testRealm.name(), ORG, false));
 
             releaseAdd.countDown();
             add.get(30, TimeUnit.SECONDS);
-            disable.get(30, TimeUnit.SECONDS);
         } finally {
             releaseAdd.countDown();
             executor.shutdownNow();
@@ -344,8 +351,194 @@ class OrgStatusTest {
 
         String emmaId = testRealm.resource().users().searchByEmail("emma@acme.test", true).getFirst().getId();
         assertEquals(List.of(ORG), orgs.organisationsOf(testRealm.name(), emmaId));
-        assertTrue(disabledMembers().contains(emmaId));
-        assertFalse(user(emmaId).isEnabled());
+        assertTrue(orgService.get(testRealm.name(), ORG).enabled(), "the refused disable changed nothing");
+        assertEquals(List.of(), disabledMembers());
+        assertTrue(user(emmaId).isEnabled());
+        assertTrue(user(paulId).isEnabled());
+    }
+
+    // The add is the one refused when the disable comes first: the disable is held inside (the spy blocks it while it
+    // reads the members), a member cannot be added meanwhile. The add waits up to max-wait (a short write), then
+    // gets the 409, and no user was created for the refused add
+    @Test
+    void addIsRefusedWhileTheOrgIsBeingDisabled() throws Exception {
+        CountDownLatch disableInside = new CountDownLatch(1);
+        CountDownLatch releaseDisable = new CountDownLatch(1);
+        blockOnMembersRead(disableInside, releaseDisable);
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> disable = inRequest(executor, () -> orgService.setEnabled(testRealm.name(), ORG, false));
+            assertTrue(disableInside.await(30, TimeUnit.SECONDS));
+
+            assertThrowsExactly(ResourceBusyException.class, () -> memberService.add(testRealm.name(), ORG,
+                    new AddMemberRequest("emma@acme.test", "Emma", "Roux")));
+            assertTrue(testRealm.resource().users().searchByEmail("emma@acme.test", true).isEmpty());
+
+            releaseDisable.countDown();
+            disable.get(30, TimeUnit.SECONDS);
+        } finally {
+            releaseDisable.countDown();
+            executor.shutdownNow();
+        }
+        assertFalse(user(paulId).isEnabled());
+    }
+
+    // #26: deleting the org while it is being disabled is refused. Without the lock, the disable went on disabling the
+    // members it had already read after the deletion, with the list of the members to enable again deleted with the org
+    @Test
+    void deleteIsRefusedWhileTheOrgIsBeingDisabled() throws Exception {
+        CountDownLatch disableInside = new CountDownLatch(1);
+        CountDownLatch releaseDisable = new CountDownLatch(1);
+        blockOnMembersRead(disableInside, releaseDisable);
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> disable = inRequest(executor, () -> orgService.setEnabled(testRealm.name(), ORG, false));
+            assertTrue(disableInside.await(30, TimeUnit.SECONDS));
+
+            assertThrowsExactly(ResourceBusyException.class, () -> orgService.delete(testRealm.name(), ORG));
+            assertTrue(orgs.findByName(testRealm.name(), ORG).isPresent(), "the org is still there");
+
+            releaseDisable.countDown();
+            disable.get(30, TimeUnit.SECONDS);
+        } finally {
+            releaseDisable.countDown();
+            executor.shutdownNow();
+        }
+
+        // nothing is left disabled outside of a list: Paul is disabled and listed, so the org can enable him again
+        assertFalse(user(paulId).isEnabled());
+        assertTrue(disabledMembers().contains(paulId));
+        orgService.setEnabled(testRealm.name(), ORG, true);
+        assertTrue(user(paulId).isEnabled());
+    }
+
+    // The inverse: a disable while the org is being deleted is refused (the deletion is held inside, the spy blocks it
+    // just before the real delete of the org)
+    @Test
+    void disableIsRefusedWhileTheOrgIsBeingDeleted() throws Exception {
+        CountDownLatch deleteInside = new CountDownLatch(1);
+        CountDownLatch releaseDelete = new CountDownLatch(1);
+        Mockito.doAnswer(invocation -> {
+                    deleteInside.countDown();
+                    releaseDelete.await();
+                    return invocation.callRealMethod();
+                })
+                .doCallRealMethod()
+                .when(orgs).delete(anyString(), anyString());
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> delete = inRequest(executor, () -> orgService.delete(testRealm.name(), ORG));
+            assertTrue(deleteInside.await(30, TimeUnit.SECONDS));
+
+            assertThrowsExactly(ResourceBusyException.class,
+                    () -> orgService.setEnabled(testRealm.name(), ORG, false));
+            assertTrue(user(paulId).isEnabled(), "the refused disable touched no member");
+
+            releaseDelete.countDown();
+            delete.get(30, TimeUnit.SECONDS);
+        } finally {
+            releaseDelete.countDown();
+            executor.shutdownNow();
+        }
+        assertTrue(orgs.findByName(testRealm.name(), ORG).isEmpty());
+    }
+
+    // #26, second case: a member added while the org is being deleted. The add is refused before any user is created
+    // (it used to create the user, fail to join the org and keep the user)
+    @Test
+    void addIsRefusedWhileTheOrgIsBeingDeletedAndCreatesNoUser() throws Exception {
+        CountDownLatch deleteInside = new CountDownLatch(1);
+        CountDownLatch releaseDelete = new CountDownLatch(1);
+        Mockito.doAnswer(invocation -> {
+                    deleteInside.countDown();
+                    releaseDelete.await();
+                    return invocation.callRealMethod();
+                })
+                .doCallRealMethod()
+                .when(orgs).delete(anyString(), anyString());
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> delete = inRequest(executor, () -> orgService.delete(testRealm.name(), ORG));
+            assertTrue(deleteInside.await(30, TimeUnit.SECONDS));
+
+            assertThrowsExactly(ResourceBusyException.class, () -> memberService.add(testRealm.name(), ORG,
+                    new AddMemberRequest("emma@acme.test", "Emma", "Roux")));
+            assertTrue(testRealm.resource().users().searchByEmail("emma@acme.test", true).isEmpty());
+
+            releaseDelete.countDown();
+            delete.get(30, TimeUnit.SECONDS);
+        } finally {
+            releaseDelete.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    // remove picks its lock mode on a first read of the org (enabled, nothing listed: shared), then reads the org again
+    // once locked. Here a whole disable runs between the two reads (the spy disables the org on another thread right
+    // after the first read, and waits for it): the shared lock is no longer enough, remove releases it and takes the
+    // exclusive one, then removes Claire. She is enabled again and leaves the list; Paul stays listed
+    @Test
+    void removeAfterADisableFinishedBetweenTheReadAndTheLockTakesTheExclusiveLock() throws Exception {
+        String claireId = member("claire");
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            Mockito.doAnswer(invocation -> {
+                        Object org = invocation.callRealMethod();
+                        // only the first read of remove: the next ones call the real method
+                        Future<?> disable = inRequest(executor,
+                                () -> orgService.setEnabled(testRealm.name(), ORG, false));
+                        disable.get(60, TimeUnit.SECONDS);
+                        return org;
+                    })
+                    .doCallRealMethod()
+                    .when(orgs).getByName(anyString(), eq(ORG));
+
+            memberService.remove(testRealm.name(), ORG, claireId);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertTrue(user(claireId).isEnabled(), "disabled by the disable, enabled again by the remove");
+        assertFalse(disabledMembers().contains(claireId));
+        assertTrue(disabledMembers().contains(paulId), "the other members stay listed");
+        assertFalse(user(paulId).isEnabled());
+        assertEquals(List.of(), orgs.organisationsOf(testRealm.name(), claireId));
+    }
+
+    // enabled org, nothing listed: remove only needs the shared lock, so it goes along with an add in progress (two
+    // short writes in the same org do not bother each other)
+    @Test
+    void removeFromAnEnabledOrgGoesAlongWithAnAddInProgress() throws Exception {
+        String claireId = member("claire");
+        CountDownLatch addInside = new CountDownLatch(1);
+        CountDownLatch releaseAdd = new CountDownLatch(1);
+        Mockito.doAnswer(invocation -> {
+                    addInside.countDown();
+                    releaseAdd.await();
+                    return invocation.callRealMethod();
+                })
+                .doCallRealMethod()
+                .when(orgs).addMember(anyString(), anyString(), anyString());
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> add = inRequest(executor, () -> memberService.add(testRealm.name(), ORG,
+                    new AddMemberRequest("emma@acme.test", "Emma", "Roux")));
+            assertTrue(addInside.await(30, TimeUnit.SECONDS));
+
+            memberService.remove(testRealm.name(), ORG, claireId);
+            assertEquals(List.of(), orgs.organisationsOf(testRealm.name(), claireId));
+
+            releaseAdd.countDown();
+            add.get(30, TimeUnit.SECONDS);
+        } finally {
+            releaseAdd.countDown();
+            executor.shutdownNow();
+        }
     }
 
     // A member disabled with the org and then removed from it leaves the list, enabled again: she belongs to no org,
@@ -412,40 +605,76 @@ class OrgStatusTest {
     }
 
     // Two calls at the same time, on two threads: the disable is held inside (the spy blocks it while it reads the
-    // members) and the enable must wait for it. Instead of a sleep, the test waits until the enable is queued on the
-    // lock of the org, then lets the disable finish: the enable runs after it, so the org ends enabled with Paul
+    // members, ORG is locked exclusively) and the enable is refused at once, without waiting (a single try). The
+    // disable then finishes alone: the org ends disabled, Paul disabled and listed
     @Test
-    void concurrentCallsForTheSameOrgRunOneAfterTheOther() throws Exception {
+    void secondCallForTheSameOrgIsRefusedAtOnce() throws Exception {
         CountDownLatch disableInside = new CountDownLatch(1);
         CountDownLatch releaseDisable = new CountDownLatch(1);
-        Mockito.doAnswer(invocation -> {
-                    disableInside.countDown();
-                    releaseDisable.await();
-                    return invocation.callRealMethod();
-                })
-                .doCallRealMethod()
-                .when(orgs).members(anyString(), anyString());
+        blockOnMembersRead(disableInside, releaseDisable);
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
             Future<?> disable = inRequest(executor, () -> orgService.setEnabled(testRealm.name(), ORG, false));
             assertTrue(disableInside.await(30, TimeUnit.SECONDS));
 
-            Future<?> enable = inRequest(executor, () -> orgService.setEnabled(testRealm.name(), ORG, true));
-            await().atMost(Duration.ofSeconds(30))
-                    .until(() -> orgLocks.lockOf(testRealm.name(), ORG).hasQueuedThreads());
-            assertFalse(enable.isDone());
+            long start = System.nanoTime();
+            ResourceBusyException busy = assertThrowsExactly(ResourceBusyException.class,
+                    () -> orgService.setEnabled(testRealm.name(), ORG, true));
+            assertEquals("A change is in progress, try again later", busy.getMessage());
+            assertTrue(Duration.ofNanos(System.nanoTime() - start).compareTo(Duration.ofSeconds(1)) < 0,
+                    "refused without waiting");
+            assertFalse(disable.isDone());
 
             releaseDisable.countDown();
             disable.get(30, TimeUnit.SECONDS);
-            enable.get(30, TimeUnit.SECONDS);
         } finally {
             releaseDisable.countDown();
             executor.shutdownNow();
         }
 
-        assertTrue(orgService.get(testRealm.name(), ORG).enabled());
-        assertTrue(user(paulId).isEnabled());
+        assertFalse(orgService.get(testRealm.name(), ORG).enabled());
+        assertFalse(user(paulId).isEnabled());
+        assertTrue(disabledMembers().contains(paulId));
+    }
+
+    // A creation waits a little for a change in progress on an org of the same name (a short write): held for less
+    // than max-wait (2 s by default), the second creation goes on and finds the org: "already exists"; held for
+    // longer, it is refused with the "change in progress" 409
+    @Test
+    void creationWaitsAShortTimeForAChangeInProgressOnTheSameName() throws Exception {
+        CountDownLatch creationInside = new CountDownLatch(1);
+        CountDownLatch releaseCreation = new CountDownLatch(1);
+        Mockito.doAnswer(invocation -> {
+                    creationInside.countDown();
+                    releaseCreation.await();
+                    return invocation.callRealMethod();
+                })
+                .doCallRealMethod()
+                .when(orgs).create(anyString(), any());
+
+        ExecutorService executor = Executors.newFixedThreadPool(3);
+        try {
+            Future<?> first = inRequest(executor, () -> orgService.create(testRealm.name(),
+                    new CreateOrgRequest("beta", Set.of(), null, null)));
+            assertTrue(creationInside.await(30, TimeUnit.SECONDS));
+
+            // held longer than max-wait: refused
+            assertThrowsExactly(ResourceBusyException.class, () -> orgService.create(testRealm.name(),
+                    new CreateOrgRequest("beta", Set.of(), null, null)));
+
+            // released while the second creation is waiting: it gets the lock, then "already exists"
+            Future<?> second = inRequest(executor, () -> orgService.create(testRealm.name(),
+                    new CreateOrgRequest("beta", Set.of(), null, null)));
+            Thread.sleep(300);
+            releaseCreation.countDown();
+            first.get(30, TimeUnit.SECONDS);
+            ExecutionException failure = assertThrows(ExecutionException.class, () -> second.get(30, TimeUnit.SECONDS));
+            assertInstanceOf(OrgAlreadyExistsException.class, failure.getCause());
+        } finally {
+            releaseCreation.countDown();
+            executor.shutdownNow();
+        }
     }
 
     // The same for the owner of a new org, disabled while it is being created: the creation fails and is rolled back.
@@ -506,6 +735,41 @@ class OrgStatusTest {
         assertTrue(user(claireId).isEnabled());
         assertTrue(user(paulId).isEnabled());
     }
+
+    /** The spy blocks the call that reads the members of the org (a disable in progress) until the test lets it go. */
+    private void blockOnMembersRead(CountDownLatch inside, CountDownLatch release) {
+        Mockito.doAnswer(invocation -> {
+                    inside.countDown();
+                    release.await();
+                    return invocation.callRealMethod();
+                })
+                .doCallRealMethod()
+                .when(orgs).members(anyString(), anyString());
+    }
+
+    /**
+     * Replaces the locks by locks that do nothing, for the current test only (QuarkusMock): the locks of another
+     * instance of the core, which does not share them. The tests that replay the interleavings of an add and a disable
+     * from another instance run the disable inside the add, on the same thread: with the real locks that is a shared
+     * lock turned exclusive, which is refused as a programming error.
+     */
+    private static void installLocksOfAnotherInstance() {
+        // QuarkusMock needs a mock of the class of the bean (InMemoryResourceLocks, the only ResourceLocks), not of
+        // the interface: every acquire and tryAcquire answers a HeldLocks that holds nothing
+        InMemoryResourceLocks noLocks = Mockito.mock(InMemoryResourceLocks.class, invocation -> NOTHING_HELD);
+        QuarkusMock.installMockForType(noLocks, InMemoryResourceLocks.class);
+    }
+
+    private static final HeldLocks NOTHING_HELD = new HeldLocks() {
+        @Override
+        public HeldLocks add(LockRequest... requests) {
+            return this;
+        }
+
+        @Override
+        public void close() {
+        }
+    };
 
     /**
      * Runs the action on another thread inside a request context, like an HTTP request: the Keycloak admin client is

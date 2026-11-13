@@ -15,6 +15,10 @@ import org.orgkeep.api.model.OrgRole;
 import org.orgkeep.api.model.OrgSummary;
 import org.orgkeep.api.model.CatalogRoles;
 import org.orgkeep.components.catalog.CatalogSetup;
+import org.orgkeep.components.lock.HeldLocks;
+import org.orgkeep.components.lock.LockMode;
+import org.orgkeep.components.lock.LockRequest;
+import org.orgkeep.components.lock.ResourceLocks;
 import org.orgkeep.repository.keycloak.KeycloakClients;
 import org.orgkeep.repository.keycloak.KeycloakGroups;
 import org.orgkeep.repository.keycloak.KeycloakOrgs;
@@ -47,7 +51,7 @@ public class OrgServiceImpl implements OrgService {
     private final KeycloakGroups groups;
     private final KeycloakUsers users;
     private final MemberEligibility eligibility;
-    private final OrgLocks orgLocks;
+    private final ResourceLocks locks;
     private final CatalogSetup catalogSetup;
     private final EventBus eventBus;
     private final OrgMapper orgMapper;
@@ -60,6 +64,14 @@ public class OrgServiceImpl implements OrgService {
      */
     @Override
     public CreateOrgResponse create(String realm, CreateOrgRequest request) {
+        // a short write: waits a little for a change in progress on an org of this name (a creation of the same name,
+        // a deletion), then answers 409. Held for the whole creation, owner included
+        try (HeldLocks ignored = locks.acquire(LockRequest.org(realm, request.name(), LockMode.EXCLUSIVE))) {
+            return createLocked(realm, request);
+        }
+    }
+
+    private CreateOrgResponse createLocked(String realm, CreateOrgRequest request) {
         // checked before anything is created: an existing user may be privileged or already belong to another org.
         // A member of an org with this very name is not refused there: the org already exists, reported below as such
         if (request.ownerEmail() != null) {
@@ -191,18 +203,20 @@ public class OrgServiceImpl implements OrgService {
      * some members still enabled, or enabled with some members still disabled; a new call with the same value
      * finishes the job.
      * <p>
-     * One call at a time per organisation, within this instance (see OrgLocks): each call reads the org and writes it
-     * back whole, two of them at the same time would overwrite each other.
+     * A heavy operation: the organisation is locked exclusively with a single immediate try, within this instance (see
+     * ResourceLocks). A change in progress on it (another enable or disable, an add, a deletion) gives a 409 at once
+     * instead of a wait: each call reads the org and writes it back whole, two of them at the same time would
+     * overwrite each other.
      */
     @Override
     public OrgDetails setEnabled(String realm, String orgName, boolean enabled) {
-        orgLocks.run(realm, orgName, () -> {
+        try (HeldLocks ignored = locks.tryAcquire(LockRequest.org(realm, orgName, LockMode.EXCLUSIVE))) {
             if (enabled) {
                 enable(realm, orgName);
             } else {
                 disable(realm, orgName);
             }
-        });
+        }
         return get(realm, orgName);
     }
 
@@ -315,18 +329,25 @@ public class OrgServiceImpl implements OrgService {
         }
     }
 
+    /**
+     * A heavy operation, like setEnabled: refused with a 409 while another change is in progress on the org. Without
+     * that, a disable still running would go on disabling members after the deletion, and the list of the members to
+     * enable again, kept on the org, would disappear with it.
+     */
     @Override
     public void delete(String realm, String orgName) {
-        OrganizationRepresentation org = orgs.getByName(realm, orgName);
+        try (HeldLocks ignored = locks.tryAcquire(LockRequest.org(realm, orgName, LockMode.EXCLUSIVE))) {
+            OrganizationRepresentation org = orgs.getByName(realm, orgName);
 
-        orgs.delete(realm, org.getId());
-        clients.findUuid(realm, OrgClients.clientId(orgName))
-                .ifPresent(clientUuid -> clients.delete(realm, clientUuid));
-        groups.findId(realm, OrgGroups.root(orgName)).ifPresentOrElse(
-                groupId -> groups.delete(realm, groupId),
-                () -> log.warn("Organisation '{}' had no group {}", orgName, OrgGroups.root(orgName)));
+            orgs.delete(realm, org.getId());
+            clients.findUuid(realm, OrgClients.clientId(orgName))
+                    .ifPresent(clientUuid -> clients.delete(realm, clientUuid));
+            groups.findId(realm, OrgGroups.root(orgName)).ifPresentOrElse(
+                    groupId -> groups.delete(realm, groupId),
+                    () -> log.warn("Organisation '{}' had no group {}", orgName, OrgGroups.root(orgName)));
 
-        log.info("Organisation '{}' deleted from realm '{}'", orgName, realm);
+            log.info("Organisation '{}' deleted from realm '{}'", orgName, realm);
+        }
     }
 
     /** Creates the org client and its roles, returns the client internal id (not the clientId). */
@@ -368,15 +389,14 @@ public class OrgServiceImpl implements OrgService {
         String ownerId = users.findIdByEmail(realm, request.ownerEmail())
                 .orElseGet(() -> createOwner(realm, request));
 
-        // Under the lock of the org (see OrgLocks): a disable of the org on this instance runs entirely before (the
-        // org is seen disabled, without the owner) or entirely after (the owner is disabled and listed like any member)
-        MemberEligibility.AfterJoin afterJoin = orgLocks.call(realm, request.name(), () -> {
-            // the org was just created: the owner cannot be a member yet, the result can be ignored
-            orgs.addMember(realm, orgId, ownerId);
-            // the new org may have been disabled meanwhile (see MemberEligibility.afterJoin): the creation fails and
-            // is rolled back, which removes the membership
-            return eligibility.afterJoin(realm, request.name(), ownerId);
-        });
+        // Under the lock of the org, held by create (see ResourceLocks): a disable of the org on this instance runs
+        // entirely before (the org is seen disabled, without the owner) or entirely after (the owner is disabled and
+        // listed like any member)
+        // the org was just created: the owner cannot be a member yet, the result can be ignored
+        orgs.addMember(realm, orgId, ownerId);
+        // the new org may have been disabled meanwhile (see MemberEligibility.afterJoin): the creation fails and
+        // is rolled back, which removes the membership
+        MemberEligibility.AfterJoin afterJoin = eligibility.afterJoin(realm, request.name(), ownerId);
         if (afterJoin == MemberEligibility.AfterJoin.DISABLED_WITH_THE_ORG) {
             // only with a disable from another instance of the core, which the lock does not reach. It listed the
             // owner, and disabled it or is about to: the rollback deletes the org and its list, so the owner would

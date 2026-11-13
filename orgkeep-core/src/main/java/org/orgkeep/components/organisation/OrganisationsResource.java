@@ -49,7 +49,8 @@ public class OrganisationsResource {
     @APIResponseSchema(value = CreateOrgResponse.class, responseCode = "201", responseDescription = "Organisation created")
     @APIResponse(responseCode = "400", description = "Invalid request")
     @APIResponse(responseCode = "409", description = "An organisation or a client with this name already exists, "
-            + "or the existing user given as owner cannot be added to this organisation")
+            + "the existing user given as owner cannot be added to this organisation, "
+            + "or a change is in progress on an organisation of this name (try again later)")
     public CreateOrgResponse create(@Valid @NotNull CreateOrgRequest request){
         return orgService.create(currentRealm.name(), request);
     }
@@ -87,6 +88,7 @@ public class OrganisationsResource {
                     + "failure half way, the same call again finishes the job.")
     @APIResponseSchema(value = OrgDetails.class, responseCode = "200", responseDescription = "The organisation")
     @APIResponse(responseCode = "404", description = "Unknown organisation")
+    @APIResponse(responseCode = "409", description = "A change is in progress on the organisation, try again later")
     public OrgDetails setEnabled(@PathParam("org") String org, @Valid @NotNull UpdateOrgStatusRequest request){
         return orgService.setEnabled(currentRealm.name(), org, request.enabled());
     }
@@ -97,6 +99,7 @@ public class OrganisationsResource {
     @Operation(summary = "Delete an organisation", description = "Also deletes its client and group tree. Users are kept.")
     @APIResponse(responseCode = "204", description = "Organisation deleted")
     @APIResponse(responseCode = "404", description = "Unknown organisation")
+    @APIResponse(responseCode = "409", description = "A change is in progress on the organisation, try again later")
     public void delete(@PathParam("org") String org){
         orgService.delete(currentRealm.name(), org);
     }

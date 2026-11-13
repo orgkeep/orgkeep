@@ -54,9 +54,23 @@ public class TeamAlignment {
      * A product no longer assigned is taken away from them.
      */
     public void align(String realm, String orgName, String catalog, String product) {
-        List<GroupRepresentation> teams = teams(realm, orgName).stream()
+        alignTeams(realm, orgName, catalog, product, teams(realm, orgName).stream()
                 .filter(team -> teamMapper.gives(attributes(team), catalog, product))
-                .toList();
+                .toList());
+    }
+
+    /**
+     * Realigns one team only, read again here (attributes included). For the callers holding the lock of that team
+     * and not the whole org (ORG shared + TEAM exclusive): the other teams are written by other callers and must not
+     * be touched from a snapshot. Nothing happens if the team is gone or does not give the product.
+     */
+    public void alignTeam(String realm, String orgName, String catalog, String product, String teamName) {
+        groups.find(realm, OrgGroups.userGroup(orgName, teamName))
+                .filter(team -> teamMapper.gives(attributes(team), catalog, product))
+                .ifPresent(team -> alignTeams(realm, orgName, catalog, product, List.of(team)));
+    }
+
+    private void alignTeams(String realm, String orgName, String catalog, String product, List<GroupRepresentation> teams) {
         if (teams.isEmpty()) {
             return;
         }

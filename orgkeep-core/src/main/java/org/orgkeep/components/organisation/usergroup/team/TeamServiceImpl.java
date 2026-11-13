@@ -186,7 +186,8 @@ public class TeamServiceImpl implements TeamService {
 
         groups.replaceAttributes(realm, teamId, teamMapper.withChoices(groups.attributes(realm, teamId),
                 catalog, product, request.features(), request.quota(), cycle, featureQuotas));
-        alignment.align(realm, orgName, catalog, product);
+        // this team only: the others are written under their own lock
+        alignment.alignTeam(realm, orgName, catalog, product, team);
         log.info("Product '{}' of catalog '{}' given by team '{}' of organisation '{}' in realm '{}'",
                 product, catalog, team, orgName, realm);
 

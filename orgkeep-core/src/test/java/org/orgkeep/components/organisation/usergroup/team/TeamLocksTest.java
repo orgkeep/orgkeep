@@ -13,6 +13,7 @@ import org.orgkeep.api.model.CreateProductRequest;
 import org.orgkeep.api.model.CreateUserGroupRequest;
 import org.orgkeep.api.model.GrantProductRequest;
 import org.orgkeep.api.model.QuotaCycle;
+import org.orgkeep.config.OrgkeepConfig;
 import org.orgkeep.components.lock.HeldLocks;
 import org.orgkeep.components.lock.LockMode;
 import org.orgkeep.components.lock.LockRequest;
@@ -30,6 +31,8 @@ import org.junit.jupiter.api.Test;
 import org.keycloak.admin.client.Keycloak;
 import org.mockito.Mockito;
 
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
@@ -39,7 +42,9 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -65,6 +70,7 @@ class TeamLocksTest {
     @Inject TeamService teamService;
     @Inject UserGroupService userGroupService;
     @Inject ResourceLocks locks;
+    @Inject OrgkeepConfig config;
     @InjectSpy KeycloakGroups groups;
 
     private TestRealm testRealm;
@@ -99,9 +105,9 @@ class TeamLocksTest {
             Future<?> first = inRequest(executor, () -> grant("ops", "a"));
             assertTrue(inside.await(30, TimeUnit.SECONDS));
 
-            long start = System.nanoTime();
+            // the call returns while the first one is still held on its latch: the second team did not wait for it
             grant("dev", "b");
-            assertTrue(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start) < 1500, "the second team waited");
+            assertFalse(first.isDone(), "the first write should still be held");
             assertNotNull(teamAttributes("dev").get("grant:prod:b"));
 
             release.countDown();
@@ -135,7 +141,7 @@ class TeamLocksTest {
             release.countDown();
             executor.shutdownNow();
         }
-        Map<String, java.util.List<String>> attributes = teamAttributes("ops");
+        Map<String, List<String>> attributes = teamAttributes("ops");
         assertNotNull(attributes.get("grant:prod:a"));
         assertNotNull(attributes.get("grant:prod:b"));
     }
@@ -160,9 +166,25 @@ class TeamLocksTest {
             release.countDown();
             executor.shutdownNow();
         }
-        Map<String, java.util.List<String>> attributes = teamAttributes("ops");
+        Map<String, List<String>> attributes = teamAttributes("ops");
         assertNotNull(attributes.get("grant:prod:a"));
-        assertEquals(null, attributes.get("grant:prod:b"));
+        assertNull(attributes.get("grant:prod:b"));
+    }
+
+    // Giving a product on one team holds ORG shared + that TEAM only: it must not rewrite the other teams from a
+    // snapshot. "dev" is made stale (its pool attribute removed) and stays so after "ops" is written
+    @Test
+    void grantingAProductDoesNotRealignTheOtherTeams() {
+        grant("dev", "a");
+        String devId = testRealm.resource().getGroupByPath("/" + ORG + "/user-groups/dev").getId();
+        Map<String, List<String>> stale = new HashMap<>(teamAttributes("dev"));
+        assertNotNull(stale.remove("prod.a.quotas"));
+        groups.replaceAttributes(realm(), devId, stale);
+
+        grant("ops", "a");
+
+        assertNull(teamAttributes("dev").get("prod.a.quotas"));
+        assertNotNull(teamAttributes("ops").get("prod.a.quotas"));
     }
 
     // A renegotiation holds the org exclusively: a team write of the org is refused after max-wait
@@ -189,7 +211,7 @@ class TeamLocksTest {
             release.countDown();
             executor.shutdownNow();
         }
-        assertEquals(null, teamAttributes("ops").get("grant:prod:b"));
+        assertNull(teamAttributes("ops").get("grant:prod:b"));
     }
 
     // The other way round: a team write holds the org shared, the renegotiation and the unassignment (a single
@@ -209,7 +231,8 @@ class TeamLocksTest {
             assertThrowsExactly(ResourceBusyException.class, () -> productService.assign(realm(), ORG, CATALOG, "a",
                     new AssignProductRequest(2000L, QuotaCycle.MONTHLY)));
             assertThrowsExactly(ResourceBusyException.class, () -> productService.unassign(realm(), ORG, CATALOG, "b"));
-            assertTrue(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start) < 1500, "the refusal waited");
+            // a call that waited would have taken at least max-wait
+            assertTrue(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start) < maxWaitMillis(), "the refusal waited");
 
             release.countDown();
             write.get(30, TimeUnit.SECONDS);
@@ -258,11 +281,15 @@ class TeamLocksTest {
             assertThrowsExactly(ResourceBusyException.class, () -> productService.assign(realm(), ORG, CATALOG, "a",
                     new AssignProductRequest(5L, QuotaCycle.DAILY)));
             assertThrowsExactly(ResourceBusyException.class, () -> productService.unassign(realm(), ORG, CATALOG, "a"));
-            assertTrue(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start) < 1500, "the refusal waited");
+            assertTrue(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start) < maxWaitMillis(), "the refusal waited");
         } finally {
             executor.shutdownNow();
         }
         productService.unassign(realm(), ORG, CATALOG, "a");
+    }
+
+    private long maxWaitMillis() {
+        return config.locks().maxWait().toMillis();
     }
 
     private String realm() {
@@ -273,7 +300,7 @@ class TeamLocksTest {
         teamService.grantProduct(realm(), ORG, team, CATALOG, product, GrantProductRequest.allFeatures());
     }
 
-    private Map<String, java.util.List<String>> teamAttributes(String team) {
+    private Map<String, List<String>> teamAttributes(String team) {
         return testRealm.resource().getGroupByPath("/" + ORG + "/user-groups/" + team).getAttributes();
     }
 

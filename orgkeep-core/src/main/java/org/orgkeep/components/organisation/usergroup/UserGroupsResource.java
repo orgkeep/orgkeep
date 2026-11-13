@@ -74,6 +74,8 @@ public class UserGroupsResource {
             description = "The member gets the products of the group. In the group admin, the member becomes org admin.")
     @APIResponse(responseCode = "204", description = "Member in the group")
     @APIResponse(responseCode = "404", description = "Unknown organisation or user group, or not a member of the organisation")
+    @APIResponse(responseCode = "409", description = "A change is in progress on the organisation, the group or "
+            + "the user, try again later")
     public void addMember(@PathParam("org") String org, @PathParam("group") String group,
                           @PathParam("userId") String userId){
         userGroupService.addMember(currentRealm.name(), org, group, userId);
@@ -85,7 +87,8 @@ public class UserGroupsResource {
             description = "The member loses the products of the group, unless another group grants them.")
     @APIResponse(responseCode = "204", description = "Member out of the group")
     @APIResponse(responseCode = "404", description = "Unknown organisation or user group")
-    @APIResponse(responseCode = "409", description = "Group users: every member stays in it")
+    @APIResponse(responseCode = "409", description = "Group users: every member stays in it, or a change is in "
+            + "progress on the organisation, the group or the user (try again later)")
     public void removeMember(@PathParam("org") String org, @PathParam("group") String group,
                              @PathParam("userId") String userId){
         userGroupService.removeMember(currentRealm.name(), org, group, userId);

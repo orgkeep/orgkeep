@@ -98,7 +98,8 @@ public class CatalogRolesResource {
     @Operation(summary = "Grant the role directly to a user", description = "Idempotent. The user must be a member of an organisation.")
     @APIResponse(responseCode = "204", description = "Role granted")
     @APIResponse(responseCode = "404", description = "Unknown catalog, role or user")
-    @APIResponse(responseCode = "409", description = "The user is not a member of an organisation")
+    @APIResponse(responseCode = "409", description = "The user is not a member of an organisation, or a change is "
+            + "in progress on the user (try again later)")
     public void grant(@PathParam("catalog") String catalog, @PathParam("role") String role, @PathParam("userId") String userId){
         catalogRoleService.grant(currentRealm.name(), catalog, role, userId);
     }
@@ -108,6 +109,7 @@ public class CatalogRolesResource {
     @Operation(summary = "Revoke the role granted directly to a user", description = "Idempotent.")
     @APIResponse(responseCode = "204", description = "Role revoked")
     @APIResponse(responseCode = "404", description = "Unknown catalog, role or user")
+    @APIResponse(responseCode = "409", description = "A change is in progress on the user, try again later")
     public void revoke(@PathParam("catalog") String catalog, @PathParam("role") String role, @PathParam("userId") String userId){
         catalogRoleService.revoke(currentRealm.name(), catalog, role, userId);
     }

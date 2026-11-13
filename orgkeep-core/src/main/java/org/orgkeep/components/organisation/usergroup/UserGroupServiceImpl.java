@@ -9,6 +9,10 @@ import org.orgkeep.api.model.CreateUserGroupRequest;
 import org.orgkeep.api.model.OrgGroups;
 import org.orgkeep.api.model.UserGroup;
 import org.orgkeep.components.catalog.CatalogSetup;
+import org.orgkeep.components.lock.HeldLocks;
+import org.orgkeep.components.lock.LockMode;
+import org.orgkeep.components.lock.LockRequest;
+import org.orgkeep.components.lock.ResourceLocks;
 import org.orgkeep.components.organisation.usergroup.team.TeamMapper;
 import org.orgkeep.repository.keycloak.KeycloakGroups;
 import org.orgkeep.repository.keycloak.KeycloakOrgs;
@@ -32,6 +36,7 @@ public class UserGroupServiceImpl implements UserGroupService {
     private final CatalogSetup catalogSetup;
     private final UserGroupMapper userGroupMapper;
     private final TeamMapper teamMapper;
+    private final ResourceLocks locks;
 
     /** One call for the groups, then two per group: its members and its role mappings. */
     @Override
@@ -76,30 +81,40 @@ public class UserGroupServiceImpl implements UserGroupService {
 
     @Override
     public void addMember(String realm, String orgName, String groupName, String userId) {
-        OrganizationRepresentation org = orgs.getByName(realm, orgName);
-        String groupId = groupId(realm, orgName, groupName);
-        // a group of the org only takes members of the org: the products it grants are those of the org
-        if (!orgs.isMember(realm, org.getId(), userId)) {
-            throw new MemberNotFoundException(orgName, userId);
-        }
+        // ORG shared (refused while the org is being disabled or deleted), the team shared (its attributes are not
+        // written meanwhile), the user exclusively (a user being removed from the org must not join a team of it)
+        try (HeldLocks ignored = locks.acquire(LockRequest.org(realm, orgName, LockMode.SHARED),
+                LockRequest.team(realm, orgName, groupName, LockMode.SHARED),
+                LockRequest.userById(realm, userId, LockMode.EXCLUSIVE))) {
+            OrganizationRepresentation org = orgs.getByName(realm, orgName);
+            String groupId = groupId(realm, orgName, groupName);
+            // a group of the org only takes members of the org: the products it grants are those of the org
+            if (!orgs.isMember(realm, org.getId(), userId)) {
+                throw new MemberNotFoundException(orgName, userId);
+            }
 
-        // joining a group the user is already in changes nothing in Keycloak
-        groups.join(realm, userId, groupId);
+            // joining a group the user is already in changes nothing in Keycloak
+            groups.join(realm, userId, groupId);
+        }
     }
 
     @Override
     public void removeMember(String realm, String orgName, String groupName, String userId) {
-        orgs.getByName(realm, orgName);
-        if (OrgGroups.USERS.equals(groupName)) {
-            // the group users gives org-user: leaving it would leave a member without any role in the org
-            throw new OperationNotAllowedException(
-                    "Every member stays in the user group '%s': remove the member from the organisation instead"
-                            .formatted(groupName));
-        }
-        String groupId = groupId(realm, orgName, groupName);
+        try (HeldLocks ignored = locks.acquire(LockRequest.org(realm, orgName, LockMode.SHARED),
+                LockRequest.team(realm, orgName, groupName, LockMode.SHARED),
+                LockRequest.userById(realm, userId, LockMode.EXCLUSIVE))) {
+            orgs.getByName(realm, orgName);
+            if (OrgGroups.USERS.equals(groupName)) {
+                // the group users gives org-user: leaving it would leave a member without any role in the org
+                throw new OperationNotAllowedException(
+                        "Every member stays in the user group '%s': remove the member from the organisation instead"
+                                .formatted(groupName));
+            }
+            String groupId = groupId(realm, orgName, groupName);
 
-        // leaving a group the user is not in changes nothing in Keycloak
-        groups.leave(realm, userId, groupId);
+            // leaving a group the user is not in changes nothing in Keycloak
+            groups.leave(realm, userId, groupId);
+        }
     }
 
     /** The parent group /{org}/user-groups, created with the organisation. */

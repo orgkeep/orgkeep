@@ -75,20 +75,27 @@ public class OrgMemberServiceImpl implements OrgMemberService {
      * A short write: ORG is locked shared from the start, before any user is created, and for the whole call (see
      * ResourceLocks). Compatible with other adds, but refused (409, after a short wait) while a heavy operation holds
      * the org exclusively: a disable or a deletion in progress. So no user is created for an org being deleted.
+     * <p>
+     * The email is locked exclusively too (the user may not exist yet), then the id once the user is found: two adds of
+     * the same email in two organisations cannot both pass "is the user in another org?" and then join, the second
+     * waits for the first (and is then refused as a member of another org) or gets a 409 after the short wait.
      */
     @Override
     public OrgMember add(String realm, String orgName, AddMemberRequest request) {
-        try (HeldLocks ignored = locks.acquire(LockRequest.org(realm, orgName, LockMode.SHARED))) {
-            return addLocked(realm, orgName, request);
+        try (HeldLocks held = locks.acquire(LockRequest.org(realm, orgName, LockMode.SHARED),
+                LockRequest.userByEmail(realm, request.email(), LockMode.EXCLUSIVE))) {
+            return addLocked(realm, orgName, request, held);
         }
     }
 
-    private OrgMember addLocked(String realm, String orgName, AddMemberRequest request) {
+    private OrgMember addLocked(String realm, String orgName, AddMemberRequest request, HeldLocks held) {
         OrganizationRepresentation org = orgs.getByName(realm, orgName);
         // checked before the user is created: the members of a disabled org are disabled (see OrgService.setEnabled)
         eligibility.checkEnabled(org);
 
         Optional<String> existingId = users.findIdByEmail(realm, request.email());
+        // an existing user is also locked by id, the key the other writes on a user use (remove, roles, teams)
+        existingId.ifPresent(id -> held.add(LockRequest.userById(realm, id, LockMode.EXCLUSIVE)));
         // an existing user may be privileged or a member of another org; a member of this org is refused just below
         existingId.ifPresent(userId -> eligibility.checkReusable(realm, orgName, userId, request.email()));
         String userId = existingId.orElseGet(() -> createUser(realm, orgName, request));
@@ -127,12 +134,15 @@ public class OrgMemberServiceImpl implements OrgMemberService {
     @Override
     public void remove(String realm, String orgName, String userId) {
         LockMode mode = writesTheOrg(orgs.getByName(realm, orgName), null) ? LockMode.EXCLUSIVE : LockMode.SHARED;
-        HeldLocks held = locks.acquire(LockRequest.org(realm, orgName, mode));
+        // the user is locked by id, exclusively, with the org: a role or a team given to the user meanwhile waits
+        HeldLocks held = locks.acquire(LockRequest.org(realm, orgName, mode),
+                LockRequest.userById(realm, userId, LockMode.EXCLUSIVE));
         try {
             OrganizationRepresentation org = orgs.getByName(realm, orgName);
             if (mode == LockMode.SHARED && writesTheOrg(org, userId)) {
                 held.close();
-                held = locks.acquire(LockRequest.org(realm, orgName, LockMode.EXCLUSIVE));
+                held = locks.acquire(LockRequest.org(realm, orgName, LockMode.EXCLUSIVE),
+                        LockRequest.userById(realm, userId, LockMode.EXCLUSIVE));
                 // no new decision on a new read: under the exclusive lock the org is stable
                 org = orgs.getByName(realm, orgName);
             }

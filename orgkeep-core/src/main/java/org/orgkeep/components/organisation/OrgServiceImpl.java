@@ -66,17 +66,26 @@ public class OrgServiceImpl implements OrgService {
     public CreateOrgResponse create(String realm, CreateOrgRequest request) {
         // a short write: waits a little for a change in progress on an org of this name (a creation of the same name,
         // a deletion), then answers 409. Held for the whole creation, owner included
-        try (HeldLocks ignored = locks.acquire(LockRequest.org(realm, request.name(), LockMode.EXCLUSIVE))) {
-            return createLocked(realm, request);
+        // The owner is locked by email too (and by id below if the user exists), like an add of a member: the same email
+        // cannot become the owner of this org and a member of another one at the same time
+        List<LockRequest> requests = new ArrayList<>();
+        requests.add(LockRequest.org(realm, request.name(), LockMode.EXCLUSIVE));
+        if (request.ownerEmail() != null) {
+            requests.add(LockRequest.userByEmail(realm, request.ownerEmail(), LockMode.EXCLUSIVE));
+        }
+        try (HeldLocks held = locks.acquire(requests.toArray(LockRequest[]::new))) {
+            return createLocked(realm, request, held);
         }
     }
 
-    private CreateOrgResponse createLocked(String realm, CreateOrgRequest request) {
+    private CreateOrgResponse createLocked(String realm, CreateOrgRequest request, HeldLocks held) {
         // checked before anything is created: an existing user may be privileged or already belong to another org.
         // A member of an org with this very name is not refused there: the org already exists, reported below as such
         if (request.ownerEmail() != null) {
-            users.findIdByEmail(realm, request.ownerEmail())
-                    .ifPresent(userId -> eligibility.checkReusable(realm, request.name(), userId, request.ownerEmail()));
+            users.findIdByEmail(realm, request.ownerEmail()).ifPresent(userId -> {
+                held.add(LockRequest.userById(realm, userId, LockMode.EXCLUSIVE));
+                eligibility.checkReusable(realm, request.name(), userId, request.ownerEmail());
+            });
         }
 
         String orgId = orgs.create(realm, orgMapper.toOrgRepresentation(request))

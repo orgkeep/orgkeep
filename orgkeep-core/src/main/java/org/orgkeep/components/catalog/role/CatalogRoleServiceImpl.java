@@ -10,6 +10,10 @@ import org.orgkeep.api.model.CreateCatalogRoleRequest;
 import org.orgkeep.api.model.RoleHolder;
 import org.orgkeep.api.model.UpdateCatalogRoleRequest;
 import org.orgkeep.components.catalog.CatalogSetup;
+import org.orgkeep.components.lock.HeldLocks;
+import org.orgkeep.components.lock.LockMode;
+import org.orgkeep.components.lock.LockRequest;
+import org.orgkeep.components.lock.ResourceLocks;
 import org.orgkeep.components.organisation.usergroup.team.TeamAlignment;
 import org.orgkeep.repository.keycloak.KeycloakClientScopes;
 import org.orgkeep.repository.keycloak.KeycloakClients;
@@ -34,6 +38,7 @@ public class CatalogRoleServiceImpl implements CatalogRoleService {
     private final CatalogSetup catalogSetup;
     private final TeamAlignment teamAlignment;
     private final CatalogRoleMapper catalogRoleMapper;
+    private final ResourceLocks locks;
 
     @Override
     public CatalogRole create(String realm, String catalog, CreateCatalogRoleRequest request) {
@@ -98,12 +103,15 @@ public class CatalogRoleServiceImpl implements CatalogRoleService {
     public void grant(String realm, String catalog, String role, String userId) {
         CatalogSetup.Ids ids = catalogSetup.get(realm, catalog);
         getRole(realm, catalog, ids, role);
-        users.find(realm, userId).orElseThrow(() -> new UserNotFoundException(realm, userId));
-        // the catalog roles are for the users of the orgs (and later their service accounts), not for anyone in the realm
-        if (orgs.organisationsOf(realm, userId).isEmpty()) {
-            throw new OperationNotAllowedException("User '%s' is not a member of an organisation".formatted(userId));
+        // a short write on the user: refused (409) while the user is being removed from its org or changed otherwise
+        try (HeldLocks ignored = locks.acquire(LockRequest.userById(realm, userId, LockMode.EXCLUSIVE))) {
+            users.find(realm, userId).orElseThrow(() -> new UserNotFoundException(realm, userId));
+            // the catalog roles are for the users of the orgs (and later their service accounts), not for anyone in the realm
+            if (orgs.organisationsOf(realm, userId).isEmpty()) {
+                throw new OperationNotAllowedException("User '%s' is not a member of an organisation".formatted(userId));
+            }
+            clients.grantToUser(realm, ids.clientUuid(), userId, role);
         }
-        clients.grantToUser(realm, ids.clientUuid(), userId, role);
         log.info("Catalog role '{}' of catalog '{}' granted to user '{}' in realm '{}'", role, catalog, userId, realm);
     }
 
@@ -111,8 +119,10 @@ public class CatalogRoleServiceImpl implements CatalogRoleService {
     public void revoke(String realm, String catalog, String role, String userId) {
         CatalogSetup.Ids ids = catalogSetup.get(realm, catalog);
         getRole(realm, catalog, ids, role);
-        users.find(realm, userId).orElseThrow(() -> new UserNotFoundException(realm, userId));
-        clients.revokeFromUser(realm, ids.clientUuid(), userId, role);
+        try (HeldLocks ignored = locks.acquire(LockRequest.userById(realm, userId, LockMode.EXCLUSIVE))) {
+            users.find(realm, userId).orElseThrow(() -> new UserNotFoundException(realm, userId));
+            clients.revokeFromUser(realm, ids.clientUuid(), userId, role);
+        }
         log.info("Catalog role '{}' of catalog '{}' revoked from user '{}' in realm '{}'", role, catalog, userId, realm);
     }
 

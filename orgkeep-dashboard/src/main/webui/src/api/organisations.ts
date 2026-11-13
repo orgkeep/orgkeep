@@ -226,6 +226,17 @@ export function useRemoveOrgMember(org: string) {
   });
 }
 
+// Disables or enables a member. Disabling also closes their sessions. The core refuses (409) oneself, an owner,
+// a privileged account and an organisation that is disabled: the message of the core is shown as it is.
+export function useSetMemberEnabled(org: string) {
+  const invalidate = useInvalidateMembers(org);
+  return useMutation({
+    mutationFn: ({ userId, enabled }: { userId: string; enabled: boolean }) =>
+      putJson<OrgMember>(`${membersUrl(org)}/${encodeURIComponent(userId)}/enabled`, { enabled }),
+    onSuccess: invalidate,
+  });
+}
+
 export function useOrgProducts(org: string) {
   return useQuery({
     queryKey: [ORGANISATIONS_KEY, 'detail', org, 'products'],

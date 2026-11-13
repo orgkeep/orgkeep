@@ -425,7 +425,24 @@
     "columns": {
       "name": "Nom",
       "email": "Email",
-      "role": "Rôle"
+      "role": "Rôle",
+      "status": "Statut"
+    },
+    "disable": {
+      "button": "Désactiver",
+      "title": "Désactiver {{member}} ?",
+      "message": "Le membre ne peut plus se connecter et ses sessions sont fermées. Un token déjà émis reste valable jusqu'à son expiration. Le membre reste dans l'organisation, ses teams et ses produits.",
+      "confirm": "Désactiver"
+    },
+    "enable": {
+      "button": "Réactiver",
+      "title": "Réactiver {{member}} ?",
+      "message": "Le membre peut de nouveau se connecter.",
+      "confirm": "Réactiver"
+    },
+    "status": {
+      "active": "Actif",
+      "disabled": "Désactivé"
     },
     "removeTitle": "Retirer {{member}} ?",
     "removeMessage": "Le membre quitte l'organisation {{org}} et ses teams, et perd ses produits. Le compte est conservé.",

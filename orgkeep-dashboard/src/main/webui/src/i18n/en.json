@@ -425,7 +425,24 @@
     "columns": {
       "name": "Name",
       "email": "Email",
-      "role": "Role"
+      "role": "Role",
+      "status": "Status"
+    },
+    "disable": {
+      "button": "Disable",
+      "title": "Disable {{member}}?",
+      "message": "The member can no longer log in and their sessions are closed. A token already issued stays valid until it expires. The member stays in the organisation, its teams and products.",
+      "confirm": "Disable"
+    },
+    "enable": {
+      "button": "Enable",
+      "title": "Enable {{member}}?",
+      "message": "The member can log in again.",
+      "confirm": "Enable"
+    },
+    "status": {
+      "active": "Active",
+      "disabled": "Disabled"
     },
     "removeTitle": "Remove {{member}}?",
     "removeMessage": "The member leaves the organisation {{org}} and its teams, and loses their products. The account is kept.",

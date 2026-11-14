@@ -23,7 +23,7 @@ For `linux/amd64` and `linux/arm64`, on the GitHub Container Registry:
 
 | Image | What |
 |---|---|
-| `ghcr.io/orgkeep/orgkeep:{{version}}` | The REST API and the dashboard, one application ([configuration](https://github.com/orgkeep/orgkeep/tree/v{{version}}/orgkeep-dashboard#configuration)) |
+| `ghcr.io/orgkeep/orgkeep:{{version}}` | The REST API and the dashboard, one application ([configuration](https://orgkeep.org/docs/latest/reference/configuration/)) |
 | `ghcr.io/orgkeep/orgkeep-core:{{version}}` | The REST API alone, to build your own screens ([configuration](https://orgkeep.org/docs/latest/reference/configuration/)) |
 | `ghcr.io/orgkeep/orgkeep-keycloak:{{version}}` | Keycloak with the Orgkeep theme |
 

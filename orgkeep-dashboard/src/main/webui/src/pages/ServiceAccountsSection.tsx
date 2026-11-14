@@ -168,7 +168,7 @@ export default function ServiceAccountsSection({ org, realmOwner = false }: Serv
                           </Button>
                         </Menu.Target>
                         <Menu.Dropdown>
-                          <Menu.Item onClick={() => setFormTarget(account)}>{t('common.edit')}</Menu.Item>
+                          <Menu.Item onClick={() => setFormTarget(account)} disabled={!catalogs.data}>{t('common.edit')}</Menu.Item>
                           <Menu.Item onClick={() => setAction({ kind: 'rotate', account })}>
                             {t('serviceAccounts.rotate.button')}
                           </Menu.Item>
@@ -193,7 +193,9 @@ export default function ServiceAccountsSection({ org, realmOwner = false }: Serv
           key: a new key gives a new form, starting from the values of the service account to edit */}
       {catalogs.data && (
         <ServiceAccountModal
-          key={formTarget === 'new' || formTarget === null ? 'new' : formTarget.name}
+          // The form reads its initial values only once, when it is created. A different key makes React create a new
+          // form: so the preselected catalog follows the catalogs of the org (their list is in the key)
+          key={formTarget === 'new' || formTarget === null ? `new|${catalogs.data.join()}` : formTarget.name}
           org={org}
           opened={formTarget !== null}
           onClose={() => setFormTarget(null)}

@@ -1,6 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deleteRequest, getJson, postJson, postRequest, putJson } from './http';
-import { SERVICE_ACCOUNTS_KEY } from './serviceAccounts';
+import { SERVICE_ACCOUNTS_KEY } from './queryKeys';
 
 // The organisations endpoints of the API of the core (OrganisationsResource, OrgProductsResource,
 // OrgCatalogsResource and OrgAdminResource in orgkeep-core), called directly by the front.

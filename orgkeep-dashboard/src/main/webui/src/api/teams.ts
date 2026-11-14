@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deleteRequest, getJson, postJson, putJson, putRequest } from './http';
+import { SERVICE_ACCOUNTS_KEY, TEAMS_KEY } from './queryKeys';
 import type { FeatureQuota, QuotaCycle } from './organisations';
 
 // The teams of an organisation, managed by its org admins (UserGroupsResource, TeamProductsResource,
@@ -86,7 +87,6 @@ export interface GrantProductRequest {
 }
 
 // Every query of this file starts with this key and the org: invalidating them refreshes the whole team screens
-const TEAMS_KEY = 'teams';
 
 // encodeURIComponent: the names come from the URL, they must not be able to change the path of the call
 function orgUrl(org: string): string {
@@ -135,7 +135,7 @@ export function useGrantableRoles(org: string) {
 function useInvalidateTeams(org: string) {
   const queryClient = useQueryClient();
   return () => {
-    queryClient.invalidateQueries({ queryKey: ['serviceAccounts', org] });
+    queryClient.invalidateQueries({ queryKey: [SERVICE_ACCOUNTS_KEY, org] });
     return queryClient.invalidateQueries({ queryKey: [TEAMS_KEY, org] });
   };
 }

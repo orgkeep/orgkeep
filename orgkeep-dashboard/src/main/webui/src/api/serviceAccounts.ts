@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deleteRequest, getJson, postJson, putJson } from './http';
+import { SERVICE_ACCOUNTS_KEY, TEAMS_KEY } from './queryKeys';
 
 // The service accounts of an organisation, managed by its org admins and by the realm owner
 // (ServiceAccountsResource in orgkeep-core). A service account is an application of the org that gets tokens
@@ -49,7 +50,6 @@ export interface UpdateServiceAccountRequest {
 
 // Every query of this file starts with this key and the org. The teams show the service accounts too
 // (api/teams.ts invalidates this key when a team changes)
-export const SERVICE_ACCOUNTS_KEY = 'serviceAccounts';
 
 function orgUrl(org: string): string {
   return `/api/organisations/${encodeURIComponent(org)}`;
@@ -83,12 +83,13 @@ export function useOrgCatalogs(org: string) {
 function useInvalidate(org: string) {
   const queryClient = useQueryClient();
   return () => {
-    queryClient.invalidateQueries({ queryKey: ['teams', org] });
+    queryClient.invalidateQueries({ queryKey: [TEAMS_KEY, org] });
     return queryClient.invalidateQueries({ queryKey: [SERVICE_ACCOUNTS_KEY, org] });
   };
 }
 
-// The credentials are in the data of the mutation: the caller shows them once, they are never put in the query cache
+// The credentials come in the answer: the caller copies them into its own state to show them once (and resets this
+// mutation), they are never put in the query cache
 export function useCreateServiceAccount(org: string) {
   const invalidate = useInvalidate(org);
   return useMutation({
@@ -106,7 +107,7 @@ export function useUpdateServiceAccount(org: string) {
   });
 }
 
-// The old secret stops working at once. The new one is only in the data of this mutation
+// The old secret stops working at once. The new one is only in the answer: the caller shows it once, then resets this mutation
 export function useRotateServiceAccountSecret(org: string) {
   return useMutation({
     mutationFn: (name: string) => postJson<ServiceAccountCredentials>(`${serviceAccountUrl(org, name)}/secret`, {}),

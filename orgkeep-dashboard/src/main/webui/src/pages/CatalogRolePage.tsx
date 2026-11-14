@@ -226,7 +226,8 @@ function HoldersSection({ catalog, role }: { catalog: string; role: string }) {
   );
 }
 
-// Two steps: an organisation, then one of its members. The core only gives a catalog role to a member of an org
+// Two steps: an organisation, then one of its members or one of its service accounts. The core only gives a catalog
+// role to a member of an org or to a service account of an org
 interface GrantProps {
   catalog: string;
   role: string;

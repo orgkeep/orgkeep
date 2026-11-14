@@ -9,7 +9,7 @@ import java.util.Set;
  * @param id          Keycloak organisation id
  * @param owners      users holding the org-owner role directly, sorted by username. Empty if the org has no owner
  *                    yet, or no org client (created outside of Orgkeep)
- * @param memberCount members of the Keycloak organisation, owners included
+ * @param memberCount people of the organisation, owners included (not its service accounts, which are members of the Keycloak organisation too)
  * @param products    products assigned to the org, as "catalog/product" (groups under /{org}/catalogs), sorted
  */
 public record OrgSummary(

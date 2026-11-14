@@ -38,6 +38,11 @@ public class KeycloakUrls {
         return issuer(realm) + "/protocol/openid-connect/token/introspect";
     }
 
+    /** The token endpoint of the realm, where the service accounts get their tokens (client credentials). */
+    public String token(String realm) {
+        return issuer(realm) + "/protocol/openid-connect/token";
+    }
+
     /** The admin console of the realm: a realm owner logs in there with their own account. */
     public String console(String realm) {
         return publicUrl() + "/admin/" + realm + "/console/";

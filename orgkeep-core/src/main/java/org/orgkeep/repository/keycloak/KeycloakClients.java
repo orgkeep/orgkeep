@@ -143,6 +143,47 @@ public class KeycloakClients {
         }
     }
 
+    /**
+     * Keeps only the default client scopes of these names and removes every optional one: the client starts from what
+     * the realm gave it and is reduced to the scopes it needs. Idempotent.
+     */
+    public void reduceScopes(String realm, String clientUuid, Set<String> keptDefaultScopeNames) {
+        var client = keycloak.realm(realm).clients().get(clientUuid);
+        client.getDefaultClientScopes().stream()
+                .filter(scope -> !keptDefaultScopeNames.contains(scope.getName()))
+                .forEach(scope -> client.removeDefaultClientScope(scope.getId()));
+        client.getOptionalClientScopes()
+                .forEach(scope -> client.removeOptionalClientScope(scope.getId()));
+    }
+
+    /** Names of the default client scopes of the client. */
+    public Set<String> defaultScopeNames(String realm, String clientUuid) {
+        return keycloak.realm(realm).clients().get(clientUuid).getDefaultClientScopes().stream()
+                .map(ClientScopeRepresentation::getName)
+                .collect(Collectors.toSet());
+    }
+
+    /** Names of the optional client scopes of the client. */
+    public Set<String> optionalScopeNames(String realm, String clientUuid) {
+        return keycloak.realm(realm).clients().get(clientUuid).getOptionalClientScopes().stream()
+                .map(ClientScopeRepresentation::getName)
+                .collect(Collectors.toSet());
+    }
+
+    /** The service-account user of the client, empty if the client has no service account. */
+    public Optional<UserRepresentation> serviceAccountUser(String realm, String clientUuid) {
+        try {
+            return Optional.ofNullable(keycloak.realm(realm).clients().get(clientUuid).getServiceAccountUser());
+        } catch (WebApplicationException e) {
+            // 400 when the service account is not enabled on the client
+            boolean notEnabled = e.getResponse().getStatus() == Response.Status.BAD_REQUEST.getStatusCode();
+            if (!KeycloakErrors.isNotFound(e) && !notEnabled) {
+                throw e;
+            }
+            return Optional.empty();
+        }
+    }
+
     /** Removes the client scope from the client, default or optional. Idempotent. */
     public void removeScope(String realm, String clientUuid, String scopeId) {
         var client = keycloak.realm(realm).clients().get(clientUuid);

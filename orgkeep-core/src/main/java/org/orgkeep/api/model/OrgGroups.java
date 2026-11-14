@@ -10,6 +10,8 @@ import java.util.regex.Pattern;
  *     /admin        org-admin
  *     /users        org-user, default group of new members
  *     /...          created by the org admins (the teams)
+ *   /service-accounts  the service-account users of the org (proof that a service account belongs to it):
+ *                      no role, no attribute
  *   /catalogs
  *     /{catalog}
  *       /{product}  assignment of the product to the org: holds the product role and what the org negotiated.
@@ -18,6 +20,7 @@ import java.util.regex.Pattern;
  */
 public final class OrgGroups {
     public static final String USER_GROUPS = "user-groups";
+    public static final String SERVICE_ACCOUNTS = "service-accounts";
     public static final String CATALOGS = "catalogs";
     public static final String ADMIN = "admin";
     public static final String USERS = "users";
@@ -41,6 +44,10 @@ public final class OrgGroups {
 
     public static String userGroups(String orgName) {
         return root(orgName) + "/" + USER_GROUPS;
+    }
+
+    public static String serviceAccounts(String orgName) {
+        return root(orgName) + "/" + SERVICE_ACCOUNTS;
     }
 
     public static String catalogs(String orgName) {
@@ -108,6 +115,11 @@ public final class OrgGroups {
      * and a "/" in it would point to another group of the tree.
      */
     public static boolean isUserGroupName(String name) {
+        return USER_GROUP_NAME.matcher(name).matches();
+    }
+
+    /** Same rule as CreateServiceAccountRequest.name (the team rule), for a name read from the URL. */
+    public static boolean isServiceAccountName(String name) {
         return USER_GROUP_NAME.matcher(name).matches();
     }
 

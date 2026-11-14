@@ -150,6 +150,20 @@ public class KeycloakGroups {
         return ids;
     }
 
+    /** The direct members of the group, not of its sub groups, brief representations (id, username, enabled). */
+    public List<UserRepresentation> members(String realm, String groupId) {
+        // Keycloak pages the members (100 by default): read every page
+        List<UserRepresentation> members = new ArrayList<>();
+        List<UserRepresentation> page;
+        int first = 0;
+        do {
+            page = keycloak.realm(realm).groups().group(groupId).members(first, PAGE_SIZE, true);
+            members.addAll(page);
+            first += PAGE_SIZE;
+        } while (page.size() == PAGE_SIZE);
+        return members;
+    }
+
     /**
      * The client roles granted directly to the group, for every client in one call: clientId → role names.
      */

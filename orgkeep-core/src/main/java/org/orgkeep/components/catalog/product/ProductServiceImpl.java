@@ -330,6 +330,8 @@ public class ProductServiceImpl implements ProductService {
             groupId = existingId.get();
             groups.replaceAttributes(realm, groupId, attributes);
             log.info("Product '{}' of catalog '{}' renegotiated by organisation '{}' in realm '{}'", product, catalog, orgName, realm);
+            // idempotent, and what makes a repeated assign finish one that failed after the group was created
+            serviceAccounts.makeCatalogAvailable(realm, orgName, catalog);
         } else {
             String catalogGroupId = catalogGroupId(realm, orgName, catalog);
             // a name already taken here means the product was assigned since the check above

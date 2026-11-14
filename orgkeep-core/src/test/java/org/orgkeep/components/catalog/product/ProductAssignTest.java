@@ -21,6 +21,7 @@ import org.orgkeep.api.model.CreateServiceAccountRequest;
 import org.orgkeep.api.model.OrgGroups;
 import org.orgkeep.api.model.OrgProduct;
 import org.orgkeep.api.model.QuotaCycle;
+import org.orgkeep.components.organisation.serviceaccount.ServiceAccounts;
 import org.orgkeep.components.organisation.usergroup.team.TeamAlignment;
 import org.orgkeep.fixtures.TestRealm;
 import org.orgkeep.repository.keycloak.KeycloakGroups;
@@ -52,6 +53,7 @@ class ProductAssignTest {
     @Inject ServiceAccountService serviceAccountService;
     @InjectSpy TeamAlignment teamAlignment;
     @InjectSpy KeycloakGroups groups;
+    @InjectSpy ServiceAccounts serviceAccountsSpy;
 
     private TestRealm testRealm;
 
@@ -153,6 +155,27 @@ class ProductAssignTest {
 
         assertEquals(Set.of("late"), optionalOf(uuid, "late", "other"));
         assertEquals(Set.of(), defaultCatalogs(uuid));
+    }
+
+    // the assignment fails after its group is created (the spy throws once): the repeated assign takes the
+    // renegotiation branch and finishes the job
+    @Test
+    void repeatedAssignFinishesTheScopeOfTheServiceAccounts() {
+        serviceAccountService.create(realm(), ORG, new CreateServiceAccountRequest("batch", null, null));
+        String uuid = testRealm.resource().clients().findByClientId("org-acme.batch").getFirst().getId();
+        catalogService.create(realm(), new CreateCatalogRequest("late", "Late", null));
+        productService.create(realm(), "late", new CreateProductRequest("l", "l", null));
+        Mockito.doThrow(new IllegalStateException("Keycloak unavailable"))
+                .doCallRealMethod()
+                .when(serviceAccountsSpy).makeCatalogAvailable(anyString(), anyString(), anyString());
+
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalStateException.class,
+                () -> productService.assign(realm(), ORG, "late", "l", request()));
+        assertEquals(Set.of(), optionalOf(uuid, "late"));
+
+        productService.assign(realm(), ORG, "late", "l", request());
+
+        assertEquals(Set.of("late"), optionalOf(uuid, "late"));
     }
 
     private Set<String> optionalOf(String clientUuid, String... names) {

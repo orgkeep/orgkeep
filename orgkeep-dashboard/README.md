@@ -13,7 +13,7 @@ To try it without building anything: the demo stack of
 
 > **Status: early preview (0.x).** Orgkeep is ready to be tried, not yet to run in production. Feedback is welcome
 > in the [issues](https://github.com/orgkeep/orgkeep/issues). No upgrade path between 0.x versions, and known
-> limitations (no service accounts yet, among others): see the [status](../README.md).
+> limitations: see the [status](../README.md).
 
 ## Requirements
 

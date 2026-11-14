@@ -1,0 +1,76 @@
+# Copies documentation/ into the site repository (orgkeep/orgkeep.github.io), folder src/content/docs/docs/latest/,
+# and pushes it to its main branch; the workflow of the site then builds and publishes it.
+# - on a release tag (v0.2.0): the documentation of the tag;
+# - by hand (Actions > Sync the documentation > Run workflow): the documentation of a branch or tag, main by default,
+#   to fix the documentation between two releases.
+# The folder of the site is emptied before the copy, so a page removed here disappears there. Nothing else of the
+# site is touched. Nothing is committed when the documentation did not change.
+#
+# SITE_DEPLOY_KEY (secret of this repository) is the private part of a deploy key with write access, added to
+# orgkeep/orgkeep.github.io only. Third-party actions are pinned by commit, with their version in a comment, since this
+# workflow holds a key that can write to the site.
+name: Sync the documentation
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch or tag whose documentation is published'
+        default: main
+        required: true
+
+permissions:
+  contents: read
+
+# Two syncs never write to the site at the same time
+concurrency:
+  group: sync-docs
+  cancel-in-progress: false
+
+env:
+  # The pushed tag, or the ref given by hand
+  REF: ${{ inputs.ref || github.ref_name }}
+  # Where the documentation goes in the site, one folder per version: docs/<version>/ will be another one
+  TARGET: src/content/docs/docs/latest
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the documentation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.REF }}
+          path: orgkeep
+          persist-credentials: false
+
+      - name: Check out the site
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: orgkeep/orgkeep.github.io
+          ref: main
+          path: site
+          ssh-key: ${{ secrets.SITE_DEPLOY_KEY }}
+
+      - name: Replace the documentation of the site
+        run: |
+          rm -rf "site/$TARGET"
+          mkdir -p "site/$TARGET"
+          cp -R orgkeep/documentation/. "site/$TARGET/"
+
+      - name: Commit and push
+        working-directory: site
+        run: |
+          git add -A -- "$TARGET"
+          if git diff --cached --quiet; then
+            echo "The documentation of $REF is already published."
+            exit 0
+          fi
+          # The checked out ref may not be the commit of the event (a manual run): read it from the clone
+          source_commit=$(git -C ../orgkeep rev-parse --short HEAD)
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -s -m "Documentation of $REF" -m "Copied from orgkeep/orgkeep@$source_commit by the workflow Sync the documentation."
+          git push origin HEAD:main

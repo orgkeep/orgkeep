@@ -32,7 +32,10 @@ export interface UserGroup {
   name: string;
   // admin and users come with the org: they cannot be deleted
   predefined: boolean;
+  // the people (not the service accounts)
   memberIds: string[];
+  // names of the service accounts of the org in the team
+  serviceAccounts: string[];
   products: TeamProduct[];
   catalogRoles: TeamCatalogRole[];
 }

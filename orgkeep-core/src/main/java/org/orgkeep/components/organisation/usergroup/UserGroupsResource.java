@@ -83,6 +83,36 @@ public class UserGroupsResource {
         userGroupService.addMember(currentRealm.name(), org, group, userId);
     }
 
+    // by name, like the service account endpoints
+    @PUT
+    @Path("/{group}/service-accounts/{sa}")
+    @Operation(summary = "Put a service account in a user group",
+            description = "The service account gets the products of the group, like a member. A group may hold members "
+                    + "and service accounts: they share its pools (see the README).")
+    @APIResponse(responseCode = "204", description = "Service account in the group")
+    @APIResponse(responseCode = "400", description = "Invalid service account name")
+    @APIResponse(responseCode = "404", description = "Unknown organisation, user group or service account of the organisation")
+    @APIResponse(responseCode = "409", description = "The groups admin and users take no service account, or a change "
+            + "is in progress on the organisation, the group or the service account")
+    public void addServiceAccount(@PathParam("org") String org, @PathParam("group") String group,
+                                  @PathParam("sa") String sa){
+        userGroupService.addServiceAccount(currentRealm.name(), org, group, sa);
+    }
+
+    @DELETE
+    @Path("/{group}/service-accounts/{sa}")
+    @Operation(summary = "Take a service account out of a user group",
+            description = "The service account loses the products of the group, unless another group grants them.")
+    @APIResponse(responseCode = "204", description = "Service account out of the group")
+    @APIResponse(responseCode = "400", description = "Invalid service account name")
+    @APIResponse(responseCode = "404", description = "Unknown organisation, user group or service account of the organisation")
+    @APIResponse(responseCode = "409", description = "The groups admin and users take no service account, or a change "
+            + "is in progress on the organisation, the group or the service account")
+    public void removeServiceAccount(@PathParam("org") String org, @PathParam("group") String group,
+                                     @PathParam("sa") String sa){
+        userGroupService.removeServiceAccount(currentRealm.name(), org, group, sa);
+    }
+
     @DELETE
     @Path("/{group}/members/{userId}")
     @Operation(summary = "Take a member out of a user group",

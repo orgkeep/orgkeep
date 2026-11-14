@@ -22,11 +22,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.keycloak.representations.idm.GroupRepresentation;
 import org.keycloak.representations.idm.OrganizationRepresentation;
+import org.keycloak.representations.idm.UserRepresentation;
 
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
+import java.util.ArrayList;
 
 @Slf4j
 @ApplicationScoped
@@ -45,12 +48,24 @@ public class UserGroupServiceImpl implements UserGroupService {
     public List<UserGroup> list(String realm, String orgName) {
         orgs.getByName(realm, orgName);
         Set<String> catalogs = catalogSetup.catalogScopeIds(realm).keySet();
+        // read once: the members of the group of the service accounts, told from the people by id
+        Set<String> serviceAccountIds = serviceAccounts.userIds(realm, orgName);
         return groups.children(realm, userGroupsId(realm, orgName)).stream()
                 .sorted(Comparator.comparing(GroupRepresentation::getName))
                 .map(group -> {
                     Map<String, List<String>> attributes = group.getAttributes() == null ? Map.of() : group.getAttributes();
                     Map<String, Set<String>> clientRoles = groups.clientRoles(realm, group.getId());
-                    return userGroupMapper.toUserGroup(group, groups.memberIds(realm, group.getId()),
+                    Set<String> memberIds = new TreeSet<>();
+                    List<String> serviceAccountNames = new ArrayList<>();
+                    for (UserRepresentation member : groups.members(realm, group.getId())) {
+                        if (!serviceAccountIds.contains(member.getId())) {
+                            memberIds.add(member.getId());
+                        } else if (ServiceAccounts.nameOfUser(orgName, member) != null) {
+                            serviceAccountNames.add(ServiceAccounts.nameOfUser(orgName, member));
+                        }
+                    }
+                    serviceAccountNames.sort(Comparator.naturalOrder());
+                    return userGroupMapper.toUserGroup(group, memberIds, serviceAccountNames,
                             teamMapper.toTeamProducts(attributes, clientRoles),
                             teamMapper.toTeamCatalogRoles(attributes, clientRoles, catalogs));
                 })
@@ -71,7 +86,7 @@ public class UserGroupServiceImpl implements UserGroupService {
             String groupId = groups.createChild(realm, userGroupsId(realm, orgName), request.name());
             log.info("User group '{}' created in organisation '{}' of realm '{}'", request.name(), orgName, realm);
             // a new group grants nothing and has no member
-            return new UserGroup(groupId, request.name(), false, Set.of(), List.of(), List.of());
+            return new UserGroup(groupId, request.name(), false, Set.of(), List.of(), List.of(), List.of());
         }
     }
 
@@ -128,6 +143,48 @@ public class UserGroupServiceImpl implements UserGroupService {
             // leaving a group the user is not in changes nothing in Keycloak
             groups.leave(realm, userId, groupId);
         }
+    }
+
+    /**
+     * A short write, like {@link #addMember}: ORG shared, the team shared, the user of the service account exclusive.
+     * The checks without a lock come first, in this order: the org, the team (404), a predefined team (409: admin
+     * gives org-admin and users gives org-user, a service account never holds an org role), the service account (400,
+     * 404). Then, under the locks, the service account is resolved again (a delete may have passed). A team may hold
+     * both people and service accounts: the pools of a team are shared, see service-accounts.md.
+     */
+    @Override
+    public void addServiceAccount(String realm, String orgName, String groupName, String name) {
+        changeServiceAccountMembership(realm, orgName, groupName, name, true);
+    }
+
+    @Override
+    public void removeServiceAccount(String realm, String orgName, String groupName, String name) {
+        changeServiceAccountMembership(realm, orgName, groupName, name, false);
+    }
+
+    private void changeServiceAccountMembership(String realm, String orgName, String groupName, String name, boolean join) {
+        orgs.getByName(realm, orgName);
+        String groupId = groupId(realm, orgName, groupName);
+        if (OrgGroups.isPredefined(groupName)) {
+            throw new OperationNotAllowedException(
+                    "A service account cannot be in the user group '%s': it holds no role of the organisation"
+                            .formatted(groupName));
+        }
+        ServiceAccounts.Resolved first = serviceAccounts.resolve(realm, orgName, name);
+        try (HeldLocks ignored = locks.acquire(LockRequest.org(realm, orgName, LockMode.SHARED),
+                LockRequest.team(realm, orgName, groupName, LockMode.SHARED),
+                LockRequest.userById(realm, first.user().getId(), LockMode.EXCLUSIVE))) {
+            ServiceAccounts.Resolved resolved = serviceAccounts.resolve(realm, orgName, name);
+            // the team may have been deleted meanwhile
+            String currentGroupId = groupId(realm, orgName, groupName);
+            if (join) {
+                groups.join(realm, resolved.user().getId(), currentGroupId);
+            } else {
+                groups.leave(realm, resolved.user().getId(), currentGroupId);
+            }
+        }
+        log.debug("Service account '{}' {} team '{}' of organisation '{}' in realm '{}'", name,
+                join ? "joined" : "left", groupName, orgName, realm);
     }
 
     /** The parent group /{org}/user-groups, created with the organisation. */

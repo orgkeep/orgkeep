@@ -11,6 +11,7 @@ import java.util.List;
  * @param description     optional
  * @param enabled         false: no new token is issued
  * @param defaultCatalogs catalogs in every token of the service account; the others are asked with the scope parameter
+ * @param teams           names of the teams (user groups of the org) it is a member of, sorted: what gives it its products
  */
 public record ServiceAccount(
     String name,
@@ -18,4 +19,5 @@ public record ServiceAccount(
     String userId,
     String description,
     boolean enabled,
-    List<String> defaultCatalogs){ }
+    List<String> defaultCatalogs,
+    List<String> teams){ }

@@ -49,4 +49,20 @@ public interface UserGroupService {
      *         the user, after a short wait
      */
     void removeMember(String realm, String orgName, String groupName, String userId);
+
+    /**
+     * Puts a service account of the organisation in the team. Idempotent. A team may hold people and service accounts.
+     *
+     * @throws org.orgkeep.api.exceptions.UserGroupNotFoundException if the org has no group with this name
+     * @throws org.orgkeep.api.exceptions.OperationNotAllowedException for the groups admin and users: a service
+     *         account holds no role of the organisation
+     * @throws org.orgkeep.api.exceptions.ServiceAccountNotFoundException if the org has no such service account
+     * @throws org.orgkeep.api.exceptions.InvalidRequestException if the name is not one
+     * @throws org.orgkeep.api.exceptions.ResourceBusyException if a change is in progress on the org, the group or
+     *         the service account, after a short wait
+     */
+    void addServiceAccount(String realm, String orgName, String groupName, String serviceAccount);
+
+    /** Takes a service account out of the team. Idempotent. Same errors as {@link #addServiceAccount}. */
+    void removeServiceAccount(String realm, String orgName, String groupName, String serviceAccount);
 }

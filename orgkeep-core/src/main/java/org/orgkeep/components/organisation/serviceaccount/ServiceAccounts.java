@@ -4,7 +4,10 @@ import jakarta.enterprise.context.ApplicationScoped;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.keycloak.representations.idm.ClientRepresentation;
+import org.keycloak.representations.idm.GroupRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
+import org.orgkeep.api.exceptions.InvalidRequestException;
+import org.orgkeep.api.exceptions.ServiceAccountNotFoundException;
 import org.orgkeep.api.model.OrgClients;
 import org.orgkeep.api.model.OrgGroups;
 import org.orgkeep.components.catalog.CatalogSetup;
@@ -30,6 +33,84 @@ public class ServiceAccounts {
     private final KeycloakClients clients;
     private final KeycloakGroups groups;
     private final CatalogSetup catalogSetup;
+
+    /** The client and the user of a service account, found and checked by {@link #resolve}. */
+    public record Resolved(ClientRepresentation client, UserRepresentation user) { }
+
+    /**
+     * The service account of the org with this name. The name is checked first (400): it is part of a clientId and
+     * must never point elsewhere. Then, in this order:
+     * <ol>
+     *     <li>the client "org-{org}.{name}";</li>
+     *     <li>its attribute "org" is the org;</li>
+     *     <li>it has a service-account user;</li>
+     *     <li>this user is a member of /{org}/service-accounts.</li>
+     * </ol>
+     * Any failure is the same 404.
+     */
+    public Resolved resolve(String realm, String orgName, String name) {
+        requireName(name);
+        ServiceAccountNotFoundException notFound = new ServiceAccountNotFoundException(orgName, name);
+        ClientRepresentation client = clients.find(realm, OrgClients.serviceAccountClientId(orgName, name))
+                .filter(found -> belongsTo(found, orgName))
+                .orElseThrow(() -> notFound);
+        UserRepresentation user = clients.serviceAccountUser(realm, client.getId()).orElseThrow(() -> notFound);
+        if (!isServiceAccountUser(realm, orgName, user.getId())) {
+            throw notFound;
+        }
+        return new Resolved(client, user);
+    }
+
+    public static void requireName(String name) {
+        if (name == null || name.length() > 50 || !OrgGroups.isServiceAccountName(name)) {
+            throw new InvalidRequestException(
+                    "The name of a service account is made of lowercase letters, digits and inner hyphens, 50 at most");
+        }
+    }
+
+    /** Names of the teams the user is a member of, sorted: the user groups of this org under /{org}/user-groups. */
+    public List<String> teamsOf(String realm, String orgName, String userId) {
+        String prefix = OrgGroups.userGroups(orgName) + "/";
+        return groups.groupsOf(realm, userId).stream()
+                .map(GroupRepresentation::getPath)
+                .filter(path -> OrgGroups.isUserGroup(path) && path.startsWith(prefix))
+                .map(path -> path.substring(prefix.length()))
+                .sorted()
+                .toList();
+    }
+
+    /** The name of the service account of a user of the group of the org, null if its username says otherwise. */
+    public static String nameOfUser(String orgName, UserRepresentation user) {
+        String username = user.getUsername();
+        String prefix = OrgClients.SERVICE_ACCOUNT_USERNAME_PREFIX + OrgClients.serviceAccountClientPrefix(orgName);
+        return username != null && username.startsWith(prefix) ? username.substring(prefix.length()) : null;
+    }
+
+    /**
+     * The client whose service-account user this is, empty for a person. Not told by the username alone (a person's is
+     * their email, which may start with "service-account-"): the client named by it must exist and have this very
+     * user as its service-account user. The admin API does not say it on the user (serviceAccountClientId is not set).
+     */
+    public Optional<ClientRepresentation> clientOfUser(String realm, UserRepresentation user) {
+        String username = user.getUsername();
+        if (username == null || !username.startsWith(OrgClients.SERVICE_ACCOUNT_USERNAME_PREFIX)) {
+            return Optional.empty();
+        }
+        return clients.find(realm, username.substring(OrgClients.SERVICE_ACCOUNT_USERNAME_PREFIX.length()))
+                .filter(client -> clients.serviceAccountUser(realm, client.getId())
+                        .filter(serviceAccountUser -> user.getId().equals(serviceAccountUser.getId())).isPresent());
+    }
+
+    /**
+     * The org of the service account this user is the user of, empty if it is not one of an org. A user of a client
+     * of the console only counts when its client carries the attribute "org" and the user is in the group of that
+     * org, however it was added to an organisation.
+     */
+    public Optional<String> orgOf(String realm, UserRepresentation user) {
+        return clientOfUser(realm, user)
+                .map(client -> client.getAttributes() == null ? null : client.getAttributes().get(OrgClients.ORG_ATTRIBUTE))
+                .filter(org -> isServiceAccountUser(realm, org, user.getId()));
+    }
 
     /** The members of the group of the org: the users of its service accounts. Empty for an org without the group. */
     public List<UserRepresentation> users(String realm, String orgName) {

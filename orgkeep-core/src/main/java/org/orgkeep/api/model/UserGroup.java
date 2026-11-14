@@ -9,7 +9,8 @@ import java.util.Set;
  *
  * @param id           Keycloak group id
  * @param predefined   true for the groups created with the organisation (admin, users): they cannot be deleted
- * @param memberIds    Keycloak ids of the direct members
+ * @param memberIds    Keycloak ids of the direct members who are people (not the service accounts)
+ * @param serviceAccounts names of the service accounts of the org that are direct members, sorted
  * @param products     products given by the group, sorted by catalog then product
  * @param catalogRoles catalog roles given by the group, sorted by catalog then role
  */
@@ -18,5 +19,6 @@ public record UserGroup(
     String name,
     boolean predefined,
     Set<String> memberIds,
+    List<String> serviceAccounts,
     List<TeamProduct> products,
     List<TeamCatalogRole> catalogRoles){ }

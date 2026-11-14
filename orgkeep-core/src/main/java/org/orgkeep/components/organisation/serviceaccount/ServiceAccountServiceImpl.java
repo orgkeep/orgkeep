@@ -70,9 +70,6 @@ public class ServiceAccountServiceImpl implements ServiceAccountService {
     private final KeycloakUrls urls;
     private final ServiceAccountMapper mapper;
 
-    /** The client and the user of a service account found and checked by {@link #resolve}. */
-    private record Resolved(ClientRepresentation client, UserRepresentation user) { }
-
     /**
      * A short write: ORG is locked shared, compatible with other creations but refused (409, after a short wait) while
      * a heavy operation holds the org: a disable or a deletion in progress. The unicity of the name is Keycloak's, the
@@ -80,7 +77,7 @@ public class ServiceAccountServiceImpl implements ServiceAccountService {
      */
     @Override
     public ServiceAccountCreated create(String realm, String orgName, CreateServiceAccountRequest request) {
-        requireName(request.name());
+        ServiceAccounts.requireName(request.name());
         try (HeldLocks ignored = locks.acquire(LockRequest.org(realm, orgName, LockMode.SHARED))) {
             return createLocked(realm, orgName, request);
         }
@@ -180,7 +177,7 @@ public class ServiceAccountServiceImpl implements ServiceAccountService {
     @Override
     public ServiceAccount get(String realm, String orgName, String name) {
         orgs.getByName(realm, orgName);
-        Resolved resolved = resolve(realm, orgName, name);
+        ServiceAccounts.Resolved resolved = resolve(realm, orgName, name);
         return toServiceAccount(realm, orgName, resolved.client(), resolved.user(), catalogSetup.catalogScopeIds(realm));
     }
 
@@ -188,9 +185,9 @@ public class ServiceAccountServiceImpl implements ServiceAccountService {
     @Override
     public ServiceAccount update(String realm, String orgName, String name, UpdateServiceAccountRequest request) {
         List<String> defaultCatalogs = request.defaultCatalogs() == null ? List.of() : request.defaultCatalogs();
-        Resolved first = firstResolve(realm, orgName, name);
+        ServiceAccounts.Resolved first = firstResolve(realm, orgName, name);
         try (HeldLocks ignored = lockServiceAccount(realm, orgName, first)) {
-            Resolved resolved = resolve(realm, orgName, name);
+            ServiceAccounts.Resolved resolved = resolve(realm, orgName, name);
             Map<String, String> catalogScopeIds = checkDefaultCatalogs(realm, orgName, defaultCatalogs);
 
             String clientUuid = resolved.client().getId();
@@ -208,9 +205,9 @@ public class ServiceAccountServiceImpl implements ServiceAccountService {
     /** Allowed while the service account or the org is disabled. The old secret stops working at once. */
     @Override
     public ServiceAccountCredentials regenerateSecret(String realm, String orgName, String name) {
-        Resolved first = firstResolve(realm, orgName, name);
+        ServiceAccounts.Resolved first = firstResolve(realm, orgName, name);
         try (HeldLocks ignored = lockServiceAccount(realm, orgName, first)) {
-            Resolved resolved = resolve(realm, orgName, name);
+            ServiceAccounts.Resolved resolved = resolve(realm, orgName, name);
             String secret = clients.regenerateSecret(realm, resolved.client().getId());
             log.info("Secret of service account '{}' of organisation '{}' regenerated in realm '{}'", name, orgName, realm);
             return new ServiceAccountCredentials(resolved.client().getClientId(), secret, urls.token(realm));
@@ -229,11 +226,11 @@ public class ServiceAccountServiceImpl implements ServiceAccountService {
     @Override
     public ServiceAccount setEnabled(String realm, String orgName, String name, boolean enabled) {
         orgs.getByName(realm, orgName);
-        Resolved first = resolve(realm, orgName, name);
+        ServiceAccounts.Resolved first = resolve(realm, orgName, name);
         try (HeldLocks ignored = lockServiceAccount(realm, orgName, first)) {
             requireEnabledAndSettled(orgs.getByName(realm, orgName));
             // a delete may have passed between the first check and the locks
-            Resolved resolved = resolve(realm, orgName, name);
+            ServiceAccounts.Resolved resolved = resolve(realm, orgName, name);
 
             String userId = resolved.user().getId();
             users.setEnabled(realm, userId, enabled);
@@ -261,7 +258,7 @@ public class ServiceAccountServiceImpl implements ServiceAccountService {
         orgs.getByName(realm, orgName);
         resolve(realm, orgName, name);
         try (HeldLocks ignored = locks.acquire(LockRequest.org(realm, orgName, LockMode.EXCLUSIVE))) {
-            Resolved resolved = resolve(realm, orgName, name);
+            ServiceAccounts.Resolved resolved = resolve(realm, orgName, name);
             clients.delete(realm, resolved.client().getId());
 
             OrganizationRepresentation org = orgs.getByName(realm, orgName);
@@ -276,49 +273,19 @@ public class ServiceAccountServiceImpl implements ServiceAccountService {
      * Locks taken for a change on one service account: ORG shared, then the service-account user exclusive, as for a
      * change on a member.
      */
-    private HeldLocks lockServiceAccount(String realm, String orgName, Resolved resolved) {
+    private HeldLocks lockServiceAccount(String realm, String orgName, ServiceAccounts.Resolved resolved) {
         return locks.acquire(LockRequest.org(realm, orgName, LockMode.SHARED),
                 LockRequest.userById(realm, resolved.user().getId(), LockMode.EXCLUSIVE));
     }
 
     /** The first resolution, before the locks: it gives the id of the user to lock. The org comes first (404). */
-    private Resolved firstResolve(String realm, String orgName, String name) {
+    private ServiceAccounts.Resolved firstResolve(String realm, String orgName, String name) {
         orgs.getByName(realm, orgName);
         return resolve(realm, orgName, name);
     }
 
-    /**
-     * The service account of the org with this name. The name is checked first (400): it is part of a clientId and
-     * must never point elsewhere. Then, in this order:
-     * <ol>
-     *     <li>the client "org-{org}.{name}";</li>
-     *     <li>its attribute "org" is the org;</li>
-     *     <li>it has a service-account user;</li>
-     *     <li>this user is a member of /{org}/service-accounts.</li>
-     * </ol>
-     * Any failure is the same 404.
-     */
-    private Resolved resolve(String realm, String orgName, String name) {
-        requireName(name);
-        ServiceAccountNotFoundException notFound = new ServiceAccountNotFoundException(orgName, name);
-        ClientRepresentation client = clients.find(realm, OrgClients.serviceAccountClientId(orgName, name))
-                .filter(found -> ServiceAccounts.belongsTo(found, orgName))
-                .orElseThrow(() -> notFound);
-        UserRepresentation user = clients.serviceAccountUser(realm, client.getId()).orElseThrow(() -> notFound);
-        String groupPath = OrgGroups.serviceAccounts(orgName);
-        boolean member = groups.groupsOf(realm, user.getId()).stream()
-                .anyMatch(group -> groupPath.equals(group.getPath()));
-        if (!member) {
-            throw notFound;
-        }
-        return new Resolved(client, user);
-    }
-
-    private static void requireName(String name) {
-        if (name == null || name.length() > 50 || !OrgGroups.isServiceAccountName(name)) {
-            throw new InvalidRequestException(
-                    "The name of a service account is made of lowercase letters, digits and inner hyphens, 50 at most");
-        }
+    private ServiceAccounts.Resolved resolve(String realm, String orgName, String name) {
+        return serviceAccounts.resolve(realm, orgName, name);
     }
 
     /** Nobody is created or changed in a disabled org, or one whose members are not all enabled again yet. */
@@ -363,6 +330,6 @@ public class ServiceAccountServiceImpl implements ServiceAccountService {
                 .sorted()
                 .toList();
         return mapper.toServiceAccount(ServiceAccounts.nameOf(orgName, client.getClientId()), client, user,
-                defaultCatalogs);
+                defaultCatalogs, serviceAccounts.teamsOf(realm, orgName, user.getId()));
     }
 }

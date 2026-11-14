@@ -18,6 +18,7 @@ public interface UserGroupMapper {
 
     // several sources: id and name come from group, the other parameters fill the properties of the same name
     @Mapping(target = "predefined", expression = "java(OrgGroups.isPredefined(group.getName()))")
-    UserGroup toUserGroup(GroupRepresentation group, Set<String> memberIds, List<TeamProduct> products,
+    UserGroup toUserGroup(GroupRepresentation group, Set<String> memberIds, List<String> serviceAccounts,
+                          List<TeamProduct> products,
                           List<TeamCatalogRole> catalogRoles);
 }

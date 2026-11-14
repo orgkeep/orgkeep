@@ -50,6 +50,7 @@ class ServiceAccountLifecycleTest {
     @Inject OrgService orgService;
     @Inject OrgMemberService memberService;
     @Inject ServiceAccountService serviceAccountService;
+    @Inject org.orgkeep.api.UserGroupService userGroupService;
     // spies on the real repository: they call Keycloak as usual, a test can block or fail one call
     @InjectSpy KeycloakOrgs orgs;
 
@@ -63,6 +64,7 @@ class ServiceAccountLifecycleTest {
         orgService.create(realm(), new CreateOrgRequest(ORG, Set.of(), null, null));
         paulId = memberService.add(realm(), ORG, new AddMemberRequest("paul@acme.test", "Paul", "Test")).id();
         batchUserId = create("batch").serviceAccount().userId();
+        userGroupService.create(realm(), ORG, new org.orgkeep.api.model.CreateUserGroupRequest("ops"));
     }
 
     @AfterEach
@@ -182,6 +184,11 @@ class ServiceAccountLifecycleTest {
             assertThrowsExactly(ResourceBusyException.class, () -> serviceAccountService.delete(realm(), ORG, "batch"));
             assertThrowsExactly(ResourceBusyException.class, () -> serviceAccountService.regenerateSecret(realm(), ORG, "batch"));
             assertThrowsExactly(ResourceBusyException.class, () -> create("worker"));
+            // the team write takes ORG shared, TEAM shared and the user exclusively: refused as well
+            assertThrowsExactly(ResourceBusyException.class,
+                    () -> userGroupService.addServiceAccount(realm(), ORG, "ops", "batch"));
+            assertThrowsExactly(ResourceBusyException.class,
+                    () -> userGroupService.removeServiceAccount(realm(), ORG, "ops", "batch"));
 
             releaseDisable.countDown();
             disable.get(60, TimeUnit.SECONDS);

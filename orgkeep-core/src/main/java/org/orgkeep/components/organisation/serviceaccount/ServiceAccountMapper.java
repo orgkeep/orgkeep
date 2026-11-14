@@ -53,6 +53,7 @@ public interface ServiceAccountMapper {
     @Mapping(target = "description", source = "client.description")
     @Mapping(target = "enabled", source = "user.enabled")
     @Mapping(target = "defaultCatalogs", source = "defaultCatalogs")
+    @Mapping(target = "teams", source = "teams")
     ServiceAccount toServiceAccount(String name, ClientRepresentation client, UserRepresentation user,
-                                    List<String> defaultCatalogs);
+                                    List<String> defaultCatalogs, List<String> teams);
 }

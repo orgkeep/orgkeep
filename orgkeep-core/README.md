@@ -20,7 +20,8 @@ To try it without building anything: the demo stack of
 > in the [issues](https://github.com/orgkeep/orgkeep/issues).
 > - No upgrade path between 0.x versions: a change of format applies to new objects only, and a realm may have to
 >   be created again.
-> - Known limitations: no service accounts yet (machine-to-machine access for the organisations); Orgkeep calls
+> - Known limitations: service accounts (machine-to-machine access for the organisations) are available through the
+>   API, with no dashboard screens yet; Orgkeep calls
 >   Keycloak with an admin account of the `master` realm; outside the demo, the `orgkeep-dashboard` client is
 >   created by hand in Keycloak; one realm per Orgkeep instance.
 

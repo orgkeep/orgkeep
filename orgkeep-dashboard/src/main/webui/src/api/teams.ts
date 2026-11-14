@@ -131,9 +131,13 @@ export function useGrantableRoles(org: string) {
 }
 
 // After any change of a team: the list of the groups is read again (products, roles, members)
+// (the service accounts list their teams too: their list is read again as well)
 function useInvalidateTeams(org: string) {
   const queryClient = useQueryClient();
-  return () => queryClient.invalidateQueries({ queryKey: [TEAMS_KEY, org] });
+  return () => {
+    queryClient.invalidateQueries({ queryKey: ['serviceAccounts', org] });
+    return queryClient.invalidateQueries({ queryKey: [TEAMS_KEY, org] });
+  };
 }
 
 export function useCreateUserGroup(org: string) {
@@ -165,6 +169,23 @@ export function useRemoveTeamMember(org: string, team: string) {
   const invalidate = useInvalidateTeams(org);
   return useMutation({
     mutationFn: (userId: string) => deleteRequest(`${teamUrl(org, team)}/members/${encodeURIComponent(userId)}`),
+    onSuccess: invalidate,
+  });
+}
+
+// A service account of the org in the team, by name. Not in admin and users: the core answers 409
+export function useAddTeamServiceAccount(org: string, team: string) {
+  const invalidate = useInvalidateTeams(org);
+  return useMutation({
+    mutationFn: (name: string) => putRequest(`${teamUrl(org, team)}/service-accounts/${encodeURIComponent(name)}`),
+    onSuccess: invalidate,
+  });
+}
+
+export function useRemoveTeamServiceAccount(org: string, team: string) {
+  const invalidate = useInvalidateTeams(org);
+  return useMutation({
+    mutationFn: (name: string) => deleteRequest(`${teamUrl(org, team)}/service-accounts/${encodeURIComponent(name)}`),
     onSuccess: invalidate,
   });
 }

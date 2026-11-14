@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   Alert,
   Anchor,
+  Badge,
   Breadcrumbs,
   Button,
   Center,
@@ -28,6 +29,7 @@ import {
   useRoleHolders,
 } from '../api/catalogs';
 import { useOrganisations, useOrgMembers } from '../api/organisations';
+import { useServiceAccounts } from '../api/serviceAccounts';
 import ConfirmModal from '../components/ConfirmModal';
 import { RoleKindBadge } from './CatalogPage';
 import CatalogRoleModal from './CatalogRoleModal';
@@ -178,15 +180,27 @@ function HoldersSection({ catalog, role }: { catalog: string; role: string }) {
           <Table.Thead>
             <Table.Tr>
               <Table.Th>{t('catalogRole.users.columns.user')}</Table.Th>
-              <Table.Th>{t('catalogRole.users.columns.email')}</Table.Th>
+              <Table.Th>{t('catalogRole.users.columns.emailOrOrg')}</Table.Th>
               <Table.Th />
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
             {holders.map((holder) => (
               <Table.Tr key={holder.userId}>
-                <Table.Td ff="monospace">{holder.username}</Table.Td>
-                <Table.Td>{holder.email}</Table.Td>
+                {/* a service account shows its client ID and its org, a user its username */}
+                <Table.Td ff="monospace">{holder.serviceAccount ?? holder.username}</Table.Td>
+                <Table.Td>
+                  {holder.serviceAccount !== null ? (
+                    <Group gap="xs">
+                      <Badge variant="light">{t('catalogRole.users.serviceAccount')}</Badge>
+                      <Text size="sm" ff="monospace">
+                        {holder.org}
+                      </Text>
+                    </Group>
+                  ) : (
+                    holder.email
+                  )}
+                </Table.Td>
                 <Table.Td align="right">
                   <Button size="xs" variant="subtle" color="red" onClick={() => setToRemove(holder)}>
                     {t('common.remove')}
@@ -201,7 +215,7 @@ function HoldersSection({ catalog, role }: { catalog: string; role: string }) {
       <ConfirmModal
         opened={toRemove !== null}
         title={t('catalogRole.users.removeTitle', { role })}
-        message={t('catalogRole.users.removeMessage', { user: toRemove?.email ?? toRemove?.username ?? '' })}
+        message={t('catalogRole.users.removeMessage', { user: toRemove?.email ?? toRemove?.serviceAccount ?? toRemove?.username ?? '' })}
         confirmLabel={t('common.remove')}
         pending={revoke.isPending}
         error={revoke.error}
@@ -239,6 +253,7 @@ function GrantToUser({ catalog, role, holderIds }: GrantProps) {
       />
       {/* the members are loaded once an organisation is chosen: the hook needs it */}
       {org && <MemberPicker key={org} catalog={catalog} role={role} holderIds={holderIds} org={org} />}
+      {org && <ServiceAccountPicker key={`sa-${org}`} catalog={catalog} role={role} holderIds={holderIds} org={org} />}
     </Group>
   );
 }
@@ -256,6 +271,36 @@ function MemberPicker({ catalog, role, holderIds, org }: GrantProps & { org: str
         label={t('catalogRole.users.member')}
         placeholder={t('catalogRole.users.memberPlaceholder')}
         data={candidates.map((member) => ({ value: member.id, label: personName(member) }))}
+        value={null}
+        onChange={(userId) => userId && grant.mutate(userId)}
+        searchable
+        disabled={grant.isPending}
+        w={280}
+      />
+      {grant.error && (
+        <Text size="sm" c="red">
+          {grant.error.message}
+        </Text>
+      )}
+    </Stack>
+  );
+}
+
+// The service accounts of the chosen org. The grant uses the id of the user behind the service account (userId):
+// the same call as for a person, the core tells them apart
+function ServiceAccountPicker({ catalog, role, holderIds, org }: GrantProps & { org: string }) {
+  const { t } = useTranslation();
+  const accounts = useServiceAccounts(org);
+  const grant = useGrantRoleToUser(catalog, role);
+  const candidates = (accounts.data ?? []).filter((account) => !holderIds.includes(account.userId));
+
+  return (
+    <Stack gap={4}>
+      {/* a Select used as an action, like the member picker: choosing a service account gives the role */}
+      <Select
+        label={t('catalogRole.users.serviceAccountLabel')}
+        placeholder={t('catalogRole.users.serviceAccountPlaceholder')}
+        data={candidates.map((account) => ({ value: account.userId, label: account.name }))}
         value={null}
         onChange={(userId) => userId && grant.mutate(userId)}
         searchable

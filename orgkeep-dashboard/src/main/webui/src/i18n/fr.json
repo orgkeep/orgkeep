@@ -26,7 +26,8 @@
     "loginClient": "Client de login",
     "organisation": "Organisation {{org}}",
     "members": "Membres",
-    "teams": "Teams"
+    "teams": "Teams",
+    "serviceAccounts": "Service accounts"
   },
   "home": {
     "welcome": "Bienvenue {{name}}",
@@ -95,7 +96,8 @@
     "tabs": {
       "members": "Membres",
       "products": "Produits",
-      "teams": "Teams"
+      "teams": "Teams",
+      "serviceAccounts": "Service accounts"
     },
     "teams": {
       "loadError": "Impossible de charger les teams",
@@ -298,7 +300,7 @@
     },
     "users": {
       "title": "Donné par vous",
-      "subtitle": "Les users qui ont le rôle directement, quelles que soient leurs teams. Seulement des membres d'une organisation.",
+      "subtitle": "Les users et service accounts qui ont le rôle directement, quelles que soient leurs teams. Seulement des membres d'une organisation ou ses service accounts.",
       "loadError": "Impossible de charger les users",
       "empty": "Donné à personne directement.",
       "organisation": "Organisation",
@@ -307,10 +309,13 @@
       "memberPlaceholder": "Choisir un membre",
       "columns": {
         "user": "User",
-        "email": "Email"
+        "emailOrOrg": "Email / organisation"
       },
       "removeTitle": "Retirer {{role}} ?",
-      "removeMessage": "{{user}} perd le rôle (sauf si une team le lui donne)."
+      "removeMessage": "{{user}} perd le rôle (sauf si une team le lui donne).",
+      "serviceAccount": "Service account",
+      "serviceAccountLabel": "Ou donner à un service account",
+      "serviceAccountPlaceholder": "Choisir un service account"
     },
     "token": {
       "title": "Dans les tokens",
@@ -478,6 +483,69 @@
       "poolHint": "Avec un quota de team, son pool s'appelle \"{{pool}}\" dans les tokens."
     }
   },
+  "serviceAccounts": {
+    "title": "Service accounts de {{org}}",
+    "hint": "Un service account est une application de l'organisation (un batch, un backend, un job de CI) qui obtient des tokens avec son client ID et son secret. Ses droits viennent de ses teams, comme ceux d'un user.",
+    "create": "Nouveau service account",
+    "empty": "Aucun service account pour le moment.",
+    "loadError": "Impossible de charger les service accounts de {{org}}",
+    "catalogsError": "Impossible de charger les catalogues de l'organisation",
+    "actions": "Actions",
+    "teamsTitle": "Teams de {{name}}",
+    "columns": {
+      "name": "Nom",
+      "description": "Description",
+      "status": "Statut",
+      "catalogs": "Catalogues par défaut",
+      "teams": "Teams"
+    },
+    "status": {
+      "enabled": "Actif",
+      "disabled": "Désactivé"
+    },
+    "form": {
+      "createTitle": "Nouveau service account dans {{org}}",
+      "editTitle": "Modifier {{name}}",
+      "name": "Nom",
+      "nameDescription": "Minuscules, chiffres et tirets. Ne peut plus changer ensuite : le client ID est org-{{org}}.<nom>.",
+      "nameInvalid": "Minuscules, chiffres et tirets intérieurs seulement",
+      "description": "Description",
+      "defaultCatalogs": "Catalogues par défaut",
+      "defaultCatalogsDescription": "Catalogues présents dans chaque token du service account. Les autres se demandent avec le paramètre scope.",
+      "noCatalog": "L'organisation n'a pas encore de produit : le realm owner les assigne, puis les catalogues se choisissent ici."
+    },
+    "secret": {
+      "createdTitle": "Service account créé",
+      "rotatedTitle": "Nouveau secret",
+      "shownOnce": "Copiez le secret maintenant : il ne sera plus affiché. En cas de perte, générez-en un nouveau.",
+      "oldStopped": "L'ancien secret ne fonctionne plus.",
+      "clientId": "Client ID",
+      "clientSecret": "Secret",
+      "tokenUrl": "URL du token",
+      "usage": "L'application envoie son client ID et son secret à l'URL du token avec le grant client credentials (HTTP Basic ou formulaire).",
+      "done": "J'ai copié le secret"
+    },
+    "rotate": {
+      "button": "Générer un nouveau secret",
+      "title": "Générer un nouveau secret pour {{name}} ?",
+      "message": "Un nouveau secret est généré et l'ancien cesse de fonctionner tout de suite : l'application doit être mise à jour."
+    },
+    "disable": {
+      "button": "Désactiver",
+      "title": "Désactiver {{name}} ?",
+      "message": "Plus aucun nouveau token n'est émis. Un token déjà émis n'est pas révoqué : une API qui l'introspecte le voit inactif, une API qui ne vérifie que la signature l'accepte jusqu'à son expiration."
+    },
+    "enable": {
+      "button": "Activer",
+      "title": "Activer {{name}} ?",
+      "message": "L'application peut de nouveau obtenir des tokens."
+    },
+    "delete": {
+      "button": "Supprimer",
+      "title": "Supprimer {{name}} ?",
+      "message": "Ses identifiants cessent de fonctionner tout de suite et il quitte ses teams. Cette action est définitive."
+    }
+  },
   "team": {
     "notFound": "Pas de team {{team}}",
     "backToTeams": "Retour aux teams",
@@ -539,6 +607,15 @@
       "cycle": "Cycle",
       "poolHint": "Pool \"{{pool}}\" dans les tokens. Un membre de plusieurs teams avec un quota pour le produit reçoit tous leurs pools.",
       "submit": "Donner"
+    },
+    "serviceAccounts": {
+      "title": "Service accounts ({{count}})",
+      "add": "Ajouter un service account",
+      "hint": "Les service accounts de l'organisation dans cette team reçoivent ce qu'elle donne, comme ses membres.",
+      "empty": "Aucun service account dans cette team.",
+      "noneInOrg": "L'organisation n'a pas encore de service account.",
+      "mixedTitle": "Des personnes et des applications dans la même team",
+      "mixedMessage": "Les membres d'une team partagent ses pools : des users peuvent épuiser son quota et bloquer une application. Conseil : une team par application, et un quota de team sur les teams des personnes."
     }
   },
   "loginClient": {

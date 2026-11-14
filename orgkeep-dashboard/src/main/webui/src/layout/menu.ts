@@ -36,6 +36,7 @@ export function buildMenu(user: CurrentUser, t: TFunction): MenuSection[] {
       items: [
         { label: t('menu.members'), path: `/orgs/${org}/members` },
         { label: t('menu.teams'), path: `/orgs/${org}/teams` },
+        { label: t('menu.serviceAccounts'), path: `/orgs/${org}/service-accounts` },
       ],
     });
   }

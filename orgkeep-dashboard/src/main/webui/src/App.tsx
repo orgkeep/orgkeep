@@ -14,6 +14,7 @@ import NotFoundPage from './pages/NotFoundPage';
 import OrganisationPage from './pages/OrganisationPage';
 import OrganisationsPage from './pages/OrganisationsPage';
 import OrgMembersPage from './pages/OrgMembersPage';
+import OrgServiceAccountsPage from './pages/OrgServiceAccountsPage';
 import OrgTeamsPage from './pages/OrgTeamsPage';
 import ProductPage from './pages/ProductPage';
 import TeamPage from './pages/TeamPage';
@@ -79,6 +80,9 @@ export default function App() {
         {administeredOrgs(user).length > 0 && <Route path="/orgs/:org/members" element={<OrgMembersPage />} />}
         {administeredOrgs(user).length > 0 && <Route path="/orgs/:org/teams" element={<OrgTeamsPage />} />}
         {administeredOrgs(user).length > 0 && <Route path="/orgs/:org/teams/:team" element={<TeamPage />} />}
+        {administeredOrgs(user).length > 0 && (
+          <Route path="/orgs/:org/service-accounts" element={<OrgServiceAccountsPage />} />
+        )}
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </AppLayout>

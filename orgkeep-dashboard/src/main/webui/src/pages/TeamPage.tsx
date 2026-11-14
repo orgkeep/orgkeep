@@ -18,6 +18,7 @@ import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 import { type OrgMember, useOrgMembers } from '../api/organisations';
 import { productKey } from '../api/products';
+import { useServiceAccounts } from '../api/serviceAccounts';
 import {
   type AvailableProduct,
   type GrantableRole,
@@ -25,10 +26,12 @@ import {
   type TeamProduct,
   type UserGroup,
   useAddTeamMember,
+  useAddTeamServiceAccount,
   useAvailableProducts,
   useGrantableRoles,
   useGrantCatalogRole,
   useRemoveTeamMember,
+  useRemoveTeamServiceAccount,
   useRevokeCatalogRole,
   useRevokeProduct,
   useUserGroups,
@@ -106,6 +109,8 @@ export default function TeamPage({ realmOwner = false }: TeamPageProps) {
       </Stack>
 
       <MembersSection org={org} team={team} realmOwner={realmOwner} />
+      {/* admin and users take no service account (the core answers 409): no section there */}
+      {!team.predefined && <ServiceAccountsSection org={org} team={team} />}
       <ProductsSection org={org} team={team} />
       <CatalogRolesSection org={org} team={team} />
     </Stack>
@@ -212,6 +217,90 @@ function MembersSection({ org, team, realmOwner }: SectionProps & { realmOwner: 
           member={previewTarget}
           onClose={() => setPreviewTarget(null)}
         />
+      )}
+    </Stack>
+  );
+}
+
+// The service accounts of the org in the team: they get what the team gives, like its members
+function ServiceAccountsSection({ org, team }: SectionProps) {
+  const { t } = useTranslation();
+  const { data: accounts } = useServiceAccounts(org);
+  const add = useAddTeamServiceAccount(org, team.name);
+  const remove = useRemoveTeamServiceAccount(org, team.name);
+
+  const others = (accounts ?? []).filter((account) => !team.serviceAccounts.includes(account.name));
+  const error = add.error ?? remove.error;
+  // people and applications in the same team share its pools: the core allows it, the alert only explains it
+  const mixed = team.serviceAccounts.length > 0 && team.memberIds.length > 0;
+
+  return (
+    <Stack>
+      <Group justify="space-between">
+        <Title order={3}>{t('team.serviceAccounts.title', { count: team.serviceAccounts.length })}</Title>
+        {others.length > 0 && (
+          <Select
+            placeholder={t('team.serviceAccounts.add')}
+            data={others.map((account) => account.name)}
+            // a Select used as an action: it never keeps a value
+            value={null}
+            onChange={(name) => name && add.mutate(name)}
+            searchable
+            disabled={add.isPending}
+            w={280}
+          />
+        )}
+      </Group>
+      <Text c="dimmed" size="sm">
+        {t('team.serviceAccounts.hint')}
+      </Text>
+      {accounts && accounts.length === 0 && <Text c="dimmed">{t('team.serviceAccounts.noneInOrg')}</Text>}
+      {mixed && (
+        <Alert color="blue" title={t('team.serviceAccounts.mixedTitle')}>
+          {t('team.serviceAccounts.mixedMessage')}
+        </Alert>
+      )}
+      {error && (
+        <Alert
+          color="red"
+          title={t('common.failed')}
+          withCloseButton
+          onClose={() => {
+            add.reset();
+            remove.reset();
+          }}
+        >
+          {error.message}
+        </Alert>
+      )}
+
+      {team.serviceAccounts.length === 0 ? (
+        <Text c="dimmed">{t('team.serviceAccounts.empty')}</Text>
+      ) : (
+        <Table withTableBorder>
+          <Table.Tbody>
+            {team.serviceAccounts.map((name) => (
+              <Table.Tr key={name}>
+                <Table.Td ff="monospace" fw={500}>
+                  {name}
+                </Table.Td>
+                <Table.Td>
+                  <Group justify="flex-end">
+                    <Button
+                      variant="subtle"
+                      size="xs"
+                      color="red"
+                      loading={remove.isPending && remove.variables === name}
+                      onClick={() => remove.mutate(name)}
+                    >
+                      {t('common.remove')}
+                    </Button>
+                  </Group>
+                </Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
       )}
     </Stack>
   );

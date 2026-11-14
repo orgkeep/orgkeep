@@ -30,18 +30,20 @@ import {
   useUnassignProduct,
 } from '../api/organisations';
 import { type Product, productKey, useProducts } from '../api/products';
+import { useServiceAccounts } from '../api/serviceAccounts';
 import { type UserGroup, useUserGroups } from '../api/teams';
 import ConfirmModal from '../components/ConfirmModal';
 import TokenPreviewModal from '../components/TokenPreviewModal';
 import AssignProductModal from './AssignProductModal';
 import { ROLE_COLORS } from './orgRoles';
 import { personName } from './personName';
+import ServiceAccountsSection from './ServiceAccountsSection';
 import MemberName from "../components/MemberName";
 import ResendInvitationButton from '../components/ResendInvitationButton';
 
 // The tabs of the page. The selected one is in the URL (?tab=products) like the product filter of the list:
 // the product count of the list links straight to the products tab.
-const TABS = ['members', 'products', 'teams'] as const;
+const TABS = ['members', 'products', 'teams', 'serviceAccounts'] as const;
 type Tab = (typeof TABS)[number];
 
 // Any other value of ?tab (or none) gives the default tab
@@ -63,6 +65,7 @@ export default function OrganisationPage() {
   const products = useOrgProducts(org);
   // the API of the org admins, opened to the realm owner by the core
   const teams = useUserGroups(org);
+  const serviceAccounts = useServiceAccounts(org);
 
   if (isPending) {
     return (
@@ -108,6 +111,9 @@ export default function OrganisationPage() {
           <Tabs.Tab value="teams" rightSection={<Count value={teams.data?.length} />}>
             {t('orgDetail.tabs.teams')}
           </Tabs.Tab>
+          <Tabs.Tab value="serviceAccounts" rightSection={<Count value={serviceAccounts.data?.length} />}>
+            {t('orgDetail.tabs.serviceAccounts')}
+          </Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="members" pt="md">
@@ -118,6 +124,9 @@ export default function OrganisationPage() {
         </Tabs.Panel>
         <Tabs.Panel value="teams" pt="md">
           <TeamsTab org={org} teams={teams.data} isPending={teams.isPending} error={teams.error} />
+        </Tabs.Panel>
+        <Tabs.Panel value="serviceAccounts" pt="md">
+          <ServiceAccountsSection org={org} realmOwner />
         </Tabs.Panel>
       </Tabs>
     </Stack>

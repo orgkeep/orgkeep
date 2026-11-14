@@ -179,8 +179,11 @@ class ServiceAccountTokenTest {
         assertEquals(200, grant(newSecret, false, null).status());
     }
 
-    // disabling stops the new tokens and the introspection of the earlier ones; it does not revoke them: after
-    // enabling again, the same old token is active again
+    // Disabling stops the new tokens, and closes the sessions: Keycloak sets the notBefore of the user to the current
+    // second, so the introspection rejects every token issued before, for good (also after enabling again). A JWT is
+    // still valid by its signature until its exp, for an API that does not introspect. The notBefore has the precision
+    // of a second: the test waits for the next one between the grant and the disable, or a token issued in the same
+    // second as the disable would stay active
     @Test
     void disabledServiceAccountGetsNoTokenAndItsEarlierTokenIsInactive() throws Exception {
         ServiceAccountCreated created = create(List.of());
@@ -188,6 +191,7 @@ class ServiceAccountTokenTest {
         String secret = created.credentials().clientSecret();
         String earlier = grant(secret, true, "prod").accessToken();
         assertTrue(introspect(earlier).path("active").asBoolean());
+        Thread.sleep(1100);
 
         assertFalse(serviceAccountService.setEnabled(realm(), ORG, "billing", false).enabled());
 
@@ -197,8 +201,11 @@ class ServiceAccountTokenTest {
 
         assertTrue(serviceAccountService.setEnabled(realm(), ORG, "billing", true).enabled());
 
-        assertEquals(200, grant(secret, true, null).status());
-        assertTrue(introspect(earlier).path("active").asBoolean(), "disabling is not a revocation");
+        // new tokens again, but the earlier one stays revoked for the APIs that introspect
+        Grant later = grant(secret, true, "prod");
+        assertEquals(200, later.status());
+        assertTrue(introspect(later.accessToken()).path("active").asBoolean());
+        assertFalse(introspect(earlier).path("active").asBoolean(), "disabling sets the notBefore of the user");
     }
 
     @Test

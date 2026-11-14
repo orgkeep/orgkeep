@@ -99,8 +99,9 @@ public class ServiceAccountsResource {
     @PUT
     @Path("/{sa}/enabled")
     @Operation(summary = "Enable or disable a service account",
-            description = "Disabled: no new token. A token already issued is not revoked: an API that only checks the "
-                    + "signature accepts it until it expires, an API that introspects sees it inactive.")
+            description = "Disabled: no new token, the sessions are closed and an API that introspects the tokens "
+                    + "issued before sees them inactive for good (also after enabling again). An API that only checks the "
+                    + "signature of a JWT accepts it until it expires.")
     @APIResponse(responseCode = "400", description = "Invalid name")
     @APIResponse(responseCode = "404", description = "Unknown organisation or service account")
     @APIResponse(responseCode = "409", description = "The organisation is disabled or being enabled again, "

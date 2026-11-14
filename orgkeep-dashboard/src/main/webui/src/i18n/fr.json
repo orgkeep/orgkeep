@@ -533,7 +533,7 @@
     "disable": {
       "button": "Désactiver",
       "title": "Désactiver {{name}} ?",
-      "message": "Plus aucun nouveau token n'est émis. Un token déjà émis n'est pas révoqué : une API qui l'introspecte le voit inactif, une API qui ne vérifie que la signature l'accepte jusqu'à son expiration."
+      "message": "Plus aucun nouveau token n'est émis, et tout token émis avant est refusé par une API qui l'introspecte. Une API qui ne vérifie que la signature d'un JWT l'accepte jusqu'à son expiration."
     },
     "enable": {
       "button": "Activer",

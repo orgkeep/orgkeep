@@ -533,7 +533,7 @@
     "disable": {
       "button": "Disable",
       "title": "Disable {{name}}?",
-      "message": "No new token is issued. A token already issued is not revoked: an API that introspects sees it inactive, an API that only checks the signature accepts it until it expires."
+      "message": "No new token is issued, and every token issued before is rejected by an API that introspects. An API that only checks the signature of a JWT accepts it until it expires."
     },
     "enable": {
       "button": "Enable",

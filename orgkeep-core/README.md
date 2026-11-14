@@ -159,9 +159,10 @@ way a person does, by being put in a **team** (`PUT /api/organisations/{org}/use
 and its token carries the same catalog claims as a person's, plus `organization: ["<org>"]`. The realm owner can also
 give it a reserved catalog role directly. A service account never carries an org role: it cannot call this API.
 
-Disabling a service account (or its organisation) stops new tokens and makes an introspection answer `active: false`,
-but does not revoke a token already issued: an API that only checks the signature accepts it until it expires. For a
-fast cut-off, introspect the tokens or keep them short.
+Disabling a service account (or its organisation) through Orgkeep stops new tokens, closes its sessions and sets the
+"not before" time of its user: an introspection answers `active: false` for every token issued before, for good (also
+after enabling it again). An API that only checks the signature of a JWT still accepts it until it expires. For a fast
+cut-off, introspect the tokens or keep them short.
 
 **Teams share their pools.** All the members of a team, people and service accounts alike, draw on the same quotas of
 the team, and everybody in the organisation draws on the pool of the organisation. A team that mixes people and

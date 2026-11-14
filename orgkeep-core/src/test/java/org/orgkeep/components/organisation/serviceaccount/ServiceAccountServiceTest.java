@@ -230,6 +230,40 @@ class ServiceAccountServiceTest {
                 new UpdateServiceAccountRequest(null, List.of("sandbox"))));
     }
 
+    // what makes a service account is the group of the org, not its username: a person's username is their email, and
+    // "service-account-ci@..." stays listed, counted and manageable
+    @Test
+    void aPersonWhoseEmailStartsLikeAServiceAccountIsStillAPerson() {
+        String paulId = memberService.add(realm(), ORG, new AddMemberRequest("paul@acme.test", "Paul", "Test")).id();
+        String ciId = memberService.add(realm(), ORG,
+                new AddMemberRequest("service-account-ci@acme.test", "Ci", "Test")).id();
+        create("billing", List.of());
+
+        assertEquals(Set.of(paulId, ciId),
+                memberService.list(realm(), ORG).stream().map(OrgMember::id).collect(Collectors.toSet()));
+        assertEquals(2, orgService.list(realm(), null, null, null, 0, 10).getFirst().memberCount());
+        assertEquals(List.of("billing"), serviceAccountService.list(realm(), ORG).stream().map(ServiceAccount::name).toList());
+
+        assertFalse(memberService.setEnabled(realm(), ORG, ciId, false, paulId).enabled());
+        memberService.remove(realm(), ORG, ciId);
+        assertEquals(List.of(paulId), memberService.list(realm(), ORG).stream().map(OrgMember::id).toList());
+    }
+
+    // a client of the console whose service-account user is added to the org by hand is no service account of Orgkeep
+    // either way: without the group it is a member like another
+    @Test
+    void aConsoleServiceAccountUserAddedToTheOrgIsNotInTheGroupSoNotFiltered() {
+        String uuid = testRealm.createClient("console-client");
+        var rep = testRealm.resource().clients().get(uuid).toRepresentation();
+        rep.setServiceAccountsEnabled(true);
+        testRealm.resource().clients().get(uuid).update(rep);
+        String userId = testRealm.resource().clients().get(uuid).getServiceAccountUser().getId();
+        orgs.addMember(realm(), testRealm.resource().organizations().search("acme", true, 0, 1).getFirst().getId(), userId);
+
+        assertEquals(List.of(userId), memberService.list(realm(), ORG).stream().map(OrgMember::id).toList());
+        assertEquals(List.of(), serviceAccountService.list(realm(), ORG));
+    }
+
     @Test
     void invalidNameIsRefusedEverywhere() {
         assertThrowsExactly(InvalidRequestException.class, () -> create("Billing", List.of()));

@@ -10,10 +10,11 @@ import org.orgkeep.api.model.OrgGroups;
 import org.orgkeep.components.catalog.CatalogSetup;
 import org.orgkeep.repository.keycloak.KeycloakClients;
 import org.orgkeep.repository.keycloak.KeycloakGroups;
-import org.orgkeep.repository.keycloak.KeycloakUsers;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * The service accounts of an org, found through the group /{org}/service-accounts: what the other parts of the core
@@ -29,7 +30,6 @@ public class ServiceAccounts {
     private final KeycloakClients clients;
     private final KeycloakGroups groups;
     private final CatalogSetup catalogSetup;
-    private final KeycloakUsers keycloakUsers;
 
     /** The members of the group of the org: the users of its service accounts. Empty for an org without the group. */
     public List<UserRepresentation> users(String realm, String orgName) {
@@ -65,18 +65,20 @@ public class ServiceAccounts {
         return client.getAttributes() != null && orgName.equals(client.getAttributes().get(OrgClients.ORG_ATTRIBUTE));
     }
 
-    /**
-     * Whether the user is the user of a service account (Keycloak names it "service-account-{clientId}"). Service
-     * accounts are members of the Keycloak organisation, so everything that walks its members must leave them out:
-     * they are not people.
-     */
-    public static boolean isServiceAccountUser(UserRepresentation user) {
-        return user.getUsername() != null && user.getUsername().startsWith(OrgClients.SERVICE_ACCOUNT_USERNAME_PREFIX);
+    /** Ids of the service-account users of the org: the members of its group. Read once to filter a member list. */
+    public Set<String> userIds(String realm, String orgName) {
+        return users(realm, orgName).stream().map(UserRepresentation::getId).collect(Collectors.toSet());
     }
 
-    /** Same, for a user known by its id. An unknown user is not one. */
-    public boolean isServiceAccountUser(String realm, String userId) {
-        return keycloakUsers.find(realm, userId).map(ServiceAccounts::isServiceAccountUser).orElse(false);
+    /**
+     * Whether the user is a service account of this org: a member of its group /{org}/service-accounts, the proof
+     * that a service account belongs to the org. Service accounts are members of the Keycloak organisation too, so
+     * everything that walks its members must leave them out: they are not people. Not told by the username: a person's
+     * username is their email, which may start with "service-account-" like any other.
+     */
+    public boolean isServiceAccountUser(String realm, String orgName, String userId) {
+        String groupPath = OrgGroups.serviceAccounts(orgName);
+        return groups.groupsOf(realm, userId).stream().anyMatch(group -> groupPath.equals(group.getPath()));
     }
 
     /**

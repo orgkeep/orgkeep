@@ -39,7 +39,7 @@ public class TokenPreviewServiceImpl implements TokenPreviewService {
     public TokenPreview preview(String realm, String orgName, String userId, List<String> catalogs) {
         String orgId = orgs.getByName(realm, orgName).getId();
         // a service account is a member of the Keycloak organisation too, but its token is not previewed here
-        if (!orgs.isMember(realm, orgId, userId) || serviceAccounts.isServiceAccountUser(realm, userId)) {
+        if (!orgs.isMember(realm, orgId, userId) || serviceAccounts.isServiceAccountUser(realm, orgName, userId)) {
             throw new MemberNotFoundException(orgName, userId);
         }
         // the names go into the scope parameter: only real catalogs, never another client scope of the realm

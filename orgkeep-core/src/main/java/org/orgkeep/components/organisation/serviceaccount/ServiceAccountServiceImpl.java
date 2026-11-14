@@ -106,10 +106,11 @@ public class ServiceAccountServiceImpl implements ServiceAccountService {
 
             UserRepresentation user = clients.serviceAccountUser(realm, clientUuid).orElseThrow(() ->
                     new IllegalStateException("Client '%s' has no service account user".formatted(request.name())));
-            // an UNMANAGED member, like the users added by an org admin. Left out of everything that lists or changes
-            // the members (see ServiceAccounts.isServiceAccountUser). Deleting the client removes the membership
-            orgs.addMember(realm, org.getId(), user.getId());
+            // in the group first: from the moment the user is a member of the Keycloak organisation, everything that
+            // lists the members must already know it is not a person (see ServiceAccounts.isServiceAccountUser)
             groups.join(realm, user.getId(), serviceAccountsGroupId(realm, orgName));
+            // an UNMANAGED member, like the users added by an org admin. Deleting the client removes both memberships
+            orgs.addMember(realm, org.getId(), user.getId());
 
             String secret = clients.regenerateSecret(realm, clientUuid);
 

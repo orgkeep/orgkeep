@@ -102,7 +102,7 @@ public class UserGroupServiceImpl implements UserGroupService {
             // a group of the org only takes members of the org: the products it grants are those of the org
             // not a service account either: they are members of the Keycloak organisation too, and never in a team
             // through this endpoint
-            if (!orgs.isMember(realm, org.getId(), userId) || serviceAccounts.isServiceAccountUser(realm, userId)) {
+            if (!orgs.isMember(realm, org.getId(), userId) || serviceAccounts.isServiceAccountUser(realm, orgName, userId)) {
                 throw new MemberNotFoundException(orgName, userId);
             }
 

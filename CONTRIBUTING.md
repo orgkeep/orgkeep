@@ -44,6 +44,8 @@ license).
   and run). The *Build* check runs it again on each pull request.
 - A change of the theme is checked in a browser, and in Mailpit for an email (see *Work on it* in the
   [README of the theme](orgkeep-theme/README.md)). A screenshot in the pull request helps the review.
+- A change of behaviour or of a setting updates its page in [`documentation/`](documentation) in the same pull
+  request. It is published on https://orgkeep.org/docs/ at the next release, or earlier by a maintainer.
 - Follow the style of the surrounding code. Comments are in English.
 - A commit message starts with a short summary line, followed by why the change is needed when it is not obvious.
 - No IDE files or build output in the commits (`target`, `node_modules`, `dist`, `.quinoa`).
@@ -85,3 +87,10 @@ The theme inherits from the default themes of Keycloak and only changes their ap
 templates, nothing specific to Orgkeep in the flows. The less is copied, the less there is to update when Keycloak
 changes version. Texts go in the `messages` files, with keys prefixed `orgkeep` so that they never replace a key of
 Keycloak.
+
+### `documentation`: the documentation of the site
+
+Markdown pages, with their screenshots in `images/`, English. Each page starts with a front matter (`title`,
+`description`, `sidebar.order`) read by the site generator (Astro Starlight, in the repository `orgkeep.github.io`).
+Links between pages are relative and end with a `/` (`../reference/configuration/`), so that they keep working when a
+version of the documentation gets its own folder. A workflow copies this folder into the site at each release.

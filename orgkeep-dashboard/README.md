@@ -54,41 +54,10 @@ The application listens on port **8284** (`QUARKUS_HTTP_PORT` to change it): the
 
 ## Configuration
 
-Everything of the core (see [its configuration](../orgkeep-core/README.md#configuration): Keycloak,
-realm, owner, emails...), plus the Keycloak client the browser logs in with:
-
-| Variable | Default | What |
-|---|---|---|
-| `ORGKEEP_DASHBOARD_CLIENT_SECRET` | **required** | The secret of the dashboard client |
-| `QUARKUS_OIDC_DASHBOARD_CLIENT_ID` | `orgkeep-dashboard` | Its clientId. When changed, set `ORGKEEP_DASHBOARD_CLIENT_ID` (read by the core) to the same value |
-| `ORGKEEP_DASHBOARD_LOGIN_THEME` | none | `orgkeep` for the login page of the dashboard in the Orgkeep look (the theme must be in Keycloak, see [orgkeep-theme](../orgkeep-theme)) |
-
-### The dashboard client in Keycloak
-
-Create it in the realm managed by Orgkeep (the demo, `ORGKEEP_DEMO_ENABLED=true`, creates it for `localhost:8284`):
-
-- Client ID `orgkeep-dashboard`, **Client authentication on** (a confidential client: the secret stays on the
-  server), **Standard flow** only;
-- Valid redirect URIs: `https://dashboard.example.com/*`, the public URL of the dashboard;
-- Valid post logout redirect URIs: `+` (the same as the redirect URIs);
-- then copy its secret (tab **Credentials**) into `ORGKEEP_DASHBOARD_CLIENT_SECRET`.
-
-Example:
-
-```
-docker run -p 8284:8284 \
-  -e KEYCLOAK_URL=https://keycloak.example.com \
-  -e KEYCLOAK_ADMIN_USER=admin -e KEYCLOAK_ADMIN_PASSWORD=... \
-  -e ORGKEEP_REALM_NAME=acme \
-  -e ORGKEEP_OWNER_EMAIL=owner@acme.com -e ORGKEEP_OWNER_PASSWORD=... \
-  -e ORGKEEP_OWNER_FIRST_NAME=Alice -e ORGKEEP_OWNER_LAST_NAME=Martin \
-  -e ORGKEEP_DASHBOARD_CLIENT_SECRET=... \
-  ghcr.io/orgkeep/orgkeep:0.1.0
-```
-
-On the first startup the realm does not exist yet, so neither does the client: start Orgkeep once with any value in
-`ORGKEEP_DASHBOARD_CLIENT_SECRET` (it is only used at login), create the client, then restart Orgkeep with its real
-secret.
+Everything of the core (Keycloak, realm, owner, emails...), plus the Keycloak client the browser logs in with:
+`ORGKEEP_DASHBOARD_CLIENT_SECRET` is required, and the client itself is created in Keycloak (the demo creates it).
+The complete reference, with every variable and how to create the client, is in the documentation:
+https://orgkeep.org/docs/latest/reference/configuration/ (its source is [`documentation/`](../documentation)).
 
 ## Contributing
 

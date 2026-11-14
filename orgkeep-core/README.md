@@ -78,65 +78,14 @@ catalog `products`. At every startup, it adds what is missing, so an existing re
 
 ## Configuration
 
-Environment variables (or the matching properties in `application.properties`, `orgkeep.realm-name` for
-`ORGKEEP_REALM_NAME`...).
+Orgkeep is configured with environment variables (or the matching properties in `application.properties`,
+`orgkeep.realm-name` for `ORGKEEP_REALM_NAME`...). Four are required: `KEYCLOAK_URL`, `ORGKEEP_REALM_NAME`,
+`ORGKEEP_OWNER_EMAIL` and `ORGKEEP_OWNER_PASSWORD` (plus the first and last name of the owner when the realm is
+created). The Keycloak admin account, the SMTP server, the dashboard client, Swagger UI and the demo data have their
+own settings.
 
-### Keycloak
-
-| Variable | Default | What |
-|---|---|---|
-| `KEYCLOAK_URL` | **required** | Base URL of Keycloak as Orgkeep reaches it, without `/realms/...` (`http://keycloak:8080` inside Docker). Used for the admin API and to verify the tokens |
-| `KEYCLOAK_ADMIN_USER` | `admin` | Admin of the `master` realm, through the client `admin-cli` |
-| `KEYCLOAK_ADMIN_PASSWORD` | `admin` | Its password |
-| `ORGKEEP_KEYCLOAK_PUBLIC_URL` | the base of `KEYCLOAK_URL` | Keycloak as the browsers see it (`https://login.example.com`): the issuer of the tokens and the console link shown to the realm owner. Set it when `KEYCLOAK_URL` is an internal URL |
-
-### Realm and its owner
-
-| Variable | Default | What |
-|---|---|---|
-| `ORGKEEP_REALM_NAME` | **required** | The realm managed by Orgkeep, created at the first startup. The API only accepts tokens of this realm |
-| `ORGKEEP_OWNER_EMAIL` | **required** | The initial realm owner |
-| `ORGKEEP_OWNER_PASSWORD` | **required** | Its initial password |
-| `ORGKEEP_OWNER_USERNAME` | the email | Its username |
-| `ORGKEEP_OWNER_FIRST_NAME` / `ORGKEEP_OWNER_LAST_NAME` | **required** when the realm is created | Keycloak asks for them at the first login otherwise |
-| `ORGKEEP_OWNER_TEMPORARY_PASSWORD` | `true` | The owner must change the password at the first login |
-| `ORGKEEP_MODE` | `on-prem` | `on-prem`: the realm owner also gets the Keycloak admin console of the realm. `saas` is reserved for the hosted offer |
-
-### Emails
-
-Invitations are sent by Keycloak, through the SMTP server of the realm. When `ORGKEEP_SMTP_HOST` is set, Orgkeep
-writes these settings on the realm at every startup; otherwise the realm keeps its own (set in the Keycloak console).
-
-| Variable | Default | What |
-|---|---|---|
-| `ORGKEEP_SMTP_HOST` | none | SMTP server |
-| `ORGKEEP_SMTP_PORT` | `25` | |
-| `ORGKEEP_SMTP_FROM` | **required** with a host | Sender address |
-| `ORGKEEP_SMTP_FROM_DISPLAY_NAME` | none | Sender name |
-| `ORGKEEP_SMTP_USERNAME` / `ORGKEEP_SMTP_PASSWORD` | none | Authentication, enabled when the username is set |
-| `ORGKEEP_SMTP_STARTTLS` / `ORGKEEP_SMTP_SSL` | `false` | |
-| `ORGKEEP_INVITATION_LINK_LIFESPAN` | `72h` | Validity of the link of the invitation email |
-| `ORGKEEP_LOCKS_MAX_WAIT` | `2s` | How long a short write (adding or removing a member, creating an organisation) waits for a change in progress on the same organisation before answering `409`. Enabling, disabling and deleting an organisation never wait |
-
-### Dashboard client
-
-Read by the core even without the dashboard, since the core manages the realm.
-
-| Variable | Default | What |
-|---|---|---|
-| `ORGKEEP_DASHBOARD_CLIENT_ID` | `orgkeep-dashboard` | The Keycloak client of the dashboard |
-| `ORGKEEP_DASHBOARD_LOGIN_THEME` | none | Login theme set on the dashboard client only (`orgkeep`, see orgkeep-theme). The users of the organisations keep the theme of the realm |
-
-### API documentation and demo
-
-| Variable | Default | What |
-|---|---|---|
-| `QUARKUS_SWAGGER_UI_ENABLE` | `false` | Swagger UI on `/q/swagger-ui` (always in the image, off by default) |
-| `ORGKEEP_SWAGGER_UI_LOGIN` | `false` | Login with a username and a password in Swagger UI, instead of pasting a token |
-| `ORGKEEP_SWAGGER_UI_AUTH_SERVER_URL` | the realm under `ORGKEEP_KEYCLOAK_PUBLIC_URL` | The realm as the browser sees it, for this login |
-| `ORGKEEP_DEMO_ENABLED` | `false` | Creates the demo organisation, accounts and catalogs (fixed passwords: never in production) |
-
-Any other [Quarkus setting](https://quarkus.io/guides/all-config) works the same way (`QUARKUS_LOG_LEVEL`...).
+The complete reference, with every variable and its default, is in the documentation:
+https://orgkeep.org/docs/latest/reference/configuration/ (its source is [`documentation/`](../documentation)).
 
 ## The API
 

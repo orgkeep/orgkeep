@@ -14,7 +14,8 @@ Orgkeep runs on top of Keycloak 26 (its native Organizations included). It owns 
 Keycloak and needs no database of its own: everything is stored in Keycloak.
 
 To try it without building anything: the demo stack of
-[orgkeep-examples](https://github.com/orgkeep/orgkeep-examples) (`docker compose up`, then http://localhost:8284).
+[orgkeep-examples](https://github.com/orgkeep/orgkeep-examples) (`docker compose up`, then http://localhost:8284), or the
+[getting started guide](https://orgkeep.org/docs/latest/getting-started/).
 
 > **Status: early preview (0.x).** Orgkeep is ready to be tried, not yet to run in production. Feedback is welcome
 > in the [issues](https://github.com/orgkeep/orgkeep/issues).
@@ -34,7 +35,8 @@ Three modules, released together with one version:
 | [`orgkeep-dashboard`](orgkeep-dashboard) | The same API plus a web UI for the realm owner and the org admins: one application | `ghcr.io/orgkeep/orgkeep` |
 | [`orgkeep-theme`](orgkeep-theme) | A Keycloak theme in the look of Orgkeep (login page of the dashboard, emails, account console) | `ghcr.io/orgkeep/orgkeep-keycloak` (Keycloak with the theme) |
 
-How to run and configure each one is in its README.
+How to run each one is in its README. The documentation, with the configuration reference, is at
+https://orgkeep.org/docs/latest/ (its source is [`documentation/`](documentation)).
 
 ## Build
 

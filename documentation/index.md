@@ -8,7 +8,7 @@ sidebar:
 Orgkeep makes multi-tenant B2B on Keycloak simple. A *realm owner* (a B2B company) creates one **organisation** per
 customer and names its **org admins**, who invite their users and give them access through **teams**. The realm owner
 sells **products** from **catalogs**, with features and quotas, and the tokens of the users carry what their
-organisation bought, in the standard `resource_access` claim plus a claim per product.
+organisation bought, in the standard `resource_access` claim plus a claim per catalog (quotas and parameters).
 
 Orgkeep runs on top of Keycloak 26 (its native Organizations included). It owns the integrity of what it writes in
 Keycloak and needs no database of its own: everything is stored in Keycloak.

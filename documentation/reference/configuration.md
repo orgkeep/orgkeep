@@ -2,7 +2,7 @@
 title: Configuration
 description: Every setting of the Orgkeep core and dashboard, with its environment variable and default.
 sidebar:
-  order: 1
+  order: 10
 ---
 
 Orgkeep is configured with environment variables (or the matching properties in `application.properties`:

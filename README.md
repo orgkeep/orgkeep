@@ -1,5 +1,10 @@
 # Orgkeep
 
+![Build](https://github.com/orgkeep/orgkeep/actions/workflows/build.yml/badge.svg)
+![License](https://img.shields.io/badge/license-Apache%202.0-blue)
+![Status](https://img.shields.io/badge/status-early%20preview-yellow)
+![Java](https://img.shields.io/badge/Java-25-orange)
+
 Orgkeep makes multi-tenant B2B on Keycloak simple. A *realm owner* (a B2B company) creates one **organisation** per
 customer and names its **org admins**, who invite their users and give them access through **teams**. The realm owner
 sells **products** from **catalogs**, with features and quotas, and the tokens of the users carry what their

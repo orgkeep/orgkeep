@@ -60,8 +60,11 @@ public class UserGroupServiceImpl implements UserGroupService {
                     for (UserRepresentation member : groups.members(realm, group.getId())) {
                         if (!serviceAccountIds.contains(member.getId())) {
                             memberIds.add(member.getId());
-                        } else if (ServiceAccounts.nameOfUser(orgName, member) != null) {
-                            serviceAccountNames.add(ServiceAccounts.nameOfUser(orgName, member));
+                        } else {
+                            String name = ServiceAccounts.nameOfUser(orgName, member);
+                            if (name != null) {
+                                serviceAccountNames.add(name);
+                            }
                         }
                     }
                     serviceAccountNames.sort(Comparator.naturalOrder());

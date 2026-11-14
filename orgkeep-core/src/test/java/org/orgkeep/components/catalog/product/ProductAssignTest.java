@@ -138,6 +138,31 @@ class ProductAssignTest {
                 .anyMatch(scope -> CATALOG.equals(scope.getName())));
     }
 
+    // the first product of the org in a catalog created after the service account: the catalog becomes optional on it,
+    // a catalog the org has nothing in is not touched, and a default one stays default
+    @Test
+    void firstAssignmentInACatalogMakesItOptionalOnTheServiceAccounts() {
+        serviceAccountService.create(realm(), ORG, new CreateServiceAccountRequest("batch", null, null));
+        String uuid = testRealm.resource().clients().findByClientId("org-acme.batch").getFirst().getId();
+        catalogService.create(realm(), new CreateCatalogRequest("late", "Late", null));
+        catalogService.create(realm(), new CreateCatalogRequest("other", "Other", null));
+        productService.create(realm(), "late", new CreateProductRequest("l", "l", null));
+        assertEquals(Set.of(), optionalOf(uuid, "late", "other"));
+
+        productService.assign(realm(), ORG, "late", "l", request());
+
+        assertEquals(Set.of("late"), optionalOf(uuid, "late", "other"));
+        assertEquals(Set.of(), defaultCatalogs(uuid));
+    }
+
+    private Set<String> optionalOf(String clientUuid, String... names) {
+        Set<String> wanted = Set.of(names);
+        return testRealm.resource().clients().get(clientUuid).getOptionalClientScopes().stream()
+                .map(scope -> scope.getName())
+                .filter(wanted::contains)
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
     private Set<String> defaultCatalogs(String clientUuid) {
         return testRealm.resource().clients().get(clientUuid).getDefaultClientScopes().stream()
                 .map(scope -> scope.getName())

@@ -145,6 +145,27 @@ class ServiceAccountTokenTest {
         assertEquals(Set.of("searcher"), strings(defaulted.at("/resource_access/prod/roles")));
     }
 
+    // a catalog created after the service account: at the first product of the org in it, it becomes an optional scope
+    // of the client, so that the application can ask for it
+    @Test
+    void catalogCreatedAfterTheServiceAccountCanBeAskedOnceTheOrgHasAProduct() throws Exception {
+        ServiceAccountCreated created = create(List.of());
+        catalogService.create(realm(), new CreateCatalogRequest("late", "Late", null));
+        productService.create(realm(), "late", new CreateProductRequest("batch", "Batch", null));
+        catalogRoleService.create(realm(), "late", new CreateCatalogRoleRequest("runner", null, null, true));
+        String lateUuid = testRealm.resource().clients().findByClientId("late").getFirst().getId();
+        RoleRepresentation role = testRealm.resource().clients().get(lateUuid).roles().get("runner").toRepresentation();
+        testRealm.resource().users().get(created.serviceAccount().userId()).roles().clientLevel(lateUuid).add(List.of(role));
+
+        // the org has nothing in it yet: the scope is not on the client
+        assertEquals(400, grant(created.credentials().clientSecret(), true, "late").status());
+
+        productService.assign(realm(), ORG, "late", "batch", new AssignProductRequest(10L, QuotaCycle.DAILY));
+
+        JsonNode claims = claims(grant(created.credentials().clientSecret(), true, "late"));
+        assertEquals(Set.of("runner"), strings(claims.at("/resource_access/late/roles")));
+    }
+
     @Test
     void rotationInvalidatesTheOldSecretAtOnce() throws Exception {
         String oldSecret = create(List.of()).credentials().clientSecret();

@@ -156,20 +156,6 @@ public class KeycloakClients {
                 .forEach(scope -> client.removeOptionalClientScope(scope.getId()));
     }
 
-    /** Names of the default client scopes of the client. */
-    public Set<String> defaultScopeNames(String realm, String clientUuid) {
-        return keycloak.realm(realm).clients().get(clientUuid).getDefaultClientScopes().stream()
-                .map(ClientScopeRepresentation::getName)
-                .collect(Collectors.toSet());
-    }
-
-    /** Names of the optional client scopes of the client. */
-    public Set<String> optionalScopeNames(String realm, String clientUuid) {
-        return keycloak.realm(realm).clients().get(clientUuid).getOptionalClientScopes().stream()
-                .map(ClientScopeRepresentation::getName)
-                .collect(Collectors.toSet());
-    }
-
     /** The service-account user of the client, empty if the client has no service account. */
     public Optional<UserRepresentation> serviceAccountUser(String realm, String clientUuid) {
         try {

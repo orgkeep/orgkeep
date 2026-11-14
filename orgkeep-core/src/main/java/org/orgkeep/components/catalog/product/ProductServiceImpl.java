@@ -343,6 +343,9 @@ public class ProductServiceImpl implements ProductService {
                 throw e;
             }
             log.info("Product '{}' of catalog '{}' assigned to organisation '{}' in realm '{}'", product, catalog, orgName, realm);
+            // the service accounts of the org can now ask for the catalog (scope=<catalog>): the counterpart of what
+            // unassign does with the last product of a catalog
+            serviceAccounts.makeCatalogAvailable(realm, orgName, catalog);
             // a first assignment needs no alignment: a team can only give a product already assigned, and
             // unassign erases the choices of the teams
             return orgProduct(catalog, product, groupId, request, params);

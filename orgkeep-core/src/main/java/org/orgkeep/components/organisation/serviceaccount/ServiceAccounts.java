@@ -104,6 +104,23 @@ public class ServiceAccounts {
     }
 
     /**
+     * The catalog becomes an optional scope of every service account of the org that has it neither by default nor
+     * as optional: a catalog created after the service account, whose first product the org just got. Idempotent.
+     */
+    public void makeCatalogAvailable(String realm, String orgName, String catalog) {
+        String scopeId = catalogSetup.catalogScopeIds(realm).get(catalog);
+        if (scopeId == null) {
+            return;
+        }
+        for (UserRepresentation user : users(realm, orgName)) {
+            clientOf(realm, orgName, user)
+                    .filter(client -> !clients.defaultScopeIds(realm, client.getId()).contains(scopeId)
+                            && !clients.optionalScopeIds(realm, client.getId()).contains(scopeId))
+                    .ifPresent(client -> clients.makeOptionalScope(realm, client.getId(), scopeId));
+        }
+    }
+
+    /**
      * The catalog goes back to optional on every service account of the org that had it by default: the org has no
      * product in it any more. The direct reserved roles of the service accounts stay, as they do for the users.
      */

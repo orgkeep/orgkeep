@@ -244,8 +244,10 @@ public class ServiceAccountServiceImpl implements ServiceAccountService {
             }
             log.info("Service account '{}' of organisation '{}' in realm '{}' {}", name, orgName, realm,
                     enabled ? "enabled" : "disabled");
+            // built under the lock from what was resolved and written, like update
+            return toServiceAccount(realm, orgName, resolved.client(), users.get(realm, userId),
+                    catalogSetup.catalogScopeIds(realm));
         }
-        return get(realm, orgName, name);
     }
 
     /**

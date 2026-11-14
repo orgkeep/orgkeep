@@ -180,7 +180,9 @@ public class OrgServiceImpl implements OrgService {
                         .map(group -> catalogGroup.getName() + "/" + group.getName()))
                 .sorted()
                 .toList();
-        // the service accounts are members of the Keycloak organisation too: they are not counted
+        // the service accounts are members of the Keycloak organisation too: they are not counted. Two more calls per
+        // org (the group, its members), the price of a count that agrees with the member list, which leaves out the
+        // members of that group. The admin API has no count of the members of a group
         long memberCount = Math.max(0, orgs.memberCount(realm, org.getId()) - serviceAccounts.users(realm, org.getName()).size());
         return orgMapper.toOrgSummary(org, owners, memberCount, products);
     }

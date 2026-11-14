@@ -45,6 +45,11 @@ public interface CatalogRoleMapper {
                 Boolean.parseBoolean(firstValue(role.getAttributes(), CatalogRoles.ORG_GRANTABLE)));
     }
 
-    @Mapping(target = "userId", source = "id")
-    RoleHolder toRoleHolder(UserRepresentation user);
+    /** @param serviceAccount the clientId of the service account of the user, null for a person; org: its org, if known */
+    @Mapping(target = "userId", source = "user.id")
+    @Mapping(target = "username", source = "user.username")
+    @Mapping(target = "email", source = "user.email")
+    @Mapping(target = "serviceAccount", source = "serviceAccount")
+    @Mapping(target = "org", source = "org")
+    RoleHolder toRoleHolder(UserRepresentation user, String serviceAccount, String org);
 }

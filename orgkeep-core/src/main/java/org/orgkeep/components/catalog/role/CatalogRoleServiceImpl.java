@@ -22,10 +22,15 @@ import org.orgkeep.repository.keycloak.KeycloakUsers;
 import jakarta.enterprise.context.ApplicationScoped;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.RoleRepresentation;
+import org.keycloak.representations.idm.UserRepresentation;
+import org.orgkeep.api.model.OrgClients;
+import org.orgkeep.components.organisation.serviceaccount.ServiceAccounts;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 
 @Slf4j
 @ApplicationScoped
@@ -39,6 +44,7 @@ public class CatalogRoleServiceImpl implements CatalogRoleService {
     private final TeamAlignment teamAlignment;
     private final CatalogRoleMapper catalogRoleMapper;
     private final ResourceLocks locks;
+    private final ServiceAccounts serviceAccounts;
 
     @Override
     public CatalogRole create(String realm, String catalog, CreateCatalogRoleRequest request) {
@@ -105,10 +111,17 @@ public class CatalogRoleServiceImpl implements CatalogRoleService {
         getRole(realm, catalog, ids, role);
         // a short write on the user: refused (409) while the user is being removed from its org or changed otherwise
         try (HeldLocks ignored = locks.acquire(LockRequest.userById(realm, userId, LockMode.EXCLUSIVE))) {
-            users.find(realm, userId).orElseThrow(() -> new UserNotFoundException(realm, userId));
-            // the catalog roles are for the users of the orgs (and later their service accounts), not for anyone in the realm
-            if (orgs.organisationsOf(realm, userId).isEmpty()) {
-                throw new OperationNotAllowedException("User '%s' is not a member of an organisation".formatted(userId));
+            UserRepresentation user = users.find(realm, userId).orElseThrow(() -> new UserNotFoundException(realm, userId));
+            // the catalog roles are for the people of the orgs and their service accounts, not for anyone in the realm.
+            // The user of a service account counts only for a service account of Orgkeep (the group of the org and the
+            // attribute of the client): another client of the console, whose user was put in an organisation by hand,
+            // is refused
+            boolean allowed = serviceAccounts.clientOfUser(realm, user).isPresent()
+                    ? serviceAccounts.orgOf(realm, user).isPresent()
+                    : !orgs.organisationsOf(realm, userId).isEmpty();
+            if (!allowed) {
+                throw new OperationNotAllowedException(
+                        "User '%s' is not a member of an organisation or a service account of one".formatted(userId));
             }
             clients.grantToUser(realm, ids.clientUuid(), userId, role);
         }
@@ -130,10 +143,20 @@ public class CatalogRoleServiceImpl implements CatalogRoleService {
     public List<RoleHolder> holders(String realm, String catalog, String role) {
         CatalogSetup.Ids ids = catalogSetup.get(realm, catalog);
         getRole(realm, catalog, ids, role);
+        // the brief representations of the holders do not say which one is a service account: read each in full
         return clients.listUsersWithRole(realm, ids.clientUuid(), role).stream()
-                .map(catalogRoleMapper::toRoleHolder)
+                .map(holder -> users.find(realm, holder.getId()).orElse(holder))
+                .map(holder -> toRoleHolder(realm, holder))
                 .sorted(Comparator.comparing(RoleHolder::username))
                 .toList();
+    }
+
+    /** The org shown for a service account is the attribute of its client, even if the user is not in its group. */
+    private RoleHolder toRoleHolder(String realm, UserRepresentation user) {
+        Optional<ClientRepresentation> client = serviceAccounts.clientOfUser(realm, user);
+        String org = client.map(found -> found.getAttributes() == null ? null : found.getAttributes().get(OrgClients.ORG_ATTRIBUTE))
+                .orElse(null);
+        return catalogRoleMapper.toRoleHolder(user, client.map(ClientRepresentation::getClientId).orElse(null), org);
     }
 
     /** The role, checked to be a catalog role (not a product of the same client). */

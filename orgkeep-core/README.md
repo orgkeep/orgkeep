@@ -145,10 +145,32 @@ Everything lives under `/api`, for two audiences:
 
 - `/api/admin/...`: the realm owner (realm role `realm-owner`): organisations, catalogs, products, assignments of
   products to organisations, catalog roles, login client;
-- `/api/organisations/{org}/...`: the org admins of `{org}` (and the realm owner): members, teams, what the teams give.
+- `/api/organisations/{org}/...`: the org admins of `{org}` (and the realm owner): members, teams, what the teams give,
+  service accounts.
 
 Callers send an access token of the realm (`Authorization: Bearer ...`). The full contract is on `/q/openapi`, and in
 Swagger UI when enabled.
+
+### Service accounts
+
+An organisation gets machine-to-machine access to your APIs with **service accounts**: the org admins create them
+(`/api/organisations/{org}/service-accounts`), and each is an OAuth2 client with the client credentials grant, named
+`org-<org>.<name>`. The secret is shown once, at creation and at each rotation. A service account gets its products the
+way a person does, by being put in a **team** (`PUT /api/organisations/{org}/user-groups/{team}/service-accounts/{name}`),
+and its token carries the same catalog claims as a person's, plus `organization: ["<org>"]`. The realm owner can also
+give it a reserved catalog role directly. A service account never carries an org role: it cannot call this API.
+
+Disabling a service account (or its organisation) stops new tokens and makes an introspection answer `active: false`,
+but does not revoke a token already issued: an API that only checks the signature accepts it until it expires. For a
+fast cut-off, introspect the tokens or keep them short.
+
+**Teams share their pools.** All the members of a team, people and service accounts alike, draw on the same quotas of
+the team, and everybody in the organisation draws on the pool of the organisation. A team that mixes people and
+service accounts is allowed, but people can then use up its quota and block an application. The pattern to follow:
+**one team per application**, and a **team quota on the teams of people**. A team quota is a cap, so it leaves room for
+the application. For example, with an organisation quota of 1000 and a team of people capped at 700, the team of the
+application, without a team quota, always keeps at least 300. (Separating people and applications into different teams
+does not by itself protect the application: they still share the pool of the organisation.)
 
 ## Contributing
 

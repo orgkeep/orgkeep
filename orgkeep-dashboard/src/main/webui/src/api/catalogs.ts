@@ -195,11 +195,14 @@ export interface UpdateCatalogRoleRequest {
   orgGrantable: boolean;
 }
 
-// A user holding the role directly (given by the realm owner), not through a team
+// A user or a service account holding the role directly (given by the realm owner), not through a team
 export interface RoleHolder {
   userId: string;
   username: string;
   email: string | null;
+  // the clientId and the org of a service account, null for a user
+  serviceAccount: string | null;
+  org: string | null;
 }
 
 function rolesUrl(catalog: string): string {

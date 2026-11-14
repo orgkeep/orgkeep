@@ -102,7 +102,7 @@ class CatalogRoleServiceTest {
         catalogRoleService.grant(testRealm.name(), CATALOG, "anonymous", member.id());
         catalogRoleService.grant(testRealm.name(), CATALOG, "anonymous", member.id());
 
-        assertEquals(List.of(new RoleHolder(member.id(), member.username(), "bot@acme.test")),
+        assertEquals(List.of(new RoleHolder(member.id(), member.username(), "bot@acme.test", null, null)),
                 catalogRoleService.holders(testRealm.name(), CATALOG, "anonymous"));
         AccessToken withScope = token(member.id(), "openid " + CATALOG);
         assertEquals(Set.of("anonymous"), withScope.getResourceAccess(CATALOG).getRoles());

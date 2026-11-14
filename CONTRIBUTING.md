@@ -93,4 +93,6 @@ Keycloak.
 Markdown pages, with their screenshots in `images/`, English. Each page starts with a front matter (`title`,
 `description`, `sidebar.order`) read by the site generator (Astro Starlight, in the repository `orgkeep.github.io`).
 Links between pages are relative and end with a `/` (`../reference/configuration/`), so that they keep working when a
-version of the documentation gets its own folder. A workflow copies this folder into the site at each release.
+version of the documentation gets its own folder. The sidebar is built from the folders and files: a page is placed by
+its `sidebar.order` (lower first), a folder becomes a group named after it, placed by the lowest `sidebar.order` of its
+pages, so no list of pages is kept in the site. A workflow copies this folder into the site at each release.

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Anchor, Badge, Button, Group, Loader, Menu, Modal, Stack, Table, Text, Tooltip } from '@mantine/core';
+import { ActionIcon, Alert, Anchor, Badge, Button, Group, Loader, Menu, Modal, Stack, Table, Text, Tooltip } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import {
@@ -12,6 +12,7 @@ import {
   useSetServiceAccountEnabled,
 } from '../api/serviceAccounts';
 import ConfirmModal from '../components/ConfirmModal';
+import GearIcon from '../components/GearIcon';
 import ServiceAccountSecretModal from '../components/ServiceAccountSecretModal';
 import ServiceAccountModal from './ServiceAccountModal';
 
@@ -163,9 +164,10 @@ export default function ServiceAccountsSection({ org, realmOwner = false }: Serv
                     <Group justify="flex-end">
                       <Menu position="bottom-end">
                         <Menu.Target>
-                          <Button variant="subtle" size="xs">
-                            {t('serviceAccounts.actions')}
-                          </Button>
+                          {/* an icon alone: aria-label gives screen readers the word the icon replaces */}
+                          <ActionIcon variant="subtle" aria-label={t('serviceAccounts.actions')}>
+                            <GearIcon />
+                          </ActionIcon>
                         </Menu.Target>
                         <Menu.Dropdown>
                           <Menu.Item onClick={() => setFormTarget(account)} disabled={!catalogs.data}>{t('common.edit')}</Menu.Item>

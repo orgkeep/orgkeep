@@ -49,7 +49,8 @@ export default function ServiceAccountSecretModal({ credentials, rotated, onClos
                 </Table.Td>
                 <Table.Td>
                   <Group gap="xs" wrap="nowrap">
-                    <Code style={{ wordBreak: 'break-all' }}>{row.value}</Code>
+                    {/* flex 1 + minWidth 0: the value takes the room left by the button and wraps inside it */}
+                    <Code style={{ wordBreak: 'break-all', flex: 1, minWidth: 0 }}>{row.value}</Code>
                     <CopyValue value={row.value} />
                   </Group>
                 </Table.Td>

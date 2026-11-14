@@ -14,6 +14,7 @@ import org.orgkeep.components.lock.LockMode;
 import org.orgkeep.components.lock.LockRequest;
 import org.orgkeep.components.lock.ResourceLocks;
 import org.orgkeep.components.organisation.usergroup.team.TeamMapper;
+import org.orgkeep.components.organisation.serviceaccount.ServiceAccounts;
 import org.orgkeep.repository.keycloak.KeycloakGroups;
 import org.orgkeep.repository.keycloak.KeycloakOrgs;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -37,6 +38,7 @@ public class UserGroupServiceImpl implements UserGroupService {
     private final UserGroupMapper userGroupMapper;
     private final TeamMapper teamMapper;
     private final ResourceLocks locks;
+    private final ServiceAccounts serviceAccounts;
 
     /** One call for the groups, then two per group: its members and its role mappings. */
     @Override
@@ -98,7 +100,9 @@ public class UserGroupServiceImpl implements UserGroupService {
             OrganizationRepresentation org = orgs.getByName(realm, orgName);
             String groupId = groupId(realm, orgName, groupName);
             // a group of the org only takes members of the org: the products it grants are those of the org
-            if (!orgs.isMember(realm, org.getId(), userId)) {
+            // not a service account either: they are members of the Keycloak organisation too, and never in a team
+            // through this endpoint
+            if (!orgs.isMember(realm, org.getId(), userId) || serviceAccounts.isServiceAccountUser(realm, userId)) {
                 throw new MemberNotFoundException(orgName, userId);
             }
 

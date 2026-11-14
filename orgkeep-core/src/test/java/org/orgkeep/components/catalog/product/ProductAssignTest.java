@@ -11,11 +11,13 @@ import org.mockito.Mockito;
 import org.orgkeep.api.CatalogService;
 import org.orgkeep.api.OrgService;
 import org.orgkeep.api.ProductService;
+import org.orgkeep.api.ServiceAccountService;
 import org.orgkeep.api.exceptions.ProductAlreadyAssignedException;
 import org.orgkeep.api.model.AssignProductRequest;
 import org.orgkeep.api.model.CreateCatalogRequest;
 import org.orgkeep.api.model.CreateOrgRequest;
 import org.orgkeep.api.model.CreateProductRequest;
+import org.orgkeep.api.model.CreateServiceAccountRequest;
 import org.orgkeep.api.model.OrgGroups;
 import org.orgkeep.api.model.OrgProduct;
 import org.orgkeep.api.model.QuotaCycle;
@@ -47,6 +49,7 @@ class ProductAssignTest {
     @Inject OrgService orgService;
     @Inject CatalogService catalogService;
     @Inject ProductService productService;
+    @Inject ServiceAccountService serviceAccountService;
     @InjectSpy TeamAlignment teamAlignment;
     @InjectSpy KeycloakGroups groups;
 
@@ -111,6 +114,35 @@ class ProductAssignTest {
                 () -> productService.assign(realm(), ORG, CATALOG, "a", request()));
 
         assertTrue(groups.findId(realm(), assignmentPath).isPresent());
+    }
+
+    // the last product of a catalog goes: it is optional again on the service accounts that had it by default. Another
+    // catalog stays as it is, and so does a catalog while the org still has a product in it
+    @Test
+    void unassigningTheLastProductOfACatalogMakesItOptionalOnTheServiceAccounts() {
+        catalogService.create(realm(), new CreateCatalogRequest("sandbox", "Sandbox", null));
+        productService.create(realm(), "sandbox", new CreateProductRequest("s", "s", null));
+        productService.assign(realm(), ORG, CATALOG, "a", request());
+        productService.assign(realm(), ORG, CATALOG, "b", request());
+        productService.assign(realm(), ORG, "sandbox", "s", request());
+        serviceAccountService.create(realm(), ORG,
+                new CreateServiceAccountRequest("batch", null, java.util.List.of(CATALOG, "sandbox")));
+        String uuid = testRealm.resource().clients().findByClientId("org-acme.batch").getFirst().getId();
+
+        productService.unassign(realm(), ORG, CATALOG, "a");
+        assertEquals(Set.of(CATALOG, "sandbox"), defaultCatalogs(uuid), "a product is left in the catalog");
+
+        productService.unassign(realm(), ORG, CATALOG, "b");
+        assertEquals(Set.of("sandbox"), defaultCatalogs(uuid));
+        assertTrue(testRealm.resource().clients().get(uuid).getOptionalClientScopes().stream()
+                .anyMatch(scope -> CATALOG.equals(scope.getName())));
+    }
+
+    private Set<String> defaultCatalogs(String clientUuid) {
+        return testRealm.resource().clients().get(clientUuid).getDefaultClientScopes().stream()
+                .map(scope -> scope.getName())
+                .filter(name -> name.equals(CATALOG) || name.equals("sandbox"))
+                .collect(java.util.stream.Collectors.toSet());
     }
 
     private AssignProductRequest request() {

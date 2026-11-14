@@ -15,6 +15,7 @@ import org.orgkeep.components.lock.LockMode;
 import org.orgkeep.components.lock.LockRequest;
 import org.orgkeep.components.lock.ResourceLocks;
 import org.orgkeep.components.organisation.member.invitation.InvitationMailer;
+import org.orgkeep.components.organisation.serviceaccount.ServiceAccounts;
 import org.orgkeep.repository.keycloak.KeycloakClients;
 import org.orgkeep.repository.keycloak.KeycloakGroups;
 import org.orgkeep.repository.keycloak.KeycloakOrgs;
@@ -43,6 +44,7 @@ public class OrgMemberServiceImpl implements OrgMemberService {
     private final InvitationMailer invitations;
     private final EventBus eventBus;
     private final ResourceLocks locks;
+    private final ServiceAccounts serviceAccounts;
 
     @Override
     public List<OrgMember> list(String realm, String orgName) {
@@ -58,6 +60,8 @@ public class OrgMemberServiceImpl implements OrgMemberService {
                 .orElse(Set.of());
 
         return orgs.members(realm, org.getId()).stream()
+                // the service accounts are members of the Keycloak organisation: not people, not listed
+                .filter(member -> !ServiceAccounts.isServiceAccountUser(member))
                 .map(member -> memberMapper.toOrgMember(member, roleOf(member.getId(), ownerIds, adminIds),
                         invitations.isPending(realm, member)))
                 .toList();
@@ -118,7 +122,7 @@ public class OrgMemberServiceImpl implements OrgMemberService {
     @Override
     public void resendInvitation(String realm, String orgName, String userId) {
         OrganizationRepresentation org = orgs.getByName(realm, orgName);
-        if (!orgs.isMember(realm, org.getId(), userId)) {
+        if (!isPerson(realm, org.getId(), userId)) {
             throw new MemberNotFoundException(orgName, userId);
         }
         invitations.resend(realm, userId);
@@ -164,7 +168,7 @@ public class OrgMemberServiceImpl implements OrgMemberService {
     @Override
     public OrgMember setEnabled(String realm, String orgName, String userId, boolean enabled, String callerId) {
         OrganizationRepresentation org = orgs.getByName(realm, orgName);
-        if (!orgs.isMember(realm, org.getId(), userId)) {
+        if (!isPerson(realm, org.getId(), userId)) {
             throw new MemberNotFoundException(orgName, userId);
         }
         // a caller without id cannot be told from the member: a programming error, the resource refuses it before
@@ -193,7 +197,7 @@ public class OrgMemberServiceImpl implements OrgMemberService {
                         "The organisation '%s' is disabled or being enabled again".formatted(orgName));
             }
             // a remove may have passed between the first check and the locks
-            if (!orgs.isMember(realm, current.getId(), userId)) {
+            if (!isPerson(realm, current.getId(), userId)) {
                 throw new MemberNotFoundException(orgName, userId);
             }
             users.setEnabled(realm, userId, enabled);
@@ -205,6 +209,14 @@ public class OrgMemberServiceImpl implements OrgMemberService {
                     enabled ? "enabled" : "disabled");
         }
         return memberOf(realm, orgName, userId);
+    }
+
+    /**
+     * A member of the org who is a person: the service accounts are members of the Keycloak organisation too, and
+     * every member endpoint answers as if they were not (404).
+     */
+    private boolean isPerson(String realm, String orgId, String userId) {
+        return orgs.isMember(realm, orgId, userId) && !serviceAccounts.isServiceAccountUser(realm, userId);
     }
 
     /** One member, as {@link #list} renders it. Never an owner here: setEnabled refuses owners before. */
@@ -230,7 +242,7 @@ public class OrgMemberServiceImpl implements OrgMemberService {
 
     private void removeLocked(String realm, OrganizationRepresentation org, String userId) {
         String orgName = org.getName();
-        if (!orgs.isMember(realm, org.getId(), userId)) {
+        if (!isPerson(realm, org.getId(), userId)) {
             throw new MemberNotFoundException(orgName, userId);
         }
 

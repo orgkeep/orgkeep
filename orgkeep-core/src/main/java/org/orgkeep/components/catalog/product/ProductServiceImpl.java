@@ -24,6 +24,7 @@ import org.orgkeep.components.lock.HeldLocks;
 import org.orgkeep.components.lock.LockMode;
 import org.orgkeep.components.lock.LockRequest;
 import org.orgkeep.components.lock.ResourceLocks;
+import org.orgkeep.components.organisation.serviceaccount.ServiceAccounts;
 import org.orgkeep.components.organisation.usergroup.team.TeamAlignment;
 import org.orgkeep.components.organisation.usergroup.team.TeamClaims;
 import org.orgkeep.repository.keycloak.KeycloakClientScopes;
@@ -65,6 +66,7 @@ public class ProductServiceImpl implements ProductService {
     private final TeamAlignment teamAlignment;
     private final ProductMapper productMapper;
     private final ResourceLocks locks;
+    private final ServiceAccounts serviceAccounts;
 
     @Override
     public Product create(String realm, String catalog, CreateProductRequest request) {
@@ -417,6 +419,8 @@ public class ProductServiceImpl implements ProductService {
             teamAlignment.revoke(realm, orgName, catalog, product);
             if (!teamAlignment.hasAssignment(realm, orgName, catalog)) {
                 teamAlignment.revokeCatalogRoles(realm, orgName, catalog);
+                // and the service accounts of the org no longer have it by default (they could not ask it either)
+                serviceAccounts.makeCatalogOptional(realm, orgName, catalog);
             }
             log.info("Product '{}' of catalog '{}' unassigned from organisation '{}' in realm '{}'", product, catalog, orgName, realm);
         }

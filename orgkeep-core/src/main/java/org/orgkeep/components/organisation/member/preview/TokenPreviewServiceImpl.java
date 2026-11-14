@@ -10,6 +10,7 @@ import org.orgkeep.api.exceptions.MemberNotFoundException;
 import org.orgkeep.api.model.LightweightTokens;
 import org.orgkeep.api.model.TokenPreview;
 import org.orgkeep.components.catalog.CatalogSetup;
+import org.orgkeep.components.organisation.serviceaccount.ServiceAccounts;
 import org.orgkeep.repository.keycloak.KeycloakClientScopes;
 import org.orgkeep.repository.keycloak.KeycloakClients;
 import org.orgkeep.repository.keycloak.KeycloakOrgs;
@@ -30,13 +31,15 @@ public class TokenPreviewServiceImpl implements TokenPreviewService {
     private final KeycloakClients clients;
     private final KeycloakClientScopes scopes;
     private final CatalogSetup catalogSetup;
+    private final ServiceAccounts serviceAccounts;
     // the ObjectMapper of Quarkus (quarkus-jackson), the one the REST layer uses
     private final ObjectMapper objectMapper;
 
     @Override
     public TokenPreview preview(String realm, String orgName, String userId, List<String> catalogs) {
         String orgId = orgs.getByName(realm, orgName).getId();
-        if (!orgs.isMember(realm, orgId, userId)) {
+        // a service account is a member of the Keycloak organisation too, but its token is not previewed here
+        if (!orgs.isMember(realm, orgId, userId) || serviceAccounts.isServiceAccountUser(realm, userId)) {
             throw new MemberNotFoundException(orgName, userId);
         }
         // the names go into the scope parameter: only real catalogs, never another client scope of the realm

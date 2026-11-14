@@ -26,6 +26,7 @@ import org.orgkeep.repository.keycloak.KeycloakUsers;
 import org.orgkeep.components.organisation.member.DisabledMembers;
 import org.orgkeep.components.organisation.member.MemberEligibility;
 import org.orgkeep.components.organisation.member.MemberMapper;
+import org.orgkeep.components.organisation.serviceaccount.ServiceAccounts;
 import io.vertx.core.eventbus.EventBus;
 import jakarta.enterprise.context.ApplicationScoped;
 import lombok.RequiredArgsConstructor;
@@ -56,6 +57,7 @@ public class OrgServiceImpl implements OrgService {
     private final EventBus eventBus;
     private final OrgMapper orgMapper;
     private final MemberMapper memberMapper;
+    private final ServiceAccounts serviceAccounts;
 
     /**
      * Creates the Keycloak organisation, a client "org-{name}" holding the org roles,
@@ -178,7 +180,9 @@ public class OrgServiceImpl implements OrgService {
                         .map(group -> catalogGroup.getName() + "/" + group.getName()))
                 .sorted()
                 .toList();
-        return orgMapper.toOrgSummary(org, owners, orgs.memberCount(realm, org.getId()), products);
+        // the service accounts are members of the Keycloak organisation too: they are not counted
+        long memberCount = Math.max(0, orgs.memberCount(realm, org.getId()) - serviceAccounts.users(realm, org.getName()).size());
+        return orgMapper.toOrgSummary(org, owners, memberCount, products);
     }
 
     private static boolean isBlank(String value) {
@@ -246,20 +250,24 @@ public class OrgServiceImpl implements OrgService {
             orgs.update(realm, org);
         }
 
-        List<MemberRepresentation> toDisable = membersToDisable(realm, org);
-        // recorded before they are disabled: after a failure half way, each member already disabled is listed and is
-        // enabled again with the org. A listed member not disabled yet is simply enabled again, as it was
-        addDisabledMembers(realm, orgName, toDisable.stream().map(MemberRepresentation::getId).toList());
-        for (MemberRepresentation member : toDisable) {
-            users.setEnabled(realm, member.getId(), false);
+        // the service accounts are members of the Keycloak organisation: they come through the same loop, the same
+        // list and the same recovery as the people. One disabled by its admin is not listed and stays disabled when the
+        // org is enabled again
+        List<String> toDisable = membersToDisable(realm, org).stream().map(MemberRepresentation::getId).toList();
+        // recorded before they are disabled: after a failure half way, each user already disabled is listed and is
+        // enabled again with the org. A listed user not disabled yet is simply enabled again, as it was
+        addDisabledMembers(realm, orgName, toDisable);
+        for (String userId : toDisable) {
+            users.setEnabled(realm, userId, false);
             // the refresh tokens stop working; an access token already issued lives until it expires
-            users.logout(realm, member.getId());
+            users.logout(realm, userId);
         }
-        log.info("Organisation '{}' disabled in realm '{}' ({} member(s) disabled)", orgName, realm, toDisable.size());
+        log.info("Organisation '{}' disabled in realm '{}' ({} member(s) and service account(s) disabled)",
+                orgName, realm, toDisable.size());
     }
 
     /**
-     * The enabled members of the org, except the privileged ones (see MemberEligibility): a privileged member cannot
+     * The enabled members of the org (its service accounts too), except the privileged ones (see MemberEligibility): a privileged member cannot
      * join an org through Orgkeep, but may have been added before, in the console, or got its role afterwards, and
      * disabling it could lock the realm owner out. A member already disabled (for another reason) is left out, and
      * stays disabled when the org is enabled again.
@@ -348,6 +356,13 @@ public class OrgServiceImpl implements OrgService {
         try (HeldLocks ignored = locks.tryAcquire(LockRequest.org(realm, orgName, LockMode.EXCLUSIVE))) {
             OrganizationRepresentation org = orgs.getByName(realm, orgName);
 
+            // first: once the group tree is gone, the service accounts can no longer be found, and their credentials
+            // (with their direct reserved roles) would stay valid. A failure half way leaves the org in place: the
+            // same call, repeated, finishes the job
+            int serviceAccountsDeleted = serviceAccounts.deleteAll(realm, orgName);
+            log.info("{} service account(s) of organisation '{}' deleted from realm '{}'",
+                    serviceAccountsDeleted, orgName, realm);
+
             orgs.delete(realm, org.getId());
             clients.findUuid(realm, OrgClients.clientId(orgName))
                     .ifPresent(clientUuid -> clients.delete(realm, clientUuid));
@@ -385,6 +400,7 @@ public class OrgServiceImpl implements OrgService {
     private String createOrgGroups(String realm, String orgName, String clientUuid) {
         String rootId = groups.createTopLevel(realm, orgName);
         String userGroupsId = groups.createChild(realm, rootId, OrgGroups.USER_GROUPS);
+        groups.createChild(realm, rootId, OrgGroups.SERVICE_ACCOUNTS);
         groups.createChild(realm, rootId, OrgGroups.CATALOGS);
 
         String adminId = groups.createChild(realm, userGroupsId, OrgGroups.ADMIN);

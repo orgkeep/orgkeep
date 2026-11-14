@@ -129,13 +129,13 @@
       "disable": {
         "button": "Désactiver",
         "title": "Désactiver l'organisation {{org}} ?",
-        "message": "Ses membres sont désactivés aussi : ils ne peuvent plus se connecter, et leurs sessions sont fermées (un token déjà émis reste valide jusqu'à son expiration, 5 minutes par défaut). Aucun membre ne peut être ajouté tant qu'elle est désactivée. La réactiver réactive les mêmes membres.",
+        "message": "Ses membres sont désactivés aussi : ils ne peuvent plus se connecter, et leurs sessions sont fermées (un token déjà émis reste valide jusqu'à son expiration, 5 minutes par défaut). Aucun membre ne peut être ajouté tant qu'elle est désactivée. Ses service accounts sont désactivés aussi : plus de nouveau token, et une API qui introspecte refuse les tokens déjà émis. La réactiver réactive les mêmes membres et service accounts.",
         "confirm": "Désactiver"
       },
       "enable": {
         "button": "Activer",
         "title": "Activer l'organisation {{org}} ?",
-        "message": "Les membres désactivés avec l'organisation peuvent se connecter à nouveau. Un membre désactivé pour une autre raison le reste.",
+        "message": "Les membres désactivés avec l'organisation peuvent se connecter à nouveau. Les service accounts désactivés avec elle fonctionnent à nouveau. Un membre ou un service account désactivé pour une autre raison le reste.",
         "confirm": "Activer"
       }
     },

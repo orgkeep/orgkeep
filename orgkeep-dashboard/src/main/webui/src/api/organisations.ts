@@ -1,5 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deleteRequest, getJson, postJson, postRequest, putJson } from './http';
+import { SERVICE_ACCOUNTS_KEY } from './serviceAccounts';
 
 // The organisations endpoints of the API of the core (OrganisationsResource, OrgProductsResource,
 // OrgCatalogsResource and OrgAdminResource in orgkeep-core), called directly by the front.
@@ -311,6 +312,8 @@ export function useAssignProduct(org: string) {
     // the product list counts its organisations (orgCount): refresh it too
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] });
+      // the core also changes the service accounts of the org (default catalogs) and the catalogs it offers
+      queryClient.invalidateQueries({ queryKey: [SERVICE_ACCOUNTS_KEY, org] });
       return queryClient.invalidateQueries({ queryKey: [ORGANISATIONS_KEY] });
     },
   });
@@ -323,6 +326,8 @@ export function useUnassignProduct(org: string) {
       deleteRequest(assignmentUrl(org, catalog, product)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] });
+      // the core also changes the service accounts of the org (default catalogs) and the catalogs it offers
+      queryClient.invalidateQueries({ queryKey: [SERVICE_ACCOUNTS_KEY, org] });
       return queryClient.invalidateQueries({ queryKey: [ORGANISATIONS_KEY] });
     },
   });

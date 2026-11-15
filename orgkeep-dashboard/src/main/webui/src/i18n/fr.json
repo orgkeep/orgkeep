@@ -546,6 +546,22 @@
       "message": "Ses identifiants cessent de fonctionner tout de suite et il quitte ses teams. Cette action est définitive."
     }
   },
+  "serviceAccount": {
+    "loadError": "Impossible de charger le service account {{name}}",
+    "clientId": "Client ID",
+    "lightweight": {
+      "title": "Tokens légers",
+      "on": "Activés",
+      "off": "Désactivés",
+      "loadError": "Impossible de charger le mode des tokens",
+      "description": "Activés, les tokens de ce service account ne portent que son identité : ni rôles, ni catalogues, toujours la même petite taille. Les APIs qui les reçoivent lisent le contenu par introspection (RFC 7662). Seul le realm owner le change ; les org admins ne le voient pas.",
+      "introspection": "Chaque API introspecte avec les identifiants de son catalogue, générés sur la page du catalogue :",
+      "confirm": {
+        "title": "Activer les tokens légers de {{name}} ?",
+        "message": "Chaque API qui reçoit les tokens de ce service account doit d'abord les introspecter, avec les identifiants de son catalogue (ça marche aussi avec les tokens complets), sinon elle ne voit plus ses droits. Les tokens déjà émis ne changent pas."
+      }
+    }
+  },
   "team": {
     "notFound": "Pas de team {{team}}",
     "backToTeams": "Retour aux teams",
@@ -662,6 +678,12 @@
         "message": "Toutes les applications de ce client reçoivent des tokens légers d'un coup. Chacune de vos APIs doit d'abord introspecter les tokens (ça marche aussi avec les tokens complets), sinon elle ne voit plus les droits des users. Une application qui lit des rôles dans l'access token dans le navigateur ne les voit plus non plus ; l'ID token ne change pas.",
         "button": "Activer"
       }
+    },
+    "serviceAccounts": {
+      "title": "Service accounts",
+      "switch": "Tokens légers pour les nouveaux service accounts",
+      "description": "Les service accounts créés ensuite, par un org admin ou par vous, prennent ce mode. Les existants ne changent pas : basculez chacun sur sa propre page (organisation, onglet Service accounts, puis son nom).",
+      "loadError": "Impossible de charger le défaut des service accounts"
     }
   }
 }

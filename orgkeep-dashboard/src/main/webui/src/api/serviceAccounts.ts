@@ -48,6 +48,13 @@ export interface UpdateServiceAccountRequest {
   defaultCatalogs: string[];
 }
 
+// The settings of one service account, for the realm owner only (ServiceAccountSettingsResource in orgkeep-core):
+// the org admins never see them
+export interface ServiceAccountSettings {
+  // lightweight access tokens: the APIs receiving them must introspect them first
+  lightweightTokens: boolean;
+}
+
 // Every query of this file starts with this key and the org. The teams show the service accounts too
 // (api/teams.ts invalidates this key when a team changes)
 
@@ -67,6 +74,35 @@ export function useServiceAccounts(org: string) {
   return useQuery({
     queryKey: [SERVICE_ACCOUNTS_KEY, org, 'list'],
     queryFn: () => getJson<ServiceAccount[]>(serviceAccountsUrl(org)),
+  });
+}
+
+// One service account: the detail page of the realm owner
+export function useServiceAccount(org: string, name: string) {
+  return useQuery({
+    queryKey: [SERVICE_ACCOUNTS_KEY, org, 'one', name],
+    queryFn: () => getJson<ServiceAccount>(serviceAccountUrl(org, name)),
+  });
+}
+
+// Realm owner only, under /api/admin: the same path with the settings of the service account
+function settingsUrl(org: string, name: string): string {
+  return `/api/admin/organisations/${encodeURIComponent(org)}/service-accounts/${encodeURIComponent(name)}/settings`;
+}
+
+export function useServiceAccountSettings(org: string, name: string) {
+  return useQuery({
+    queryKey: [SERVICE_ACCOUNTS_KEY, org, 'settings', name],
+    queryFn: () => getJson<ServiceAccountSettings>(settingsUrl(org, name)),
+  });
+}
+
+export function useUpdateServiceAccountSettings(org: string, name: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (request: ServiceAccountSettings) => putJson<ServiceAccountSettings>(settingsUrl(org, name), request),
+    // the answer is the mode as saved
+    onSuccess: (saved) => queryClient.setQueryData([SERVICE_ACCOUNTS_KEY, org, 'settings', name], saved),
   });
 }
 

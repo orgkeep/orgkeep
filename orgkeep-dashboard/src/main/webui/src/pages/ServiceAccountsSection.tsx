@@ -132,9 +132,16 @@ export default function ServiceAccountsSection({ org, realmOwner = false }: Serv
               {accounts.map((account) => (
                 <Table.Tr key={account.name}>
                   <Table.Td>
-                    <Text ff="monospace" fw={500}>
-                      {account.name}
-                    </Text>
+                    {/* the realm owner has a page per service account (its tokens mode); the org admins do not */}
+                    {realmOwner ? (
+                      <Anchor component={Link} to={`/organisations/${org}/service-accounts/${account.name}`} ff="monospace" fw={500}>
+                        {account.name}
+                      </Anchor>
+                    ) : (
+                      <Text ff="monospace" fw={500}>
+                        {account.name}
+                      </Text>
+                    )}
                     <Text size="xs" c="dimmed" ff="monospace">
                       {account.clientId}
                     </Text>

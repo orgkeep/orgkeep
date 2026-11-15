@@ -546,6 +546,22 @@
       "message": "Its credentials stop working at once and it leaves its teams. This cannot be undone."
     }
   },
+  "serviceAccount": {
+    "loadError": "Could not load the service account {{name}}",
+    "clientId": "Client ID",
+    "lightweight": {
+      "title": "Lightweight tokens",
+      "on": "On",
+      "off": "Off",
+      "loadError": "Could not load the mode of the tokens",
+      "description": "When on, the tokens of this service account carry nothing but who it is: no roles, no catalogs, always the same small size. The APIs that receive them read the content by introspection (RFC 7662). Only the realm owner changes this; the org admins do not see it.",
+      "introspection": "Each API introspects with the credentials of its catalog, generated on the page of the catalog:",
+      "confirm": {
+        "title": "Turn on the lightweight tokens of {{name}}?",
+        "message": "Every API receiving the tokens of this service account must introspect them first, with the credentials of its catalog (it works with full tokens too), or it no longer sees its rights. Tokens already issued do not change."
+      }
+    }
+  },
   "team": {
     "notFound": "No team {{team}}",
     "backToTeams": "Back to the teams",
@@ -662,6 +678,12 @@
         "message": "Every application of this client receives lightweight tokens at once. Each of your APIs must introspect the tokens first (it works with full tokens too), or it no longer sees the rights of the users. An application that reads roles in the access token in the browser no longer sees them either; the ID token does not change.",
         "button": "Turn on"
       }
+    },
+    "serviceAccounts": {
+      "title": "Service accounts",
+      "switch": "Lightweight tokens for new service accounts",
+      "description": "The service accounts created afterwards, by an org admin or by you, take this mode. The existing ones do not change: switch each one on its own page (organisation, Service accounts tab, then its name).",
+      "loadError": "Could not load the default of the service accounts"
     }
   }
 }

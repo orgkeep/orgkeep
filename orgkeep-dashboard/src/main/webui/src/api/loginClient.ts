@@ -85,3 +85,28 @@ export function useUpdateLoginClient() {
     onSuccess: (saved) => queryClient.setQueryData([LOGIN_CLIENT_KEY], saved),
   });
 }
+
+// The default of the service accounts created afterwards (ServiceAccountDefaultsResource in orgkeep-core): the
+// existing service accounts do not change, each one has its own mode (api/serviceAccounts.ts)
+export interface ServiceAccountDefaults {
+  lightweightTokens: boolean;
+}
+
+const SERVICE_ACCOUNT_DEFAULTS_KEY = 'service-account-defaults';
+const SERVICE_ACCOUNT_DEFAULTS_URL = '/api/admin/service-accounts/settings';
+
+export function useServiceAccountDefaults() {
+  return useQuery({
+    queryKey: [SERVICE_ACCOUNT_DEFAULTS_KEY],
+    queryFn: () => getJson<ServiceAccountDefaults>(SERVICE_ACCOUNT_DEFAULTS_URL),
+  });
+}
+
+export function useUpdateServiceAccountDefaults() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (request: ServiceAccountDefaults) =>
+      putJson<ServiceAccountDefaults>(SERVICE_ACCOUNT_DEFAULTS_URL, request),
+    onSuccess: (saved) => queryClient.setQueryData([SERVICE_ACCOUNT_DEFAULTS_KEY], saved),
+  });
+}

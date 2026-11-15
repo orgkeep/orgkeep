@@ -27,7 +27,9 @@ import {
   type UpdateOrgkeepApiClientRequest,
   useLoginClient,
   useOrgkeepApiClient,
+  useServiceAccountDefaults,
   useUpdateLoginClient,
+  useUpdateServiceAccountDefaults,
   useUpdateOrgkeepApiClient,
 } from '../api/loginClient';
 import ConfirmModal from '../components/ConfirmModal';
@@ -63,6 +65,7 @@ export default function LoginClientPage() {
       <ConnectionDetails client={client} />
       <SettingsForm client={client} />
       <LightweightTokensSection client={client} />
+      <ServiceAccountDefaultsSection />
       <OrgkeepApiClientSection />
     </Stack>
   );
@@ -281,6 +284,47 @@ function LightweightTokensSection({ client }: { client: LoginClient }) {
         onConfirm={() => save(true, closeConfirm)}
         onClose={closeConfirmModal}
       />
+    </Paper>
+  );
+}
+
+// The default mode of the service accounts created afterwards: a switch saved on its own, like the one above.
+// It never changes the existing service accounts: each one is switched on its own page (/organisations/:org/service-accounts/:sa).
+// Loaded on its own: the page works without it.
+function ServiceAccountDefaultsSection() {
+  const { t } = useTranslation();
+  const { data: defaults, error } = useServiceAccountDefaults();
+  const update = useUpdateServiceAccountDefaults();
+
+  return (
+    <Paper withBorder p="md">
+      <Stack gap="xs">
+        <Group justify="space-between">
+          <Text fw={600}>{t('loginClient.serviceAccounts.title')}</Text>
+          {defaults && (
+            <Switch
+              checked={defaults.lightweightTokens}
+              disabled={update.isPending}
+              label={t('loginClient.serviceAccounts.switch')}
+              // no confirmation: no existing service account changes, only the ones created afterwards
+              onChange={(event) => update.mutate({ lightweightTokens: event.currentTarget.checked })}
+            />
+          )}
+        </Group>
+        <Text size="sm" c="dimmed">
+          {t('loginClient.serviceAccounts.description')}
+        </Text>
+        {error && (
+          <Alert color="red" title={t('loginClient.serviceAccounts.loadError')}>
+            {error.message}
+          </Alert>
+        )}
+        {update.error && (
+          <Alert color="red" title={t('common.failed')}>
+            {update.error.message}
+          </Alert>
+        )}
+      </Stack>
     </Paper>
   );
 }

@@ -77,8 +77,8 @@ The realm is `demo`, and every password is `password`.
    curl -s http://localhost:8290/greetings -H "Authorization: Bearer $TOKEN" | jq
    ```
 
-   The answer shows the rights and the quotas of Paul in the catalog `prod`, as read from his token. The password
-   grant is enabled for the demo only.
+   The answer shows the rights and the quotas of Paul in the catalog `prod`, as read from his token (what it means is
+   in [The token](../concepts/token/)). The password grant is enabled for the demo only.
 6. As `realm-owner`, open the **Login client** page and turn on **Lightweight tokens**. Ask for a new token and call
    again: the token is much smaller, and the API reads the same rights by introspection.
 
@@ -96,6 +96,8 @@ is kept between restarts.
 
 ## Next
 
+- The [concepts](../concepts/organisations/) explain what you just saw: organisations, catalogs and products, teams,
+  quotas and pools, and what a [token](../concepts/token/) looks like, with the tokens of `paul` and `emma`.
 - Every setting of the `orgkeep` service is in the [configuration reference](../reference/configuration/).
 - The demo README in
   [orgkeep-examples](https://github.com/orgkeep/orgkeep-examples/tree/main/docker-compose) explains how the services

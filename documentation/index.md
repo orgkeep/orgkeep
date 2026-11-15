@@ -31,8 +31,20 @@ format applies to new objects only, and a realm may have to be created again. Fe
 - [Getting started](getting-started/): run the demo stack and look around, in a few minutes.
 - [Configuration](reference/configuration/): every setting of the core and of the dashboard.
 
-More is coming: guides for the realm owner, the org admins, the integrators of the APIs and the operators, then the
-concepts behind the model.
+## Concepts
+
+The model behind Orgkeep, in the order it is easiest to read:
+
+- [Organisations](concepts/organisations/): the realm owner, the organisations, their roles, members, service accounts
+  and how an organisation is laid out in Keycloak.
+- [Catalogs, products and features](concepts/catalogs/): what the realm owner sells, simple and metered products,
+  parameters, catalog roles, and what an organisation bought.
+- [Teams](concepts/teams/): how an org admin gives products, features and catalog roles to its users.
+- [Quotas and pools](concepts/quotas/): what a pool is, and how an API counts against the pools of a token.
+- [The token](concepts/token/): the claims of an access token with concrete examples, the rules on which catalogs are
+  in it, and lightweight tokens.
+
+More is coming: guides for the realm owner, the org admins, the integrators of the APIs and the operators.
 
 ## Links
 

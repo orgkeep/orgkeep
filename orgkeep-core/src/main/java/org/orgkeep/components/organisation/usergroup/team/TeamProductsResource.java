@@ -1,6 +1,7 @@
 package org.orgkeep.components.organisation.usergroup.team;
 
 import org.orgkeep.api.TeamService;
+import org.orgkeep.api.model.Slug;
 import org.orgkeep.api.model.GrantProductRequest;
 import org.orgkeep.api.model.TeamProduct;
 import org.orgkeep.web.CurrentRealm;
@@ -48,8 +49,8 @@ public class TeamProductsResource {
             + "feature that is not a metered feature given by the team")
     @APIResponse(responseCode = "404", description = "Unknown organisation, user group or catalog, or product not assigned to the organisation")
     @APIResponse(responseCode = "409", description = "A change is in progress on the organisation or the user group, try again later")
-    public TeamProduct grant(@PathParam("org") String org, @PathParam("group") String group,
-                             @PathParam("catalog") String catalog, @PathParam("product") String product,
+    public TeamProduct grant(@PathParam("org") @Slug String org, @PathParam("group") @Slug String group,
+                             @PathParam("catalog") @Slug String catalog, @PathParam("product") @Slug String product,
                              @Valid @NotNull GrantProductRequest request){
         return teamService.grantProduct(currentRealm.name(), org, group, catalog, product, request);
     }
@@ -60,8 +61,8 @@ public class TeamProductsResource {
     @APIResponse(responseCode = "204", description = "Product no longer given by the team")
     @APIResponse(responseCode = "404", description = "Unknown organisation, user group or catalog")
     @APIResponse(responseCode = "409", description = "A change is in progress on the organisation or the user group, try again later")
-    public void revoke(@PathParam("org") String org, @PathParam("group") String group,
-                       @PathParam("catalog") String catalog, @PathParam("product") String product){
+    public void revoke(@PathParam("org") @Slug String org, @PathParam("group") @Slug String group,
+                       @PathParam("catalog") @Slug String catalog, @PathParam("product") @Slug String product){
         teamService.revokeProduct(currentRealm.name(), org, group, catalog, product);
     }
 }

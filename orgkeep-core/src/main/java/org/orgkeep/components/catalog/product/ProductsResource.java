@@ -1,6 +1,7 @@
 package org.orgkeep.components.catalog.product;
 
 import org.orgkeep.api.ProductService;
+import org.orgkeep.api.model.Slug;
 import org.orgkeep.api.model.CreateProductRequest;
 import org.orgkeep.api.model.Product;
 import org.orgkeep.api.model.UpdateFeatureRequest;
@@ -45,14 +46,14 @@ public class ProductsResource {
     @APIResponse(responseCode = "400", description = "Invalid request or inconsistent parameter schema")
     @APIResponse(responseCode = "404", description = "Unknown catalog")
     @APIResponse(responseCode = "409", description = "A product or a catalog role already has this name")
-    public Product create(@PathParam("catalog") String catalog, @Valid @NotNull CreateProductRequest request){
+    public Product create(@PathParam("catalog") @Slug String catalog, @Valid @NotNull CreateProductRequest request){
         return productService.create(currentRealm.name(), catalog, request);
     }
 
     @GET
     @Operation(summary = "List the products of the catalog", description = "Sorted by name, with the number of organisations each is assigned to.")
     @APIResponse(responseCode = "404", description = "Unknown catalog")
-    public List<Product> list(@PathParam("catalog") String catalog){
+    public List<Product> list(@PathParam("catalog") @Slug String catalog){
         return productService.list(currentRealm.name(), catalog);
     }
 
@@ -61,7 +62,7 @@ public class ProductsResource {
     @Operation(summary = "Get a product")
     @APIResponseSchema(value = Product.class, responseCode = "200", responseDescription = "The product")
     @APIResponse(responseCode = "404", description = "Unknown catalog or product")
-    public Product get(@PathParam("catalog") String catalog, @PathParam("product") String product){
+    public Product get(@PathParam("catalog") @Slug String catalog, @PathParam("product") @Slug String product){
         return productService.get(currentRealm.name(), catalog, product);
     }
 
@@ -75,7 +76,7 @@ public class ProductsResource {
     @APIResponse(responseCode = "404", description = "Unknown catalog or product")
     @APIResponse(responseCode = "409", description = "A change was in progress on some organisations, which were skipped: "
             + "repeat the call")
-    public Product update(@PathParam("catalog") String catalog, @PathParam("product") String product,
+    public Product update(@PathParam("catalog") @Slug String catalog, @PathParam("product") @Slug String product,
                           @Valid @NotNull UpdateProductRequest request){
         return productService.update(currentRealm.name(), catalog, product, request);
     }
@@ -86,7 +87,7 @@ public class ProductsResource {
     @APIResponse(responseCode = "204", description = "Product deleted")
     @APIResponse(responseCode = "404", description = "Unknown catalog or product")
     @APIResponse(responseCode = "409", description = "The product is still assigned to an organisation")
-    public void delete(@PathParam("catalog") String catalog, @PathParam("product") String product){
+    public void delete(@PathParam("catalog") @Slug String catalog, @PathParam("product") @Slug String product){
         productService.delete(currentRealm.name(), catalog, product);
     }
 
@@ -100,8 +101,8 @@ public class ProductsResource {
     @APIResponse(responseCode = "400", description = "Invalid feature name")
     @APIResponse(responseCode = "404", description = "Unknown catalog or product")
     @APIResponse(responseCode = "409", description = "Another \"metered\" for an existing feature, or a first metered feature on a product assigned to organisations")
-    public Product putFeature(@PathParam("catalog") String catalog, @PathParam("product") String product,
-                              @PathParam("feature") String feature, @Valid UpdateFeatureRequest request){
+    public Product putFeature(@PathParam("catalog") @Slug String catalog, @PathParam("product") @Slug String product,
+                              @PathParam("feature") @Slug String feature, @Valid UpdateFeatureRequest request){
         return productService.putFeature(currentRealm.name(), catalog, product, feature, request);
     }
 
@@ -112,8 +113,8 @@ public class ProductsResource {
     @APIResponse(responseCode = "404", description = "Unknown catalog, product or feature")
     @APIResponse(responseCode = "409", description = "A metered feature bought by an organisation, the last metered feature of an assigned product, "
             + "or a change in progress on some organisations (the feature is kept: repeat the call)")
-    public Product deleteFeature(@PathParam("catalog") String catalog, @PathParam("product") String product,
-                                 @PathParam("feature") String feature){
+    public Product deleteFeature(@PathParam("catalog") @Slug String catalog, @PathParam("product") @Slug String product,
+                                 @PathParam("feature") @Slug String feature){
         return productService.deleteFeature(currentRealm.name(), catalog, product, feature);
     }
 }

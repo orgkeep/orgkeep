@@ -1,6 +1,7 @@
 package org.orgkeep.components.organisation.usergroup;
 
 import org.orgkeep.api.UserGroupService;
+import org.orgkeep.api.model.Slug;
 import org.orgkeep.api.model.CreateUserGroupRequest;
 import org.orgkeep.api.model.UserGroup;
 import org.orgkeep.web.CurrentRealm;
@@ -41,7 +42,7 @@ public class UserGroupsResource {
     @GET
     @Operation(summary = "List the user groups of the organisation", description = "With their members.")
     @APIResponse(responseCode = "404", description = "Unknown organisation")
-    public List<UserGroup> list(@PathParam("org") String org){
+    public List<UserGroup> list(@PathParam("org") @Slug String org){
         return userGroupService.list(currentRealm.name(), org);
     }
 
@@ -53,7 +54,7 @@ public class UserGroupsResource {
     @APIResponse(responseCode = "404", description = "Unknown organisation")
     @APIResponse(responseCode = "409", description = "The organisation has a user group with this name, "
             + "or a change is in progress on the organisation or the group")
-    public UserGroup create(@PathParam("org") String org, @Valid @NotNull CreateUserGroupRequest request){
+    public UserGroup create(@PathParam("org") @Slug String org, @Valid @NotNull CreateUserGroupRequest request){
         return userGroupService.create(currentRealm.name(), org, request);
     }
 
@@ -65,7 +66,7 @@ public class UserGroupsResource {
     @APIResponse(responseCode = "404", description = "Unknown organisation or user group")
     @APIResponse(responseCode = "409", description = "Predefined group (admin, users), "
             + "or a change is in progress on the organisation or the group")
-    public void delete(@PathParam("org") String org, @PathParam("group") String group){
+    public void delete(@PathParam("org") @Slug String org, @PathParam("group") @Slug String group){
         userGroupService.delete(currentRealm.name(), org, group);
     }
 
@@ -78,7 +79,7 @@ public class UserGroupsResource {
     @APIResponse(responseCode = "404", description = "Unknown organisation or user group, or not a member of the organisation")
     @APIResponse(responseCode = "409", description = "A change is in progress on the organisation, the group or "
             + "the user, try again later")
-    public void addMember(@PathParam("org") String org, @PathParam("group") String group,
+    public void addMember(@PathParam("org") @Slug String org, @PathParam("group") @Slug String group,
                           @PathParam("userId") String userId){
         userGroupService.addMember(currentRealm.name(), org, group, userId);
     }
@@ -94,8 +95,8 @@ public class UserGroupsResource {
     @APIResponse(responseCode = "404", description = "Unknown organisation, user group or service account of the organisation")
     @APIResponse(responseCode = "409", description = "The groups admin and users take no service account, or a change "
             + "is in progress on the organisation, the group or the service account")
-    public void addServiceAccount(@PathParam("org") String org, @PathParam("group") String group,
-                                  @PathParam("sa") String sa){
+    public void addServiceAccount(@PathParam("org") @Slug String org, @PathParam("group") @Slug String group,
+                                  @PathParam("sa") @Slug String sa){
         userGroupService.addServiceAccount(currentRealm.name(), org, group, sa);
     }
 
@@ -108,8 +109,8 @@ public class UserGroupsResource {
     @APIResponse(responseCode = "404", description = "Unknown organisation, user group or service account of the organisation")
     @APIResponse(responseCode = "409", description = "The groups admin and users take no service account, or a change "
             + "is in progress on the organisation, the group or the service account")
-    public void removeServiceAccount(@PathParam("org") String org, @PathParam("group") String group,
-                                     @PathParam("sa") String sa){
+    public void removeServiceAccount(@PathParam("org") @Slug String org, @PathParam("group") @Slug String group,
+                                     @PathParam("sa") @Slug String sa){
         userGroupService.removeServiceAccount(currentRealm.name(), org, group, sa);
     }
 
@@ -121,7 +122,7 @@ public class UserGroupsResource {
     @APIResponse(responseCode = "404", description = "Unknown organisation or user group")
     @APIResponse(responseCode = "409", description = "Group users: every member stays in it, or a change is in "
             + "progress on the organisation, the group or the user (try again later)")
-    public void removeMember(@PathParam("org") String org, @PathParam("group") String group,
+    public void removeMember(@PathParam("org") @Slug String org, @PathParam("group") @Slug String group,
                              @PathParam("userId") String userId){
         userGroupService.removeMember(currentRealm.name(), org, group, userId);
     }

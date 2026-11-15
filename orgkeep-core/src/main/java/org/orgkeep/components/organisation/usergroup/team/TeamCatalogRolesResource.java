@@ -1,6 +1,7 @@
 package org.orgkeep.components.organisation.usergroup.team;
 
 import org.orgkeep.api.TeamService;
+import org.orgkeep.api.model.Slug;
 import org.orgkeep.web.CurrentRealm;
 import org.orgkeep.web.security.OrgPermissions;
 import io.quarkus.security.PermissionsAllowed;
@@ -36,8 +37,8 @@ public class TeamCatalogRolesResource {
     @APIResponse(responseCode = "404", description = "Unknown organisation, user group, catalog or catalog role")
     @APIResponse(responseCode = "409", description = "Role reserved to the realm owner, no product of the organisation in this catalog, "
             + "or a change in progress on the organisation or the user group")
-    public void grant(@PathParam("org") String org, @PathParam("group") String group,
-                      @PathParam("catalog") String catalog, @PathParam("role") String role){
+    public void grant(@PathParam("org") @Slug String org, @PathParam("group") @Slug String group,
+                      @PathParam("catalog") @Slug String catalog, @PathParam("role") @Slug String role){
         teamService.grantCatalogRole(currentRealm.name(), org, group, catalog, role);
     }
 
@@ -46,8 +47,8 @@ public class TeamCatalogRolesResource {
     @APIResponse(responseCode = "204", description = "Catalog role no longer given by the team")
     @APIResponse(responseCode = "404", description = "Unknown organisation, user group, catalog or catalog role")
     @APIResponse(responseCode = "409", description = "A change is in progress on the organisation or the user group, try again later")
-    public void revoke(@PathParam("org") String org, @PathParam("group") String group,
-                       @PathParam("catalog") String catalog, @PathParam("role") String role){
+    public void revoke(@PathParam("org") @Slug String org, @PathParam("group") @Slug String group,
+                       @PathParam("catalog") @Slug String catalog, @PathParam("role") @Slug String role){
         teamService.revokeCatalogRole(currentRealm.name(), org, group, catalog, role);
     }
 }

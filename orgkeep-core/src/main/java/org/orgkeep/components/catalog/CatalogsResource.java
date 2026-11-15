@@ -1,6 +1,7 @@
 package org.orgkeep.components.catalog;
 
 import org.orgkeep.api.CatalogService;
+import org.orgkeep.api.model.Slug;
 import org.orgkeep.api.model.Catalog;
 import org.orgkeep.api.model.CatalogCredentials;
 import org.orgkeep.api.model.CreateCatalogRequest;
@@ -56,7 +57,7 @@ public class CatalogsResource {
     @Operation(summary = "Get a catalog")
     @APIResponseSchema(value = Catalog.class, responseCode = "200", responseDescription = "The catalog")
     @APIResponse(responseCode = "404", description = "Unknown catalog")
-    public Catalog get(@PathParam("catalog") String name){
+    public Catalog get(@PathParam("catalog") @Slug String name){
         return catalogService.get(currentRealm.name(), name);
     }
 
@@ -66,7 +67,7 @@ public class CatalogsResource {
     @APIResponseSchema(value = Catalog.class, responseCode = "200", responseDescription = "Catalog updated")
     @APIResponse(responseCode = "400", description = "Invalid request")
     @APIResponse(responseCode = "404", description = "Unknown catalog")
-    public Catalog update(@PathParam("catalog") String name, @Valid @NotNull UpdateCatalogRequest request){
+    public Catalog update(@PathParam("catalog") @Slug String name, @Valid @NotNull UpdateCatalogRequest request){
         return catalogService.update(currentRealm.name(), name, request);
     }
 
@@ -78,7 +79,7 @@ public class CatalogsResource {
                     + "catalog must get the new one.")
     @APIResponseSchema(value = CatalogCredentials.class, responseCode = "200", responseDescription = "The new credentials")
     @APIResponse(responseCode = "404", description = "Unknown catalog")
-    public CatalogCredentials regenerateSecret(@PathParam("catalog") String name){
+    public CatalogCredentials regenerateSecret(@PathParam("catalog") @Slug String name){
         return catalogService.regenerateSecret(currentRealm.name(), name);
     }
 
@@ -88,7 +89,7 @@ public class CatalogsResource {
     @APIResponse(responseCode = "204", description = "Catalog deleted")
     @APIResponse(responseCode = "404", description = "Unknown catalog")
     @APIResponse(responseCode = "409", description = "The catalog still has products")
-    public void delete(@PathParam("catalog") String name){
+    public void delete(@PathParam("catalog") @Slug String name){
         catalogService.delete(currentRealm.name(), name);
     }
 }

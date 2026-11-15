@@ -171,6 +171,22 @@ class OrganisationsResourceTest {
                 .then().statusCode(400);
     }
 
+    // Same rule for a name read from the path (@Slug on the @PathParam): an org that cannot exist is refused before
+    // any lock or lookup, so it never reaches a log line. Encoded here, so that it reaches the server as written:
+    // %0A is a line break, %20 a space.
+    @ParameterizedTest
+    @ValueSource(strings = {"acme%0Afake", "Acme", "acme%20corp", "-acme"})
+    @TestSecurity(user = "owner", roles = "realm-owner")
+    void pathWithInvalidOrgNameReturns400(String name) {
+        given().urlEncodingEnabled(false)
+                .when().get(BASE + "/" + name)
+                .then().statusCode(400);
+        given().urlEncodingEnabled(false)
+                .when().delete(BASE + "/" + name)
+                .then().statusCode(400);
+        Mockito.verifyNoInteractions(locks);
+    }
+
     @Test
     @TestSecurity(user = "owner", roles = "realm-owner")
     void createWithInvalidOwnerEmailReturns400() {

@@ -1,7 +1,6 @@
 package org.orgkeep.api.model;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 /**
@@ -13,7 +12,7 @@ import jakarta.validation.constraints.Size;
 public record CreateCatalogRequest(
     @NotBlank
     @Size(max = 50)
-    @Pattern(regexp = "[a-z0-9]([a-z0-9-]*[a-z0-9])?", message = "lowercase letters, digits and inner hyphens only")
+    @Slug
     @CatalogName
     String name,
     @NotBlank

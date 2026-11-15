@@ -1,6 +1,7 @@
 package org.orgkeep.components.catalog.role;
 
 import org.orgkeep.api.CatalogRoleService;
+import org.orgkeep.api.model.Slug;
 import org.orgkeep.api.model.CatalogRole;
 import org.orgkeep.api.model.CreateCatalogRoleRequest;
 import org.orgkeep.api.model.RoleHolder;
@@ -45,14 +46,14 @@ public class CatalogRolesResource {
     @APIResponse(responseCode = "400", description = "Invalid request")
     @APIResponse(responseCode = "404", description = "Unknown catalog")
     @APIResponse(responseCode = "409", description = "A product or a catalog role already has this name")
-    public CatalogRole create(@PathParam("catalog") String catalog, @Valid @NotNull CreateCatalogRoleRequest request){
+    public CatalogRole create(@PathParam("catalog") @Slug String catalog, @Valid @NotNull CreateCatalogRoleRequest request){
         return catalogRoleService.create(currentRealm.name(), catalog, request);
     }
 
     @GET
     @Operation(summary = "List the catalog roles", description = "Sorted by name.")
     @APIResponse(responseCode = "404", description = "Unknown catalog")
-    public List<CatalogRole> list(@PathParam("catalog") String catalog){
+    public List<CatalogRole> list(@PathParam("catalog") @Slug String catalog){
         return catalogRoleService.list(currentRealm.name(), catalog);
     }
 
@@ -61,7 +62,7 @@ public class CatalogRolesResource {
     @Operation(summary = "Get a catalog role")
     @APIResponseSchema(value = CatalogRole.class, responseCode = "200", responseDescription = "The catalog role")
     @APIResponse(responseCode = "404", description = "Unknown catalog or role")
-    public CatalogRole get(@PathParam("catalog") String catalog, @PathParam("role") String role){
+    public CatalogRole get(@PathParam("catalog") @Slug String catalog, @PathParam("role") @Slug String role){
         return catalogRoleService.get(currentRealm.name(), catalog, role);
     }
 
@@ -71,7 +72,7 @@ public class CatalogRolesResource {
     @APIResponseSchema(value = CatalogRole.class, responseCode = "200", responseDescription = "Catalog role updated")
     @APIResponse(responseCode = "400", description = "Invalid request")
     @APIResponse(responseCode = "404", description = "Unknown catalog or role")
-    public CatalogRole update(@PathParam("catalog") String catalog, @PathParam("role") String role,
+    public CatalogRole update(@PathParam("catalog") @Slug String catalog, @PathParam("role") @Slug String role,
                               @Valid @NotNull UpdateCatalogRoleRequest request){
         return catalogRoleService.update(currentRealm.name(), catalog, role, request);
     }
@@ -81,7 +82,7 @@ public class CatalogRolesResource {
     @Operation(summary = "Delete a catalog role", description = "The teams and users holding it lose it.")
     @APIResponse(responseCode = "204", description = "Catalog role deleted")
     @APIResponse(responseCode = "404", description = "Unknown catalog or role")
-    public void delete(@PathParam("catalog") String catalog, @PathParam("role") String role){
+    public void delete(@PathParam("catalog") @Slug String catalog, @PathParam("role") @Slug String role){
         catalogRoleService.delete(currentRealm.name(), catalog, role);
     }
 
@@ -89,7 +90,7 @@ public class CatalogRolesResource {
     @Path("/{role}/users")
     @Operation(summary = "List the users holding the role directly", description = "Sorted by username. Not those getting it through a team.")
     @APIResponse(responseCode = "404", description = "Unknown catalog or role")
-    public List<RoleHolder> holders(@PathParam("catalog") String catalog, @PathParam("role") String role){
+    public List<RoleHolder> holders(@PathParam("catalog") @Slug String catalog, @PathParam("role") @Slug String role){
         return catalogRoleService.holders(currentRealm.name(), catalog, role);
     }
 
@@ -100,7 +101,7 @@ public class CatalogRolesResource {
     @APIResponse(responseCode = "404", description = "Unknown catalog, role or user")
     @APIResponse(responseCode = "409", description = "The user is not a member of an organisation, or a change is "
             + "in progress on the user (try again later)")
-    public void grant(@PathParam("catalog") String catalog, @PathParam("role") String role, @PathParam("userId") String userId){
+    public void grant(@PathParam("catalog") @Slug String catalog, @PathParam("role") @Slug String role, @PathParam("userId") String userId){
         catalogRoleService.grant(currentRealm.name(), catalog, role, userId);
     }
 
@@ -110,7 +111,7 @@ public class CatalogRolesResource {
     @APIResponse(responseCode = "204", description = "Role revoked")
     @APIResponse(responseCode = "404", description = "Unknown catalog, role or user")
     @APIResponse(responseCode = "409", description = "A change is in progress on the user, try again later")
-    public void revoke(@PathParam("catalog") String catalog, @PathParam("role") String role, @PathParam("userId") String userId){
+    public void revoke(@PathParam("catalog") @Slug String catalog, @PathParam("role") @Slug String role, @PathParam("userId") String userId){
         catalogRoleService.revoke(currentRealm.name(), catalog, role, userId);
     }
 }

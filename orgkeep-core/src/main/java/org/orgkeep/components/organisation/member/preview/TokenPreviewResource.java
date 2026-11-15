@@ -1,6 +1,7 @@
 package org.orgkeep.components.organisation.member.preview;
 
 import org.orgkeep.api.TokenPreviewService;
+import org.orgkeep.api.model.Slug;
 import org.orgkeep.api.model.TokenPreview;
 import org.orgkeep.web.CurrentRealm;
 import jakarta.annotation.security.RolesAllowed;
@@ -39,7 +40,7 @@ public class TokenPreviewResource {
     @APIResponse(responseCode = "200", description = "The claims of the token and of its introspection")
     @APIResponse(responseCode = "400", description = "A name that is not a catalog of the realm")
     @APIResponse(responseCode = "404", description = "Unknown organisation, or the user is not one of its members")
-    public TokenPreview preview(@PathParam("org") String org, @PathParam("userId") String userId,
+    public TokenPreview preview(@PathParam("org") @Slug String org, @PathParam("userId") String userId,
                                        @QueryParam("catalog") List<String> catalogs){
         return tokenPreviewService.preview(currentRealm.name(), org, userId, catalogs == null ? List.of() : catalogs);
     }

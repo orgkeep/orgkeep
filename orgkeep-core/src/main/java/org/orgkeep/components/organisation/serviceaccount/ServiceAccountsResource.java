@@ -17,6 +17,7 @@ import org.eclipse.microprofile.openapi.annotations.security.SecurityRequirement
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import org.jboss.resteasy.reactive.ResponseStatus;
 import org.orgkeep.api.ServiceAccountService;
+import org.orgkeep.api.model.Slug;
 import org.orgkeep.api.model.CreateServiceAccountRequest;
 import org.orgkeep.api.model.ServiceAccount;
 import org.orgkeep.api.model.ServiceAccountCreated;
@@ -53,14 +54,14 @@ public class ServiceAccountsResource {
     @APIResponse(responseCode = "404", description = "Unknown organisation")
     @APIResponse(responseCode = "409", description = "The name is taken, the organisation is disabled, "
             + "or a change is in progress on the organisation")
-    public ServiceAccountCreated create(@PathParam("org") String org, @Valid @NotNull CreateServiceAccountRequest request) {
+    public ServiceAccountCreated create(@PathParam("org") @Slug String org, @Valid @NotNull CreateServiceAccountRequest request) {
         return serviceAccountService.create(currentRealm.name(), org, request);
     }
 
     @GET
     @Operation(summary = "List the service accounts of the organisation", description = "Sorted by name. Never with a secret.")
     @APIResponse(responseCode = "404", description = "Unknown organisation")
-    public List<ServiceAccount> list(@PathParam("org") String org) {
+    public List<ServiceAccount> list(@PathParam("org") @Slug String org) {
         return serviceAccountService.list(currentRealm.name(), org);
     }
 
@@ -69,7 +70,7 @@ public class ServiceAccountsResource {
     @Operation(summary = "Get a service account")
     @APIResponse(responseCode = "400", description = "Invalid name")
     @APIResponse(responseCode = "404", description = "Unknown organisation or service account")
-    public ServiceAccount get(@PathParam("org") String org, @PathParam("sa") String sa) {
+    public ServiceAccount get(@PathParam("org") @Slug String org, @PathParam("sa") @Slug String sa) {
         return serviceAccountService.get(currentRealm.name(), org, sa);
     }
 
@@ -80,7 +81,7 @@ public class ServiceAccountsResource {
     @APIResponse(responseCode = "400", description = "Invalid name, or a catalog that is unknown or has no product of the organisation")
     @APIResponse(responseCode = "404", description = "Unknown organisation or service account")
     @APIResponse(responseCode = "409", description = "A change is in progress on the organisation or the service account")
-    public ServiceAccount update(@PathParam("org") String org, @PathParam("sa") String sa,
+    public ServiceAccount update(@PathParam("org") @Slug String org, @PathParam("sa") @Slug String sa,
                                  @Valid @NotNull UpdateServiceAccountRequest request) {
         return serviceAccountService.update(currentRealm.name(), org, sa, request);
     }
@@ -92,7 +93,7 @@ public class ServiceAccountsResource {
     @APIResponse(responseCode = "400", description = "Invalid name")
     @APIResponse(responseCode = "404", description = "Unknown organisation or service account")
     @APIResponse(responseCode = "409", description = "A change is in progress on the organisation or the service account")
-    public ServiceAccountCredentials regenerateSecret(@PathParam("org") String org, @PathParam("sa") String sa) {
+    public ServiceAccountCredentials regenerateSecret(@PathParam("org") @Slug String org, @PathParam("sa") @Slug String sa) {
         return serviceAccountService.regenerateSecret(currentRealm.name(), org, sa);
     }
 
@@ -106,7 +107,7 @@ public class ServiceAccountsResource {
     @APIResponse(responseCode = "404", description = "Unknown organisation or service account")
     @APIResponse(responseCode = "409", description = "The organisation is disabled or being enabled again, "
             + "or a change is in progress on the organisation or the service account")
-    public ServiceAccount setEnabled(@PathParam("org") String org, @PathParam("sa") String sa,
+    public ServiceAccount setEnabled(@PathParam("org") @Slug String org, @PathParam("sa") @Slug String sa,
                                      @Valid @NotNull UpdateServiceAccountStatusRequest request) {
         return serviceAccountService.setEnabled(currentRealm.name(), org, sa, request.enabled());
     }
@@ -118,7 +119,7 @@ public class ServiceAccountsResource {
     @APIResponse(responseCode = "400", description = "Invalid name")
     @APIResponse(responseCode = "404", description = "Unknown organisation or service account")
     @APIResponse(responseCode = "409", description = "A change is in progress on the organisation")
-    public void delete(@PathParam("org") String org, @PathParam("sa") String sa) {
+    public void delete(@PathParam("org") @Slug String org, @PathParam("sa") @Slug String sa) {
         serviceAccountService.delete(currentRealm.name(), org, sa);
     }
 }

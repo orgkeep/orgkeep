@@ -1,6 +1,7 @@
 package org.orgkeep.components.organisation.usergroup.team;
 
 import org.orgkeep.api.TeamService;
+import org.orgkeep.api.model.Slug;
 import org.orgkeep.api.model.CatalogRole;
 import org.orgkeep.web.CurrentRealm;
 import org.orgkeep.web.security.OrgPermissions;
@@ -32,7 +33,7 @@ public class AvailableCatalogsResource {
     @Operation(summary = "List the catalogs of the organisation",
             description = "The names of the catalogs where the organisation has at least one product, sorted.")
     @APIResponse(responseCode = "404", description = "Unknown organisation")
-    public List<String> list(@PathParam("org") String org){
+    public List<String> list(@PathParam("org") @Slug String org){
         return teamService.catalogs(currentRealm.name(), org);
     }
 
@@ -41,7 +42,7 @@ public class AvailableCatalogsResource {
     @Operation(summary = "List the catalog roles the org admins can give",
             description = "The roles of the catalog the realm owner made grantable by the org admins.")
     @APIResponse(responseCode = "404", description = "Unknown organisation or catalog, or no product of the organisation in it")
-    public List<CatalogRole> roles(@PathParam("org") String org, @PathParam("catalog") String catalog){
+    public List<CatalogRole> roles(@PathParam("org") @Slug String org, @PathParam("catalog") @Slug String catalog){
         return teamService.grantableRoles(currentRealm.name(), org, catalog);
     }
 }

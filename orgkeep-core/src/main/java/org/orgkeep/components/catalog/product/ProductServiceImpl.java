@@ -10,6 +10,7 @@ import org.orgkeep.api.exceptions.ProductNotFoundException;
 import org.orgkeep.api.exceptions.ResourceBusyException;
 import org.orgkeep.api.exceptions.RoleNameTakenException;
 import org.orgkeep.api.model.AssignProductRequest;
+import org.orgkeep.api.model.Slug;
 import org.orgkeep.api.model.CatalogRoles;
 import org.orgkeep.api.model.CreateProductRequest;
 import org.orgkeep.api.model.Feature;
@@ -56,7 +57,7 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class ProductServiceImpl implements ProductService {
     /** Same rule as the names in the request records, for a role name read from the URL. */
-    private static final Pattern SLUG = Pattern.compile("[a-z0-9]([a-z0-9-]*[a-z0-9])?");
+    private static final Pattern SLUG = Pattern.compile(Slug.REGEXP);
 
     private final KeycloakClients clients;
     private final KeycloakClientScopes scopes;

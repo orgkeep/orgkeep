@@ -33,7 +33,7 @@ public final class OrgGroups {
     /** Multivalued attribute of an assignment group: the features of the product the org bought, without the prefix. */
     public static final String BOUGHT_FEATURES_ATTRIBUTE = "bought-features";
     private static final String PARAM_PREFIX = "param.";
-    private static final Pattern USER_GROUP_NAME = Pattern.compile("[a-z0-9]([a-z0-9-]*[a-z0-9])?");
+    private static final Pattern USER_GROUP_NAME = Pattern.compile(Slug.REGEXP);
 
     private OrgGroups() {
     }

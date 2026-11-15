@@ -1,6 +1,7 @@
 package org.orgkeep.components.organisation.usergroup.team;
 
 import org.orgkeep.api.TeamService;
+import org.orgkeep.api.model.Slug;
 import org.orgkeep.api.model.AvailableProduct;
 import org.orgkeep.web.CurrentRealm;
 import org.orgkeep.web.security.OrgPermissions;
@@ -33,7 +34,7 @@ public class AvailableProductsResource {
             description = "The products assigned to it, with the quota of the organisation and the features it bought: "
                     + "what its teams can give.")
     @APIResponse(responseCode = "404", description = "Unknown organisation")
-    public List<AvailableProduct> list(@PathParam("org") String org){
+    public List<AvailableProduct> list(@PathParam("org") @Slug String org){
         return teamService.availableProducts(currentRealm.name(), org);
     }
 }

@@ -1,6 +1,7 @@
 package org.orgkeep.components.organisation.member;
 
 import org.orgkeep.api.OrgMemberService;
+import org.orgkeep.api.model.Slug;
 import org.orgkeep.api.model.AddMemberRequest;
 import org.orgkeep.api.model.OrgMember;
 import org.orgkeep.api.model.UpdateMemberStatusRequest;
@@ -48,7 +49,7 @@ public class OrgAdminResource {
     @GET
     @Operation(summary = "List the members of the organisation")
     @APIResponse(responseCode = "404", description = "Unknown organisation")
-    public List<OrgMember> list(@PathParam("org") String org){
+    public List<OrgMember> list(@PathParam("org") @Slug String org){
         return memberService.list(currentRealm.name(), org);
     }
 
@@ -66,7 +67,7 @@ public class OrgAdminResource {
     @APIResponse(responseCode = "404", description = "Unknown organisation")
     @APIResponse(responseCode = "409", description = "The user is already a member, cannot be added to this "
             + "organisation, the organisation is disabled, or a change is in progress on it (try again later)")
-    public OrgMember add(@PathParam("org") String org, @Valid @NotNull AddMemberRequest request){
+    public OrgMember add(@PathParam("org") @Slug String org, @Valid @NotNull AddMemberRequest request){
         return memberService.add(currentRealm.name(), org, request);
     }
 
@@ -80,7 +81,7 @@ public class OrgAdminResource {
     @APIResponse(responseCode = "404", description = "Unknown organisation or not a member")
     @APIResponse(responseCode = "409", description = "The user is an owner of the organisation, or a change is in "
             + "progress on it (try again later)")
-    public void remove(@PathParam("org") String org, @PathParam("userId") String userId){
+    public void remove(@PathParam("org") @Slug String org, @PathParam("userId") String userId){
         memberService.remove(currentRealm.name(), org, userId);
     }
 
@@ -103,7 +104,7 @@ public class OrgAdminResource {
     @APIResponse(responseCode = "404", description = "Unknown organisation or not a member")
     @APIResponse(responseCode = "409", description = "The member is the caller, an owner, or a privileged user; the "
             + "organisation is disabled or still being enabled; or a change is in progress (try again later)")
-    public OrgMember setEnabled(@PathParam("org") String org, @PathParam("userId") String userId,
+    public OrgMember setEnabled(@PathParam("org") @Slug String org, @PathParam("userId") String userId,
                                 @Valid @NotNull UpdateMemberStatusRequest request){
         // The injected JsonWebToken is the token of the call (the access token of a bearer call, the ID token of a
         // dashboard session), a request scoped proxy: read here, on the thread of the request, never kept in a field.
@@ -125,7 +126,7 @@ public class OrgAdminResource {
     @APIResponse(responseCode = "204", description = "Invitation sent")
     @APIResponse(responseCode = "404", description = "Unknown organisation or not a member")
     @APIResponse(responseCode = "409", description = "The member already has a password, or the realm has no SMTP server")
-    public void resendInvitation(@PathParam("org") String org, @PathParam("userId") String userId){
+    public void resendInvitation(@PathParam("org") @Slug String org, @PathParam("userId") String userId){
         memberService.resendInvitation(currentRealm.name(), org, userId);
     }
 }

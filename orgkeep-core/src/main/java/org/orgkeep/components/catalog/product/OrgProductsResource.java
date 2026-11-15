@@ -1,6 +1,7 @@
 package org.orgkeep.components.catalog.product;
 
 import org.orgkeep.api.ProductService;
+import org.orgkeep.api.model.Slug;
 import org.orgkeep.api.model.OrgProduct;
 import org.orgkeep.web.CurrentRealm;
 import jakarta.annotation.security.RolesAllowed;
@@ -31,7 +32,7 @@ public class OrgProductsResource {
     @GET
     @Operation(summary = "List the products of the organisation", description = "Every assignment, in every catalog, sorted by catalog then product.")
     @APIResponse(responseCode = "404", description = "Unknown organisation")
-    public List<OrgProduct> list(@PathParam("org") String org){
+    public List<OrgProduct> list(@PathParam("org") @Slug String org){
         return productService.listAssigned(currentRealm.name(), org);
     }
 }

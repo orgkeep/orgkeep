@@ -1,6 +1,7 @@
 package org.orgkeep.components.catalog.product;
 
 import org.orgkeep.api.ProductService;
+import org.orgkeep.api.model.Slug;
 import org.orgkeep.api.model.AssignProductRequest;
 import org.orgkeep.api.model.OrgProduct;
 import org.orgkeep.web.CurrentRealm;
@@ -40,8 +41,8 @@ public class OrgCatalogsResource {
     @APIResponse(responseCode = "404", description = "Unknown organisation, catalog or product")
     @APIResponse(responseCode = "409", description = "A change is in progress on the organisation, try again later, "
             + "or the product was assigned to the organisation by another call meanwhile")
-    public OrgProduct assign(@PathParam("org") String org, @PathParam("catalog") String catalog,
-                             @PathParam("product") String product, @Valid @NotNull AssignProductRequest request){
+    public OrgProduct assign(@PathParam("org") @Slug String org, @PathParam("catalog") @Slug String catalog,
+                             @PathParam("product") @Slug String product, @Valid @NotNull AssignProductRequest request){
         return productService.assign(currentRealm.name(), org, catalog, product, request);
     }
 
@@ -50,8 +51,8 @@ public class OrgCatalogsResource {
     @APIResponse(responseCode = "204", description = "Product unassigned")
     @APIResponse(responseCode = "404", description = "Unknown organisation or product not assigned")
     @APIResponse(responseCode = "409", description = "A change is in progress on the organisation, try again later")
-    public void unassign(@PathParam("org") String org, @PathParam("catalog") String catalog,
-                         @PathParam("product") String product){
+    public void unassign(@PathParam("org") @Slug String org, @PathParam("catalog") @Slug String catalog,
+                         @PathParam("product") @Slug String product){
         productService.unassign(currentRealm.name(), org, catalog, product);
     }
 }

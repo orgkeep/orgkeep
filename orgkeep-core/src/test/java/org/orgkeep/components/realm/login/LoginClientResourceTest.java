@@ -8,6 +8,9 @@ import org.orgkeep.api.model.UpdateLoginClientRequest;
 import org.orgkeep.fixtures.TestRealm;
 import org.orgkeep.web.CurrentRealm;
 import io.quarkus.test.InjectMock;
+import io.quarkus.test.junit.mockito.InjectSpy;
+import org.mockito.InOrder;
+import org.orgkeep.repository.keycloak.KeycloakClients;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.security.TestSecurity;
 import io.restassured.http.ContentType;
@@ -47,6 +50,7 @@ class LoginClientResourceTest {
     @Inject RealmProvisioner realmProvisioner;
     @Inject CatalogService catalogService;
     @InjectMock CurrentRealm currentRealm;
+    @InjectSpy KeycloakClients clients;
 
     @ConfigProperty(name = "quarkus.keycloak.admin-client.server-url")
     String keycloakUrl;
@@ -226,6 +230,31 @@ class LoginClientResourceTest {
                 .body("lightweightTokens", equalTo(false));
         assertEquals(Set.of(), markerScopes(true));
         assertEquals(Set.of(), markerScopes(false));
+    }
+
+    // on: the marker scope first, then the attribute; off: the attribute first, then the scope is removed. A lightweight
+    // token without the marker would be taken for a full one by an API that tells them apart by the marker
+    @Test
+    @TestSecurity(user = "owner", roles = "realm-owner")
+    void lightweightTokensWriteOrder() {
+        String loginClientUuid = loginClient().getId();
+        Mockito.clearInvocations(clients);
+
+        put(new UpdateLoginClientRequest(List.of(), List.of(), List.of(), null, true)).then().statusCode(200);
+        InOrder on = Mockito.inOrder(clients);
+        on.verify(clients).makeDefaultScope(Mockito.eq(testRealm.name()), Mockito.eq(loginClientUuid), Mockito.anyString());
+        // the attribute is written by the last update of the client
+        on.verify(clients, Mockito.atLeastOnce()).update(Mockito.eq(testRealm.name()), Mockito.eq(loginClientUuid),
+                Mockito.argThat(client -> client.getAttributes() != null
+                        && "true".equals(client.getAttributes().get(LightweightTokens.CLIENT_ATTRIBUTE))));
+
+        Mockito.clearInvocations(clients);
+        put(new UpdateLoginClientRequest(List.of(), List.of(), List.of(), null, false)).then().statusCode(200);
+        InOrder off = Mockito.inOrder(clients);
+        off.verify(clients, Mockito.atLeastOnce()).update(Mockito.eq(testRealm.name()), Mockito.eq(loginClientUuid),
+                Mockito.argThat(client -> client.getAttributes() != null
+                        && "false".equals(client.getAttributes().get(LightweightTokens.CLIENT_ATTRIBUTE))));
+        off.verify(clients).removeScope(Mockito.eq(testRealm.name()), Mockito.eq(loginClientUuid), Mockito.anyString());
     }
 
     // turned off before it was ever on: nothing to remove, no scope created

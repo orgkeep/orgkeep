@@ -4,7 +4,6 @@ import org.orgkeep.api.LoginClientService;
 import org.orgkeep.api.exceptions.InvalidRequestException;
 import org.orgkeep.api.exceptions.LoginClientNotFoundException;
 import org.orgkeep.api.exceptions.OrgkeepApiClientNotFoundException;
-import org.orgkeep.api.model.LightweightTokens;
 import org.orgkeep.api.model.LoginClient;
 import org.orgkeep.api.model.OrgkeepApiClient;
 import org.orgkeep.api.model.UpdateLoginClientRequest;
@@ -12,7 +11,7 @@ import org.orgkeep.api.model.UpdateOrgkeepApiClientRequest;
 import org.orgkeep.components.catalog.CatalogSetup;
 import org.orgkeep.config.KeycloakUrls;
 import org.orgkeep.config.OrgkeepConfig;
-import org.orgkeep.repository.keycloak.KeycloakClientScopes;
+import org.orgkeep.components.realm.lightweight.LightweightClients;
 import org.orgkeep.repository.keycloak.KeycloakClients;
 import jakarta.enterprise.context.ApplicationScoped;
 import lombok.RequiredArgsConstructor;
@@ -21,7 +20,6 @@ import org.keycloak.representations.idm.ClientRepresentation;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 @Slf4j
@@ -29,7 +27,7 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class LoginClientServiceImpl implements LoginClientService {
     private final KeycloakClients clients;
-    private final KeycloakClientScopes scopes;
+    private final LightweightClients lightweightClients;
     private final CatalogSetup catalogSetup;
     private final LoginClientMapper loginClientMapper;
     private final KeycloakUrls keycloakUrls;
@@ -66,7 +64,7 @@ public class LoginClientServiceImpl implements LoginClientService {
             catalogSetup.setDefaultCatalogs(realm, clientUuid, catalogScopeIds, request.defaultCatalogs());
         }
         if (request.lightweightTokens() != null) {
-            setMarker(realm, clientUuid, request.lightweightTokens());
+            lightweightClients.apply(realm, clientUuid, request.lightweightTokens());
         }
 
         log.info("Login client of realm '{}' updated: redirect URIs {}, web origins {}, default catalogs {}, lightweight tokens {}",
@@ -95,25 +93,6 @@ public class LoginClientServiceImpl implements LoginClientService {
     private String orgkeepApiClientUuid(String realm) {
         return clients.findUuid(realm, OrgkeepApiClient.CLIENT_ID)
                 .orElseThrow(() -> new OrgkeepApiClientNotFoundException(realm));
-    }
-
-    /**
-     * The scope of the marker follows the lightweight mode: a default scope of the client when it is on, removed when
-     * it is off (a full token must not carry the marker, the APIs would introspect it for nothing).
-     */
-    private void setMarker(String realm, String clientUuid, boolean lightweight) {
-        Optional<String> existing = scopes.findId(realm, LightweightTokens.MARKER_CLAIM);
-        if (!lightweight) {
-            existing.ifPresent(markerScopeId -> clients.removeScope(realm, clientUuid, markerScopeId));
-            return;
-        }
-        String markerScopeId = existing
-                // created the first time the mode is turned on, read back if a concurrent request just created it
-                .or(() -> scopes.create(realm, loginClientMapper.toMarkerScope()))
-                .or(() -> scopes.findId(realm, LightweightTokens.MARKER_CLAIM))
-                .orElseThrow(() -> new IllegalStateException("Client scope '%s' not found in realm '%s'"
-                        .formatted(LightweightTokens.MARKER_CLAIM, realm)));
-        clients.makeDefaultScope(realm, clientUuid, markerScopeId);
     }
 
     /** The default client scopes of the client that are catalogs. */

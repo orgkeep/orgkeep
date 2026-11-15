@@ -6,8 +6,6 @@ import org.orgkeep.api.model.OrgkeepApiClient;
 import org.orgkeep.api.model.UpdateLoginClientRequest;
 import org.orgkeep.api.model.UpdateOrgkeepApiClientRequest;
 import org.keycloak.representations.idm.ClientRepresentation;
-import org.keycloak.representations.idm.ClientScopeRepresentation;
-import org.keycloak.representations.idm.ProtocolMapperRepresentation;
 import org.mapstruct.AfterMapping;
 import org.mapstruct.BeanMapping;
 import org.mapstruct.Mapper;
@@ -67,12 +65,8 @@ public interface LoginClientMapper {
 
     @AfterMapping
     default void updatePostLogoutRedirectUris(UpdateLoginClientRequest request, @MappingTarget ClientRepresentation client) {
-        Map<String, String> attributes = withPostLogoutRedirectUris(client, request.postLogoutRedirectUris());
-        // absent: the mode does not change
-        if (request.lightweightTokens() != null) {
-            attributes.put(LightweightTokens.CLIENT_ATTRIBUTE, request.lightweightTokens().toString());
-        }
-        client.setAttributes(attributes);
+        // the lightweight mode is not written here: see LightweightClients (the marker scope and the attribute are ordered)
+        client.setAttributes(withPostLogoutRedirectUris(client, request.postLogoutRedirectUris()));
     }
 
     /** A copy of the attributes of the client, with these post logout redirect URIs (Keycloak has no dedicated field). */
@@ -85,37 +79,6 @@ public interface LoginClientMapper {
     @Named("lightweightTokens")
     default boolean lightweightTokens(Map<String, String> attributes) {
         return attributes != null && Boolean.parseBoolean(attributes.get(LightweightTokens.CLIENT_ATTRIBUTE));
-    }
-
-    /**
-     * The client scope of the marker of the lightweight tokens: a native "Hardcoded claim" mapper, in the lightweight
-     * access token only. Neither in the full token (the scope is only on clients in lightweight mode), nor in the
-     * introspection, which returns the full content; nor listed in the "scope" claim (white label).
-     */
-    default ClientScopeRepresentation toMarkerScope() {
-        ProtocolMapperRepresentation mapper = new ProtocolMapperRepresentation();
-        mapper.setName(LightweightTokens.MARKER_CLAIM);
-        mapper.setProtocol("openid-connect");
-        mapper.setProtocolMapper("oidc-hardcoded-claim-mapper");
-        mapper.setConfig(Map.of(
-                "claim.name", LightweightTokens.MARKER_CLAIM,
-                "claim.value", "true",
-                "jsonType.label", "boolean",
-                "access.token.claim", "true",
-                "lightweight.claim", "true",
-                "introspection.token.claim", "false",
-                "id.token.claim", "false",
-                "userinfo.token.claim", "false"));
-
-        ClientScopeRepresentation scope = new ClientScopeRepresentation();
-        scope.setName(LightweightTokens.MARKER_CLAIM);
-        scope.setDescription("Marker of the lightweight access tokens");
-        scope.setProtocol("openid-connect");
-        scope.setAttributes(Map.of(
-                "include.in.token.scope", "false",
-                "display.on.consent.screen", "false"));
-        scope.setProtocolMappers(List.of(mapper));
-        return scope;
     }
 
     // @Named keeps MapStruct from using this method for every other Map -> List conversion

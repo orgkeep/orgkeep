@@ -63,16 +63,15 @@ public class LoginClientMapperTest {
         assertFalse(loginClient.lightweightTokens());
     }
 
+    // the mode is written by LightweightClients (ordered with the marker scope), never by the mapper
     @Test
-    void lightweightTokensIsSetOnlyWhenGiven() {
+    void updateDoesNotTouchTheLightweightMode() {
         ClientRepresentation client = new ClientRepresentation();
         client.setAttributes(Map.of(LightweightTokens.CLIENT_ATTRIBUTE, "true"));
 
-        mapper.update(new UpdateLoginClientRequest(List.of(), List.of(), List.of()), client);
-        assertTrue(mapper.toLoginClient(client, ISSUER, null, List.of()).lightweightTokens());
-
         mapper.update(new UpdateLoginClientRequest(List.of(), List.of(), List.of(), null, false), client);
-        assertEquals("false", client.getAttributes().get(LightweightTokens.CLIENT_ATTRIBUTE));
-        assertFalse(mapper.toLoginClient(client, ISSUER, null, List.of()).lightweightTokens());
+
+        assertEquals("true", client.getAttributes().get(LightweightTokens.CLIENT_ATTRIBUTE));
+        assertTrue(mapper.toLoginClient(client, ISSUER, null, List.of()).lightweightTokens());
     }
 }

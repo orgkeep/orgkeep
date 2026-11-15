@@ -17,6 +17,7 @@ import org.orgkeep.api.model.OrgGroups;
 import org.orgkeep.api.model.ServiceAccount;
 import org.orgkeep.api.model.ServiceAccountCreated;
 import org.orgkeep.api.model.ServiceAccountCredentials;
+import org.orgkeep.api.model.LightweightTokens;
 import org.orgkeep.api.model.UpdateServiceAccountRequest;
 import org.orgkeep.components.catalog.CatalogSetup;
 import org.orgkeep.components.lock.HeldLocks;
@@ -26,11 +27,13 @@ import org.orgkeep.components.lock.ResourceLocks;
 import org.orgkeep.components.organisation.member.DisabledMembers;
 import org.orgkeep.components.organisation.member.MemberEligibility;
 import org.orgkeep.components.organisation.usergroup.team.TeamAlignment;
+import org.orgkeep.components.realm.lightweight.LightweightClients;
 import org.orgkeep.config.KeycloakUrls;
 import org.orgkeep.repository.keycloak.KeycloakClientScopes;
 import org.orgkeep.repository.keycloak.KeycloakClients;
 import org.orgkeep.repository.keycloak.KeycloakGroups;
 import org.orgkeep.repository.keycloak.KeycloakOrgs;
+import org.orgkeep.repository.keycloak.KeycloakRealms;
 import org.orgkeep.repository.keycloak.KeycloakUsers;
 
 import java.util.Comparator;
@@ -62,6 +65,8 @@ public class ServiceAccountServiceImpl implements ServiceAccountService {
     private final KeycloakUsers users;
     private final KeycloakOrgs orgs;
     private final KeycloakClientScopes scopes;
+    private final KeycloakRealms realms;
+    private final LightweightClients lightweightClients;
     private final CatalogSetup catalogSetup;
     private final TeamAlignment teamAlignment;
     private final ServiceAccounts serviceAccounts;
@@ -89,11 +94,19 @@ public class ServiceAccountServiceImpl implements ServiceAccountService {
         requireEnabledAndSettled(org);
         List<String> defaultCatalogs = request.defaultCatalogs() == null ? List.of() : request.defaultCatalogs();
         Map<String, String> catalogScopeIds = checkDefaultCatalogs(realm, orgName, defaultCatalogs);
+        // the default of the realm, read under the lock before the first write: absent means full tokens
+        boolean lightweight = realms.attribute(realm, LightweightTokens.SERVICE_ACCOUNTS_REALM_ATTRIBUTE)
+                .map(Boolean::parseBoolean)
+                .orElse(false);
 
         String clientUuid = clients.create(realm, mapper.toClient(orgName, request))
                 .orElseThrow(() -> new ServiceAccountAlreadyExistsException(orgName, request.name()));
         try {
             clients.reduceScopes(realm, clientUuid, KEPT_DEFAULT_SCOPES);
+            // after reduceScopes, which would remove the marker scope
+            if (lightweight) {
+                lightweightClients.apply(realm, clientUuid, true);
+            }
             catalogSetup.setDefaultCatalogs(realm, clientUuid, catalogScopeIds, defaultCatalogs);
             // the claim "organization" comes from the native mapper of this scope, as for a user: it needs the user to be
             // a member of the Keycloak organisation (Keycloak refuses to introspect a token with that claim otherwise)

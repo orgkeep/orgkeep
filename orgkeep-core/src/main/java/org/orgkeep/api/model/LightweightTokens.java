@@ -24,6 +24,12 @@ public final class LightweightTokens {
      */
     public static final String INTROSPECTION_JWT_ATTRIBUTE = "client.introspection.response.allow.jwt.claim.enabled";
 
+    /**
+     * Realm attribute holding the default mode of the service accounts created afterwards ("true" / "false", absent =
+     * false). Neutral name: never in a token or a URL.
+     */
+    public static final String SERVICE_ACCOUNTS_REALM_ATTRIBUTE = "service-accounts.lightweight-tokens";
+
     private LightweightTokens() {
     }
 }

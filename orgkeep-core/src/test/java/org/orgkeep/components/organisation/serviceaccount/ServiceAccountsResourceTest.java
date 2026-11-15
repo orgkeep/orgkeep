@@ -13,6 +13,8 @@ import org.mockito.Mockito;
 import org.orgkeep.api.CatalogService;
 import org.orgkeep.api.OrgService;
 import org.orgkeep.api.ProductService;
+import org.orgkeep.api.ServiceAccountSettingsService;
+import org.orgkeep.api.model.UpdateServiceAccountSettingsRequest;
 import org.orgkeep.api.model.AssignProductRequest;
 import org.orgkeep.api.model.CreateCatalogRequest;
 import org.orgkeep.api.model.CreateOrgRequest;
@@ -47,6 +49,7 @@ class ServiceAccountsResourceTest {
     @Inject OrgService orgService;
     @Inject CatalogService catalogService;
     @Inject ProductService productService;
+    @Inject ServiceAccountSettingsService settingsService;
     @InjectMock CurrentRealm currentRealm;
 
     private TestRealm testRealm;
@@ -118,6 +121,32 @@ class ServiceAccountsResourceTest {
                 .then().statusCode(200).body("name", contains("batch")).extract().asString();
         org.junit.jupiter.api.Assertions.assertFalse(get.toLowerCase().contains("secret"), get);
         org.junit.jupiter.api.Assertions.assertFalse(list.toLowerCase().contains("secret"), list);
+    }
+
+    // the mode of the tokens is for the realm owner only (its own endpoints): neither the org admin nor the realm owner
+    // finds it in the representation of the service account
+    @Test
+    @TestSecurity(user = "alice", roles = {"realm-owner", ADMIN})
+    void getHasNoLightweightField() {
+        create("acme", "batch");
+        settingsService.update(testRealm.name(), "acme", "batch", new UpdateServiceAccountSettingsRequest(true));
+
+        String get = given().when().get(ONE, "acme", "batch").then().statusCode(200).extract().asString();
+        String list = given().when().get(BASE, "acme").then().statusCode(200).extract().asString();
+        org.junit.jupiter.api.Assertions.assertFalse(get.toLowerCase().contains("lightweight"), get);
+        org.junit.jupiter.api.Assertions.assertFalse(list.toLowerCase().contains("lightweight"), list);
+    }
+
+    // created by an org admin, the service account takes the default of the realm (the admin never sees the mode)
+    @Test
+    @TestSecurity(user = "bob", roles = ADMIN)
+    void serviceAccountCreatedByAnOrgAdminTakesTheRealmDefault() {
+        settingsService.updateRealmDefaults(testRealm.name(), new UpdateServiceAccountSettingsRequest(true));
+
+        given().contentType(ContentType.JSON).body(new CreateServiceAccountRequest("batch", null, null))
+                .when().post(BASE, "acme").then().statusCode(201);
+
+        org.junit.jupiter.api.Assertions.assertTrue(settingsService.get(testRealm.name(), "acme", "batch").lightweightTokens());
     }
 
     @Test

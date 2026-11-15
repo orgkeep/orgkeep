@@ -17,6 +17,7 @@ import org.orgkeep.api.OrgService;
 import org.orgkeep.api.ProductService;
 import org.orgkeep.api.RealmProvisioner;
 import org.orgkeep.api.ServiceAccountService;
+import org.orgkeep.api.ServiceAccountSettingsService;
 import org.orgkeep.api.model.AssignProductRequest;
 import org.orgkeep.api.model.CatalogCredentials;
 import org.orgkeep.api.model.CreateCatalogRequest;
@@ -26,6 +27,7 @@ import org.orgkeep.api.model.CreateProductRequest;
 import org.orgkeep.api.model.CreateServiceAccountRequest;
 import org.orgkeep.api.model.QuotaCycle;
 import org.orgkeep.api.model.ServiceAccountCreated;
+import org.orgkeep.api.model.UpdateServiceAccountSettingsRequest;
 import org.orgkeep.fixtures.TestRealm;
 
 import java.net.URI;
@@ -65,6 +67,7 @@ class ServiceAccountTokenTest {
     @Inject CatalogRoleService catalogRoleService;
     @Inject ProductService productService;
     @Inject ServiceAccountService serviceAccountService;
+    @Inject ServiceAccountSettingsService settingsService;
 
     @ConfigProperty(name = "quarkus.keycloak.admin-client.server-url")
     String keycloakUrl;
@@ -125,6 +128,49 @@ class ServiceAccountTokenTest {
         assertEquals("[\"acme\"]", introspection.path("organization").toString());
         assertEquals(CLIENT_ID, introspection.path("azp").asText());
         assertEquals(Set.of("searcher"), strings(introspection.at("/resource_access/prod/roles")));
+    }
+
+    // The APIs of the realm owner count per org with this claim. Its native mapper has lightweight.claim=false, so the
+    // claim leaves the token itself and stays in the introspection. Written first: if it fails, the feature is not viable
+    @Test
+    void introspectionOfALightweightTokenHasTheOrganizationClaim() throws Exception {
+        ServiceAccountCreated created = create(List.of());
+        grantSearcher(created);
+        settingsService.update(realm(), ORG, "billing", new UpdateServiceAccountSettingsRequest(true));
+
+        Grant grant = grant(created.credentials().clientSecret(), true, "prod");
+        JsonNode introspection = introspect(grant.accessToken());
+        log.info("Introspection of a lightweight token: {}", introspection.toPrettyString());
+
+        assertTrue(introspection.path("active").asBoolean(), introspection.toString());
+        assertEquals("[\"acme\"]", introspection.path("organization").toString());
+    }
+
+    // the token itself is small: the marker and the standard claims, no content; back to full, the content is back
+    @Test
+    void lightweightTokenCarriesOnlyTheMarkerAndFullAgainOnceSwitchedBack() throws Exception {
+        ServiceAccountCreated created = create(List.of());
+        grantSearcher(created);
+        String secret = created.credentials().clientSecret();
+
+        settingsService.update(realm(), ORG, "billing", new UpdateServiceAccountSettingsRequest(true));
+        Grant lightweight = grant(secret, true, "prod");
+        JsonNode token = claims(lightweight);
+        log.info("Lightweight token: {}", token.toPrettyString());
+        assertTrue(token.path("lightweight").asBoolean(), token.toString());
+        assertTrue(token.path("resource_access").isMissingNode(), token.toString());
+        assertTrue(token.path("organization").isMissingNode(), token.toString());
+
+        JsonNode introspection = introspect(lightweight.accessToken());
+        assertTrue(introspection.path("active").asBoolean(), introspection.toString());
+        assertEquals(Set.of("searcher"), strings(introspection.at("/resource_access/prod/roles")));
+        assertEquals(CLIENT_ID, introspection.path("azp").asText());
+
+        settingsService.update(realm(), ORG, "billing", new UpdateServiceAccountSettingsRequest(false));
+        JsonNode full = claims(grant(secret, true, "prod"));
+        assertTrue(full.path("lightweight").isMissingNode(), full.toString());
+        assertEquals(Set.of("searcher"), strings(full.at("/resource_access/prod/roles")));
+        assertEquals("[\"acme\"]", full.path("organization").toString());
     }
 
     // a catalog is in the token when the service account has it by default, or when the application asks for it

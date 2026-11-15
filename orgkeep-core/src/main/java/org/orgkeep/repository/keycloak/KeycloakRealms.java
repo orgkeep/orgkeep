@@ -9,8 +9,10 @@ import org.keycloak.admin.client.resource.RealmResource;
 import org.keycloak.representations.idm.RealmRepresentation;
 import org.keycloak.representations.idm.RoleRepresentation;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @ApplicationScoped
 @RequiredArgsConstructor
@@ -70,6 +72,27 @@ public class KeycloakRealms {
         // partial update: Keycloak only changes the fields that are set in the representation
         RealmRepresentation update = new RealmRepresentation();
         update.setSmtpServer(smtpServer);
+        keycloak.realm(realm).update(update);
+    }
+
+    /** The value of a realm attribute, empty when the realm does not have it. */
+    public Optional<String> attribute(String realm, String name) {
+        Map<String, String> attributes = keycloak.realm(realm).toRepresentation().getAttributes();
+        return attributes == null ? Optional.empty() : Optional.ofNullable(attributes.get(name));
+    }
+
+    /** Sets one realm attribute: the other ones are kept. */
+    public void setAttribute(String realm, String name, String value) {
+        // Keycloak replaces the whole map of attributes with the one it receives (the ones left out are removed): all
+        // the current attributes are sent back with this one. The other fields of the realm are left out of the update
+        Map<String, String> attributes = new HashMap<>();
+        Map<String, String> current = keycloak.realm(realm).toRepresentation().getAttributes();
+        if (current != null) {
+            attributes.putAll(current);
+        }
+        attributes.put(name, value);
+        RealmRepresentation update = new RealmRepresentation();
+        update.setAttributes(attributes);
         keycloak.realm(realm).update(update);
     }
 

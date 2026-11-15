@@ -107,8 +107,10 @@ class ServiceAccountSettingsResourceTest {
     @OidcSecurity(claims = @Claim(key = "lightweight", value = "true", type = ClaimType.BOOLEAN))
     void lightweightTokenOfTheRealmOwnerIsRefused() {
         given().when().get(REALM_DEFAULTS).then().statusCode(401);
+        given().contentType(ContentType.JSON).body(body(true)).when().put(REALM_DEFAULTS).then().statusCode(401);
         given().when().get(ONE, "acme", "batch").then().statusCode(401);
         given().contentType(ContentType.JSON).body(body(true)).when().put(ONE, "acme", "batch").then().statusCode(401);
+        assertNothingWritten();
     }
 
     @Test
@@ -189,6 +191,16 @@ class ServiceAccountSettingsResourceTest {
         given().contentType(ContentType.JSON).body(body(true)).when().put(REALM_DEFAULTS).then().statusCode(403);
         given().when().get(ONE, "acme", "batch").then().statusCode(403);
         given().contentType(ContentType.JSON).body(body(true)).when().put(ONE, "acme", "batch").then().statusCode(403);
+        assertNothingWritten();
+    }
+
+    /** Neither the client attribute of the service account nor the realm attribute was written. */
+    private void assertNothingWritten() {
+        Map<String, String> clientAttributes = testRealm.resource().clients().findByClientId("org-acme.batch")
+                .getFirst().getAttributes();
+        assertNull(clientAttributes == null ? null : clientAttributes.get(LightweightTokens.CLIENT_ATTRIBUTE));
+        Map<String, String> realmAttributes = testRealm.resource().toRepresentation().getAttributes();
+        assertNull(realmAttributes == null ? null : realmAttributes.get(LightweightTokens.SERVICE_ACCOUNTS_REALM_ATTRIBUTE));
     }
 
     private static UpdateServiceAccountSettingsRequest body(boolean lightweight) {

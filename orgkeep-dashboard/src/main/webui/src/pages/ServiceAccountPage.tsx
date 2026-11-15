@@ -31,7 +31,7 @@ import CopyValue from '../components/CopyValue';
 // rotate the secret, disable, delete) stay in the list of the organisation.
 export default function ServiceAccountPage() {
   const { t } = useTranslation();
-  // the path parameters of the route. Always set on this route, hence the "!"
+  // the path parameters of the route. Always set on this route, hence the cast to strings (without it they are typed string | undefined)
   const { org, sa } = useParams() as { org: string; sa: string };
   const { data: account, isPending, error } = useServiceAccount(org, sa);
 

@@ -1,5 +1,6 @@
 package org.orgkeep.dashboard.auth;
 
+import io.vertx.ext.web.RoutingContext;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
@@ -18,19 +19,21 @@ import java.util.Map;
  * front sends. Spring Security's CsrfFilter does the same job with a token instead of a header.
  * <p>
  * Bearer requests are not concerned: a browser never adds an Authorization header on its own.
- * /api/auth/* is left out: login and logout are browser navigations, which cannot carry a header.
+ * /api/auth/login and /api/auth/logout are left out: they are browser navigations, which cannot carry a header.
  * <p>
  * preMatching: runs before JAX-RS looks for the endpoint, so an unknown path is refused the same way. The session is
  * already checked at that point (proactive authentication, before JAX-RS), only the header is missing.
+ * <p>
+ * The path is the normalized one of Vert.x, the one the request is routed on and the one DashboardTenantResolver
+ * reads: not getRequestUri().getPath(), which keeps the dot segments (/api/auth/../admin/catalogs).
  */
 public class CsrfFilter {
 
     @ServerRequestFilter(preMatching = true)
-    public Response requireCsrfHeader(ContainerRequestContext request) {
-        String path = request.getUriInfo().getRequestUri().getPath();
+    public Response requireCsrfHeader(ContainerRequestContext request, RoutingContext routing) {
         boolean usesSession = DashboardSession.usesSession(request.getHeaderString(HttpHeaders.AUTHORIZATION),
                 request.getCookies().keySet());
-        if (!usesSession || DashboardSession.isAuthPath(path)
+        if (!usesSession || DashboardSession.isAuthPath(routing.normalizedPath())
                 || DashboardSession.CSRF_HEADER_VALUE.equals(request.getHeaderString(DashboardSession.CSRF_HEADER))) {
             // null: go on with the request
             return null;

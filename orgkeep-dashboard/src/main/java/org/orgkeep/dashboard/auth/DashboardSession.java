@@ -12,8 +12,12 @@ public final class DashboardSession {
     public static final String TENANT = "dashboard";
     /** Quarkus names the session cookie of a tenant q_session_&lt;tenant&gt;, plus _chunk_N when it is split. */
     static final String SESSION_COOKIE_PREFIX = "q_session_" + TENANT;
-    /** The login entry point and the logout, reached by browser navigations: they start or end the session. */
-    static final String AUTH_PATH = "/api/auth/";
+    /**
+     * The login entry point (and the return from Keycloak) and the logout, reached by browser navigations: they start
+     * or end the session. Exact paths, not a prefix: /api/auth/%2e%2e/admin/... starts with /api/auth/ but lands on
+     * /api/admin/...
+     */
+    static final Set<String> AUTH_PATHS = Set.of("/api/auth/login", "/api/auth/logout");
     /** Sent by every fetch of the front. Another site cannot send it: a custom header needs a CORS preflight. */
     public static final String CSRF_HEADER = "X-Requested-With";
     public static final String CSRF_HEADER_VALUE = "JavaScript";
@@ -32,7 +36,11 @@ public final class DashboardSession {
                 && cookieNames.stream().anyMatch(name -> name.startsWith(SESSION_COOKIE_PREFIX));
     }
 
-    static boolean isAuthPath(String path) {
-        return path.startsWith(AUTH_PATH);
+    /**
+     * @param normalizedPath the path the request is routed on: {@link io.vertx.ext.web.RoutingContext#normalizedPath()},
+     *                       without its dot segments
+     */
+    static boolean isAuthPath(String normalizedPath) {
+        return AUTH_PATHS.contains(normalizedPath);
     }
 }

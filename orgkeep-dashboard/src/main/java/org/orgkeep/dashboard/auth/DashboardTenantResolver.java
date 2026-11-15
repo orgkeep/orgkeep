@@ -15,7 +15,8 @@ import java.util.stream.Collectors;
  * <ul>
  *     <li>an Authorization header: the default tenant, bearer only. A session cookie sent along is ignored, there
  *     is never a fallback from a refused token to the session;</li>
- *     <li>/api/auth/* (login, the return from Keycloak, logout), or a session cookie: the "dashboard" tenant;</li>
+ *     <li>/api/auth/login (login, the return from Keycloak), /api/auth/logout, or a session cookie: the "dashboard"
+ *     tenant;</li>
  *     <li>anything else: the default tenant. A protected endpoint then answers 401, not a redirect to Keycloak.</li>
  * </ul>
  * Quarkus calls it on every request (a single bean of this type is allowed). The core knows nothing of it:

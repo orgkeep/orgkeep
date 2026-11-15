@@ -17,6 +17,8 @@ import org.htmlunit.html.HtmlPage;
 import org.htmlunit.html.HtmlPasswordInput;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.CredentialRepresentation;
@@ -116,6 +118,19 @@ class SessionAuthenticationTest {
     void refusesTheSessionWithoutTheCsrfHeader() {
         given().cookies(login(OWNER, OWNER_PASSWORD))
                 .when().get(CATALOGS)
+                .then().statusCode(403)
+                .body("message", startsWith("Missing header"));
+    }
+
+    // Paths that start with /api/auth/ but are not the login or the logout: the first one lands on /api/admin/catalogs
+    // once its dot segments are removed (encoded here, so that they reach the server as sent). Browsers remove such
+    // segments themselves: this keeps the filter and the routing in agreement, whatever the client.
+    @ParameterizedTest
+    @ValueSource(strings = {"/api/auth/%2e%2e/admin/catalogs", "/api/auth/..%2Fadmin/catalogs", "/api/auth/other"})
+    void refusesTheSessionWithoutTheCsrfHeaderBehindTheAuthPath(String path) {
+        given().urlEncodingEnabled(false)
+                .cookies(login(OWNER, OWNER_PASSWORD))
+                .when().get(path)
                 .then().statusCode(403)
                 .body("message", startsWith("Missing header"));
     }

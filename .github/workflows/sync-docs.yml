@@ -6,9 +6,11 @@
 # The folder of the site is emptied before the copy, so a page removed here disappears there. Nothing else of the
 # site is touched. Nothing is committed when the documentation did not change.
 #
-# SITE_DEPLOY_KEY (secret of this repository) is the private part of a deploy key with write access, added to
-# orgkeep/orgkeep.github.io only. Third-party actions are pinned by commit, with their version in a comment, since this
-# workflow holds a key that can write to the site.
+# The write access to the site is a GitHub App installed on orgkeep/orgkeep.github.io only, with the permission
+# Contents: read and write. Its client ID is the variable DOCS_APP_CLIENT_ID and its private key the secret
+# DOCS_APP_PRIVATE_KEY of this repository. Each run asks for a short-lived token, limited to the site repository, and
+# commits as the bot user of the App. Third-party actions are pinned by commit, with their version in a comment,
+# since this workflow holds a key that can write to the site.
 name: Sync the documentation
 
 on:
@@ -42,17 +44,28 @@ jobs:
       - name: Check out the documentation
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ env.REF }}
+          # The commit of the tag on a push: a tag and a branch may share a name, a bare ref would be ambiguous
+          ref: ${{ inputs.ref || github.sha }}
           path: orgkeep
           persist-credentials: false
 
+      - name: Get a token for the site repository
+        id: app
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.DOCS_APP_CLIENT_ID }}
+          private-key: ${{ secrets.DOCS_APP_PRIVATE_KEY }}
+          owner: orgkeep
+          repositories: orgkeep.github.io
+
+      # The token stays in the git configuration of the clone, which is used to push over HTTPS
       - name: Check out the site
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: orgkeep/orgkeep.github.io
           ref: main
           path: site
-          ssh-key: ${{ secrets.SITE_DEPLOY_KEY }}
+          token: ${{ steps.app.outputs.token }}
 
       - name: Replace the documentation of the site
         run: |
@@ -62,6 +75,9 @@ jobs:
 
       - name: Commit and push
         working-directory: site
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
         run: |
           git add -A -- "$TARGET"
           if git diff --cached --quiet; then
@@ -70,7 +86,12 @@ jobs:
           fi
           # The checked out ref may not be the commit of the event (a manual run): read it from the clone
           source_commit=$(git -C ../orgkeep rev-parse --short HEAD)
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # The commit is made by the bot user of the App, <slug>[bot]
+          bot="$APP_SLUG[bot]"
+          user_id=$(gh api "/users/$bot" --jq .id)
+          git config user.name "$bot"
+          git config user.email "$user_id+$bot@users.noreply.github.com"
           git commit -s -m "Documentation of $REF" -m "Copied from orgkeep/orgkeep@$source_commit by the workflow Sync the documentation."
+          # The site may have received a commit since the checkout
+          git pull --rebase origin main
           git push origin HEAD:main

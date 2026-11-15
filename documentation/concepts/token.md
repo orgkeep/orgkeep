@@ -300,6 +300,8 @@ of this team:
 - The `scope` works as for a user (see below), and the default catalogs of the service account are chosen by its org
   admin. A service account can only ask for the catalogs where its organisation has a product: a catalog becomes
   askable at the first product of the organisation in it.
+- The realm owner can switch the tokens of a service account to lightweight tokens, see
+  [Lightweight tokens](#lightweight-tokens).
 
 ## Which catalogs are in the token
 
@@ -347,10 +349,19 @@ size, with no roles, no catalogs, no profile, that the APIs of the realm owner e
 The realm owner turns this on for every API at once, with **Lightweight tokens** on the **Login client** page of the
 dashboard (`lightweightTokens` in `PUT /api/admin/login-client`). It applies to the **tokens of the login client** (the
 tokens of the users of the organisations): the tokens of the service accounts and the ones used to call the REST API of
-Orgkeep stay full. Every API that receives user tokens must then introspect. A lightweight token carries the claim
+Orgkeep stay full unless set otherwise, see below. Every API that receives user tokens must then introspect. A lightweight token carries the claim
 `"lightweight": true`, a marker of Orgkeep, so that an API that receives both kinds introspects only the ones that
 carry it. It keeps standard claims such as `iss`, `client_id`, `exp`, `iat` and `jti`, and the `scope` claim, but
 neither `sub` nor `aud` (the API reads the subject from the introspection), no roles, no profile.
+
+The tokens of a **service account** have their own switch, which only the realm owner changes: the **Lightweight
+tokens** switch on the page of the service account in the dashboard (the name in the list of the service accounts of
+the organisation), or `PUT /api/admin/organisations/{org}/service-accounts/{sa}/settings` with `lightweightTokens`. The
+org admins neither see nor change it. The realm owner also sets a **default for the new service accounts**, in the
+**Service accounts** section of the **Login client** page, or with `PUT /api/admin/service-accounts/settings`: it
+applies to the service accounts created afterwards and leaves the existing ones unchanged. The token of a lightweight
+service account is lightweight like the others, so the roles and the `organization` claim are only in the
+introspection.
 
 ```json
 {

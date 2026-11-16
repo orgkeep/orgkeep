@@ -20,9 +20,40 @@ is completed, never reset.
 | Variable | Default | What |
 |---|---|---|
 | `KEYCLOAK_URL` | **required** | Base URL of Keycloak as Orgkeep reaches it, without `/realms/...` (`http://keycloak:8080` inside Docker). Used for the admin API and to verify the tokens |
-| `KEYCLOAK_ADMIN_USER` | `admin` | Admin of the `master` realm, through the client `admin-cli` |
-| `KEYCLOAK_ADMIN_PASSWORD` | `admin` | Its password |
+| `ORGKEEP_KEYCLOAK_CLIENT_SECRET` | **required** | Secret of the client `orgkeep-admin` of the realm, whose service account Orgkeep calls the Keycloak admin API with. Given to the client when Orgkeep creates the realm |
+| `ORGKEEP_KEYCLOAK_CLIENT_ID` | `orgkeep-admin` | The id of that client |
+| `KEYCLOAK_ADMIN_USER` / `KEYCLOAK_ADMIN_PASSWORD` | none | An admin of the `master` realm, **for the first startup only**: Orgkeep uses it to create the realm and its client, nothing else. Remove them afterwards |
 | `ORGKEEP_KEYCLOAK_PUBLIC_URL` | the base of `KEYCLOAK_URL` | Keycloak as the browsers see it (`https://login.example.com`): the issuer of the tokens and the console link shown to the realm owner. Set it when `KEYCLOAK_URL` is an internal URL |
+
+### How Orgkeep calls Keycloak
+
+At runtime, Orgkeep calls the Keycloak admin API as the service account of the client `orgkeep-admin` of **its own
+realm**, with the role `realm-management/realm-admin` of that realm only: a leak of its secret exposes that realm, not
+the whole Keycloak. The credentials of the `master` realm are never kept.
+
+- **First startup**: the realm does not exist yet. With `KEYCLOAK_ADMIN_USER` and `KEYCLOAK_ADMIN_PASSWORD`, Orgkeep
+  creates, in one call to Keycloak, the realm, the client `orgkeep-admin` (with the secret `ORGKEEP_KEYCLOAK_CLIENT_SECRET`)
+  and its service account, then does everything else as that service account. Remove the two variables afterwards.
+- **Every other startup**: Orgkeep asks Keycloak for a token of its own client and never contacts `master`. If
+  `KEYCLOAK_ADMIN_USER` / `KEYCLOAK_ADMIN_PASSWORD` are still set, it logs a warning (they are neither used nor tested).
+- At the first startup, the log may show the error "OIDC Server is not available" once: the OIDC extension looks for
+  the realm before Orgkeep has created it, and recovers on its own.
+
+Do not change `orgkeep-admin` in the Keycloak console: a realm owner can read or regenerate its secret, disable or delete
+the client, or turn its *Full scope allowed* off, and Orgkeep then fails at the next call or startup. The startup errors
+say what to check:
+
+| Message | Cause |
+|---|---|
+| `Realm '...' not found at ...` | The realm does not exist and `KEYCLOAK_ADMIN_USER` / `KEYCLOAK_ADMIN_PASSWORD` are not set. Set them for the first startup, and check `KEYCLOAK_URL` and `ORGKEEP_REALM_NAME` |
+| `Keycloak refused the client '...'` | Wrong `ORGKEEP_KEYCLOAK_CLIENT_SECRET`, or the client was deleted or disabled (see Clients > `orgkeep-admin` > Credentials; the events of the realm tell which). A deleted client is created again: confidential, service account enabled, *Full scope allowed* on, service account role `realm-management/realm-admin` |
+| `The client '...' lacks rights on the admin API` | The service account lost `realm-management/realm-admin`, or *Full scope allowed* is off (Clients > `orgkeep-admin` > Client scopes > Dedicated scope) |
+| `Keycloak refused KEYCLOAK_ADMIN_USER / KEYCLOAK_ADMIN_PASSWORD` | The admin of `master` was refused at the first startup |
+
+A realm created by a version before this one has no `orgkeep-admin` client (there is no upgrade path in 0.x): create
+the realm again, or create the client by hand as above, with the secret you set in `ORGKEEP_KEYCLOAK_CLIENT_SECRET`.
+If Orgkeep stops between the creation of the realm and the end of the startup, the realm may lack its default
+catalog: delete the realm and start again.
 
 ## Realm and its owner
 
@@ -98,12 +129,15 @@ Example:
 docker run -p 8284:8284 \
   -e KEYCLOAK_URL=https://keycloak.example.com \
   -e KEYCLOAK_ADMIN_USER=admin -e KEYCLOAK_ADMIN_PASSWORD=... \
+  -e ORGKEEP_KEYCLOAK_CLIENT_SECRET=... \
   -e ORGKEEP_REALM_NAME=acme \
   -e ORGKEEP_OWNER_EMAIL=owner@acme.com -e ORGKEEP_OWNER_PASSWORD=... \
   -e ORGKEEP_OWNER_FIRST_NAME=Alice -e ORGKEEP_OWNER_LAST_NAME=Martin \
   -e ORGKEEP_DASHBOARD_CLIENT_SECRET=... \
   ghcr.io/orgkeep/orgkeep:0.1.0
 ```
+
+`KEYCLOAK_ADMIN_USER` and `KEYCLOAK_ADMIN_PASSWORD` are only for the first startup: remove them afterwards.
 
 On the first startup the realm does not exist yet, so neither does the client: start Orgkeep once with any value in
 `ORGKEEP_DASHBOARD_CLIENT_SECRET` (it is only used at login), create the client, then restart Orgkeep with its real

@@ -20,13 +20,12 @@ To try it without building anything: the demo stack of
 > in the [issues](https://github.com/orgkeep/orgkeep/issues).
 > - No upgrade path between 0.x versions: a change of format applies to new objects only, and a realm may have to
 >   be created again.
-> - Known limitations: Orgkeep calls
->   Keycloak with an admin account of the `master` realm; outside the demo, the `orgkeep-dashboard` client is
+> - Known limitations: outside the demo, the `orgkeep-dashboard` client is
 >   created by hand in Keycloak; one realm per Orgkeep instance.
 
 ## Requirements
 
-- Keycloak 26 (tested with 26.6), and the credentials of an admin of its `master` realm;
+- Keycloak 26 (tested with 26.6), and for the first startup only, the credentials of an admin of its `master` realm;
 - to build: Java 25 and Maven 3.9; Docker, for the dev mode and the tests (Keycloak is started by Quarkus Dev
   Services).
 
@@ -66,6 +65,7 @@ Run it against your Keycloak:
 docker run -p 8282:8282 \
   -e KEYCLOAK_URL=https://keycloak.example.com \
   -e KEYCLOAK_ADMIN_USER=admin -e KEYCLOAK_ADMIN_PASSWORD=... \
+  -e ORGKEEP_KEYCLOAK_CLIENT_SECRET=... \
   -e ORGKEEP_REALM_NAME=acme \
   -e ORGKEEP_OWNER_EMAIL=owner@acme.com -e ORGKEEP_OWNER_PASSWORD=... \
   -e ORGKEEP_OWNER_FIRST_NAME=Alice -e ORGKEEP_OWNER_LAST_NAME=Martin \
@@ -73,14 +73,16 @@ docker run -p 8282:8282 \
 ```
 
 The application listens on port **8282** (`QUARKUS_HTTP_PORT` to change it). At the first startup, it creates the
-realm, its owner (who changes the password at the first login), the login client of the realm and the default
+realm, the client `orgkeep-admin` Orgkeep calls Keycloak with (a service account of the realm, so the credentials of
+`master` are only needed for this first startup: remove `KEYCLOAK_ADMIN_USER` / `KEYCLOAK_ADMIN_PASSWORD` afterwards),
+its owner (who changes the password at the first login), the login client of the realm and the default
 catalog `products`. At every startup, it adds what is missing, so an existing realm is completed, never reset.
 
 ## Configuration
 
 Orgkeep is configured with environment variables (or the matching properties in `application.properties`,
-`orgkeep.realm-name` for `ORGKEEP_REALM_NAME`...). Four are required: `KEYCLOAK_URL`, `ORGKEEP_REALM_NAME`,
-`ORGKEEP_OWNER_EMAIL` and `ORGKEEP_OWNER_PASSWORD` (plus the first and last name of the owner when the realm is
+`orgkeep.realm-name` for `ORGKEEP_REALM_NAME`...). Five are required: `KEYCLOAK_URL`, `ORGKEEP_REALM_NAME`,
+`ORGKEEP_KEYCLOAK_CLIENT_SECRET`, `ORGKEEP_OWNER_EMAIL` and `ORGKEEP_OWNER_PASSWORD` (plus the first and last name of the owner when the realm is
 created). The Keycloak admin account, the SMTP server, the dashboard client, Swagger UI and the demo data have their
 own settings.
 

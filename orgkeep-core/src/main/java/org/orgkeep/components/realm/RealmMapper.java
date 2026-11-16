@@ -74,6 +74,36 @@ public interface RealmMapper {
         return client;
     }
 
+    /**
+     * The client Orgkeep calls the Keycloak admin API with, in the realm it manages: confidential, client credentials
+     * only. fullScopeAllowed is set explicitly: with false, its token carries no realm-management role and the admin
+     * API answers 403.
+     */
+    default ClientRepresentation toAdminClient(String clientId, String secret) {
+        ClientRepresentation client = new ClientRepresentation();
+        client.setClientId(clientId);
+        client.setName("Orgkeep admin");
+        client.setEnabled(true);
+        client.setPublicClient(false);
+        client.setServiceAccountsEnabled(true);
+        client.setStandardFlowEnabled(false);
+        client.setImplicitFlowEnabled(false);
+        client.setDirectAccessGrantsEnabled(false);
+        client.setFullScopeAllowed(true);
+        client.setSecret(secret);
+        return client;
+    }
+
+    /** The service account user of the admin client, with the role realm-management/realm-admin of its own realm. */
+    default UserRepresentation toAdminServiceAccount(String clientId) {
+        UserRepresentation user = new UserRepresentation();
+        user.setUsername("service-account-" + clientId.toLowerCase());
+        user.setServiceAccountClientId(clientId);
+        user.setEnabled(true);
+        user.setClientRoles(Map.of("realm-management", List.of("realm-admin")));
+        return user;
+    }
+
     /** The "smtpServer" map of the realm representation, with the keys of the Email tab of the Keycloak console. */
     default Map<String, String> toSmtpServer(SmtpSettings smtp) {
         Map<String, String> server = new HashMap<>();

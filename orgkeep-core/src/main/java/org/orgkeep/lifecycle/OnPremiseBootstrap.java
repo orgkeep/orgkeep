@@ -3,7 +3,14 @@ package org.orgkeep.lifecycle;
 import org.orgkeep.api.RealmProvisioner;
 import org.orgkeep.api.model.CreateRealmRequest;
 import org.orgkeep.api.model.SmtpSettings;
+import org.orgkeep.components.realm.AdminClient;
+import org.orgkeep.components.realm.BootstrapCredentials;
+import org.orgkeep.components.realm.RealmBootstrap;
 import org.orgkeep.config.OrgkeepConfig;
+import org.orgkeep.repository.keycloak.KeycloakAdminAccess;
+import org.orgkeep.repository.keycloak.KeycloakAdminAccess.Probe;
+import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.Response;
 import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.Dependent;
 import jakarta.enterprise.event.Observes;
@@ -20,6 +27,15 @@ public class OnPremiseBootstrap {
     @Inject
     RealmProvisioner realmService;
 
+    @Inject
+    RealmBootstrap realmBootstrap;
+
+    @Inject
+    KeycloakAdminAccess adminAccess;
+
+    @Inject
+    BootstrapCredentialsSource bootstrapCredentials;
+
     void onStart(@Observes StartupEvent ev) {
         if (config.mode() != OrgkeepConfig.Mode.ON_PREM) {
             log.info("Mode {}: no bootstrap", config.mode());
@@ -29,26 +45,82 @@ public class OnPremiseBootstrap {
         String realmName = required(config.realmName(), "orgkeep.realm-name", "ORGKEEP_REALM_NAME");
         String ownerEmail = required(config.owner().email(), "orgkeep.owner.email", "ORGKEEP_OWNER_EMAIL");
         String ownerPassword = required(config.owner().password(), "orgkeep.owner.password", "ORGKEEP_OWNER_PASSWORD");
+        String clientId = config.keycloak().clientId();
+        String clientSecret = required(config.keycloak().clientSecret(), "orgkeep.keycloak.client-secret",
+                "ORGKEEP_KEYCLOAK_CLIENT_SECRET");
+        Optional<BootstrapCredentials> bootstrap = bootstrapCredentials.read();
 
-        if (realmService.exists(realmName)) {
-            // a realm created by an older version may lack what was added since
-            realmService.ensureDefaults(realmName);
-            log.info("Realm '{}' already exists, defaults checked", realmName);
-        } else {
-            // only checked when the owner is created: Keycloak asks for them at login otherwise
-            String firstName = required(config.owner().firstName(), "orgkeep.owner.first-name", "ORGKEEP_OWNER_FIRST_NAME");
-            String lastName = required(config.owner().lastName(), "orgkeep.owner.last-name", "ORGKEEP_OWNER_LAST_NAME");
-            CreateRealmRequest request = new CreateRealmRequest(realmName, ownerEmail, ownerPassword,
-                    config.owner().username().orElse(null), config.owner().temporaryPassword(), firstName, lastName);
-            realmService.create(request);
-            log.info("Realm '{}' created for owner {}", realmName, ownerEmail);
+        try {
+            // Orgkeep first asks for a token of its own admin client: master is never contacted on a normal boot
+            Probe probe = adminAccess.probe();
+            if (probe == Probe.UNAUTHORIZED) {
+                throw refusedClient(realmName, clientId);
+            }
+            boolean absent = probe == Probe.REALM_NOT_FOUND || !realmService.exists(realmName);
+
+            if (absent) {
+                BootstrapCredentials credentials = bootstrap.orElseThrow(() -> realmMissing(realmName, clientId));
+                // only checked when the owner is created: Keycloak asks for them at login otherwise
+                String firstName = required(config.owner().firstName(), "orgkeep.owner.first-name", "ORGKEEP_OWNER_FIRST_NAME");
+                String lastName = required(config.owner().lastName(), "orgkeep.owner.last-name", "ORGKEEP_OWNER_LAST_NAME");
+                CreateRealmRequest request = new CreateRealmRequest(realmName, ownerEmail, ownerPassword,
+                        config.owner().username().orElse(null), config.owner().temporaryPassword(), firstName, lastName);
+                realmBootstrap.createWithBootstrapAdmin(request, new AdminClient(clientId, clientSecret), credentials);
+                if (probe != Probe.OK) {
+                    // only a safety net: completeCreation already ran as the service account, so it worked.
+                    // The admin client now points at a realm that exists
+                    Probe second = adminAccess.probe();
+                    if (second == Probe.UNAUTHORIZED) {
+                        throw refusedClient(realmName, clientId);
+                    }
+                    if (second != Probe.OK) {
+                        throw realmMissing(realmName, clientId);
+                    }
+                }
+            } else {
+                if (bootstrap.isPresent()) {
+                    log.warn("Realm '{}' exists: KEYCLOAK_ADMIN_USER / KEYCLOAK_ADMIN_PASSWORD are not used, "
+                            + "remove them from the environment", realmName);
+                }
+                // a realm created by an older version may lack what was added since
+                realmService.ensureDefaults(realmName);
+                log.info("Realm '{}' already exists, defaults checked", realmName);
+            }
+            // at each startup: also repairs a realm created by an older version
+            realmService.grantConsoleAccess(realmName);
+
+            // the configuration wins at each startup, a change made in the Keycloak console is overwritten
+            config.smtp().ifPresent(smtp -> realmService.configureSmtp(realmName, toSmtpSettings(smtp)));
+            config.dashboard().loginTheme().ifPresent(theme -> setDashboardLoginTheme(realmName, theme));
+        } catch (WebApplicationException e) {
+            int status = e.getResponse().getStatus();
+            if (status == Response.Status.FORBIDDEN.getStatusCode()) {
+                throw new IllegalStateException(("The client '%s' of realm '%s' lacks rights on the admin API: its service "
+                        + "account needs the role realm-management/realm-admin, and the client must have Full scope "
+                        + "allowed on (Clients > %s > Client scopes > Dedicated scope).")
+                        .formatted(clientId, realmName, clientId), e);
+            }
+            if (status == Response.Status.UNAUTHORIZED.getStatusCode()) {
+                throw refusedClient(realmName, clientId);
+            }
+            throw e;
         }
-        // at each startup: also repairs a realm created by an older version
-        realmService.grantConsoleAccess(realmName);
+    }
 
-        // the configuration wins at each startup, a change made in the Keycloak console is overwritten
-        config.smtp().ifPresent(smtp -> realmService.configureSmtp(realmName, toSmtpSettings(smtp)));
-        config.dashboard().loginTheme().ifPresent(theme -> setDashboardLoginTheme(realmName, theme));
+    private IllegalStateException realmMissing(String realmName, String clientId) {
+        return new IllegalStateException(("Realm '%s' not found at %s. For the first startup, set KEYCLOAK_ADMIN_USER and "
+                + "KEYCLOAK_ADMIN_PASSWORD (an admin of the master realm) so that Orgkeep creates the realm and its "
+                + "client '%s'; remove them afterwards. Also check KEYCLOAK_URL and ORGKEEP_REALM_NAME.")
+                .formatted(realmName, adminAccess.serverUrl(), clientId));
+    }
+
+    private static IllegalStateException refusedClient(String realmName, String clientId) {
+        return new IllegalStateException(("Keycloak refused the client '%s' of realm '%s' (ORGKEEP_KEYCLOAK_CLIENT_ID / "
+                + "ORGKEEP_KEYCLOAK_CLIENT_SECRET): wrong secret, or the client was deleted or disabled. Check "
+                + "Clients > %s > Credentials in the Keycloak console of the realm; its events (failed CLIENT_LOGIN) "
+                + "tell which one. A deleted client must be created again: confidential, service account enabled, "
+                + "Full scope allowed on, service account role realm-management/realm-admin.")
+                .formatted(clientId, realmName, clientId));
     }
 
     private void setDashboardLoginTheme(String realmName, String theme) {

@@ -9,7 +9,7 @@
 #
 # Runtime configuration through environment variables (each orgkeep.* property of application.properties
 # maps to ORGKEEP_*), for example:
-#   KEYCLOAK_URL, KEYCLOAK_ADMIN_USER, KEYCLOAK_ADMIN_PASSWORD,
+#   KEYCLOAK_URL, ORGKEEP_KEYCLOAK_CLIENT_SECRET, KEYCLOAK_ADMIN_USER and KEYCLOAK_ADMIN_PASSWORD (first startup only),
 #   ORGKEEP_REALM_NAME, ORGKEEP_OWNER_EMAIL, ORGKEEP_OWNER_PASSWORD, ORGKEEP_DEMO_ENABLED...
 ####
 # TODO pin a tag (check registry.access.redhat.com/ubi9/openjdk-25), "latest" is not reproducible

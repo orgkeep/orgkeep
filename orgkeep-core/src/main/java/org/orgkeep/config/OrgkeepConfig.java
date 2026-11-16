@@ -19,6 +19,9 @@ public interface OrgkeepConfig {
      */
     Optional<String> keycloakPublicUrl();
 
+    /** The client of the managed realm whose service account Orgkeep uses to call the Keycloak admin API (ON_PREM). */
+    Keycloak keycloak();
+
     Owner owner();
 
     Demo demo();
@@ -35,6 +38,15 @@ public interface OrgkeepConfig {
     Locks locks();
 
     enum Mode { ON_PREM, SAAS }
+
+    interface Keycloak {
+        /** Client of the managed realm, with the role realm-management/realm-admin on its service account. */
+        @WithDefault("orgkeep-admin")
+        String clientId();
+
+        /** Required in ON_PREM. Given to the client when Orgkeep creates the realm. */
+        Optional<String> clientSecret();
+    }
 
     interface Owner {
         Optional<String> email();

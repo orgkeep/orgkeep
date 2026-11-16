@@ -49,8 +49,19 @@ public class RealmProvisionerImpl implements RealmProvisioner {
 
     @Override
     public CreateRealmResponse create(CreateRealmRequest request) {
-        boolean passwordSet = request.adminPassword() != null;
-        String password = passwordSet ? request.adminPassword() : passwordGenerator.generate();
+        RealmRepresentation realm = toCreateRepresentation(request);
+        if (!realms.create(realm)) {
+            throw new RealmAlreadyExistsException(realm.getRealm());
+        }
+        return completeCreation(realm.getRealm(), request, request.adminPassword() != null);
+    }
+
+    /**
+     * The realm to create: settings, roles, and the owner with its roles and password (generated when the request has
+     * none). Sent by {@link #create}, or by {@link RealmBootstrap} with more in it.
+     */
+    RealmRepresentation toCreateRepresentation(CreateRealmRequest request) {
+        String password = request.adminPassword() != null ? request.adminPassword() : passwordGenerator.generate();
 
         RealmRepresentation realm = realmMapper.toRealmRepresentation(request);
         realm.setRoles(realmRoles());
@@ -60,25 +71,29 @@ public class RealmProvisionerImpl implements RealmProvisioner {
                 .map(RealmRole::getRoleName)
                 .toList());
         realm.setUsers(List.of(owner));
+        return realm;
+    }
 
-        if (!realms.create(realm)) {
-            throw new RealmAlreadyExistsException(realm.getRealm());
-        }
-        log.info("Realm '{}' created with owner {}", realm.getRealm(), request.adminEmail());
-        ensureDefaults(realm.getRealm());
+    /**
+     * What follows the creation of the realm in Keycloak, whoever created it: the defaults, the default catalog, the
+     * default roles of the owner and the UserCreated event.
+     */
+    CreateRealmResponse completeCreation(String realmName, CreateRealmRequest request, boolean passwordSet) {
+        log.info("Realm '{}' created with owner {}", realmName, request.adminEmail());
+        ensureDefaults(realmName);
         // only with a new realm, not in ensureDefaults: the realm owner may delete it.
         // After the login client, which gets its scope as a default scope
-        catalogSetup.ensureDefault(realm.getRealm());
+        catalogSetup.ensureDefault(realmName);
 
         // the realm and its owner are created in a single call: read back the ids Keycloak generated
-        String ownerId = users.findIdByEmail(realm.getRealm(), request.adminEmail())
-                .orElseThrow(() -> new IllegalStateException("Owner of realm '%s' not found after creation".formatted(realm.getRealm())));
+        String ownerId = users.findIdByEmail(realmName, request.adminEmail())
+                .orElseThrow(() -> new IllegalStateException("Owner of realm '%s' not found after creation".formatted(realmName)));
         // a user imported with the realm only gets the roles listed in its representation, not the default roles of
         // the realm that a user created afterwards gets: without the roles of the account client they hold, the
         // Account console of Keycloak answers 401 to the owner
-        users.addRealmRole(realm.getRealm(), ownerId, realms.defaultRoleName(realm.getRealm()));
-        eventBus.publish(UserCreated.ADDRESS, new UserCreated(realm.getRealm(), null, ownerId, passwordSet));
-        return new CreateRealmResponse(realms.id(realm.getRealm()), realm.getRealm(), ownerId);
+        users.addRealmRole(realmName, ownerId, realms.defaultRoleName(realmName));
+        eventBus.publish(UserCreated.ADDRESS, new UserCreated(realmName, null, ownerId, passwordSet));
+        return new CreateRealmResponse(realms.id(realmName), realmName, ownerId);
     }
 
     @Override

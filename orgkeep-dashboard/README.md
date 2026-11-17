@@ -54,9 +54,10 @@ The application listens on port **8284** (`QUARKUS_HTTP_PORT` to change it): the
 
 ## Configuration
 
-Everything of the core (Keycloak, realm, owner, emails...), plus the Keycloak client the browser logs in with:
-`ORGKEEP_DASHBOARD_CLIENT_SECRET` is required, and the client itself is created in Keycloak (the demo creates it).
-The complete reference, with every variable and how to create the client, is in the documentation:
+Everything of the core (Keycloak, realm, owner, emails...), plus `ORGKEEP_DASHBOARD_URL`, the public URL of the
+dashboard (required). Orgkeep creates the Keycloak client the browser logs in with from it, and keeps it up to date at
+each startup: there is no secret to configure.
+The complete reference, with every variable, is in the documentation:
 https://orgkeep.org/docs/latest/reference/configuration/ (its source is [`documentation/`](../documentation)).
 
 ## Contributing

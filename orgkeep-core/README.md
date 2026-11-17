@@ -20,8 +20,7 @@ To try it without building anything: the demo stack of
 > in the [issues](https://github.com/orgkeep/orgkeep/issues).
 > - No upgrade path between 0.x versions: a change of format applies to new objects only, and a realm may have to
 >   be created again.
-> - Known limitations: outside the demo, the `orgkeep-dashboard` client is
->   created by hand in Keycloak; one realm per Orgkeep instance.
+> - Known limitation: one realm per Orgkeep instance.
 
 ## Requirements
 

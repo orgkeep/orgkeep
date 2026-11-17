@@ -5,6 +5,7 @@ import org.orgkeep.api.events.UserCreated;
 import org.orgkeep.api.exceptions.RealmAlreadyExistsException;
 import org.orgkeep.api.model.CreateRealmRequest;
 import org.orgkeep.api.model.CreateRealmResponse;
+import org.orgkeep.api.model.DashboardClientSettings;
 import org.orgkeep.api.model.OrgClients;
 import org.orgkeep.api.model.OrgkeepApiClient;
 import org.orgkeep.api.model.RealmRole;
@@ -26,8 +27,11 @@ import org.keycloak.representations.idm.UserRepresentation;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 @Slf4j
 @ApplicationScoped
@@ -110,6 +114,79 @@ public class RealmProvisionerImpl implements RealmProvisioner {
             log.info("Login theme '{}' set on client '{}' of realm '{}'", theme, clientId, name);
         });
         return clientUuid.isPresent();
+    }
+
+    @Override
+    public void ensureDashboardClient(String name, DashboardClientSettings settings) {
+        ClientRepresentation client = clients.find(name, settings.clientId()).orElse(null);
+        if (client == null) {
+            client = new ClientRepresentation();
+            client.setClientId(settings.clientId());
+            client.setName("Dashboard");
+            client.setEnabled(true);
+            // no secret: Keycloak generates one for a confidential client
+            applyDashboardSettings(client, settings);
+            // explicitly empty, not null: with null, Keycloak adds the origin of the redirect URIs as web origin
+            client.setWebOrigins(new ArrayList<>());
+            if (clients.create(name, client).isPresent()) {
+                log.info("Client '{}' created in realm '{}' for the dashboard on {}", settings.clientId(), name, settings.url());
+                return;
+            }
+            // created by someone else in the meantime: read it and repair it below
+            client = clients.find(name, settings.clientId())
+                    .orElseThrow(() -> new IllegalStateException("Client '%s' not found in realm '%s'"
+                            .formatted(settings.clientId(), name)));
+        }
+        String uuid = client.getId();
+        if (applyDashboardSettings(client, settings)) {
+            clients.update(name, uuid, client);
+            log.info("Client '{}' of realm '{}' repaired to match the configuration", settings.clientId(), name);
+        }
+        // a client made by hand, public or bearer-only: it has no secret until it is confidential. The only case
+        // where Orgkeep sets the secret
+        if (clients.secret(name, uuid).isEmpty()) {
+            clients.regenerateSecret(name, uuid);
+            log.info("Secret generated for client '{}' of realm '{}'", settings.clientId(), name);
+        }
+    }
+
+    /**
+     * Sets what Orgkeep owns on the dashboard client, leaving the rest (other attributes, secret) alone.
+     *
+     * @return true when something differed
+     */
+    private static boolean applyDashboardSettings(ClientRepresentation client, DashboardClientSettings settings) {
+        boolean changed = false;
+        changed |= set(client.isPublicClient(), false, client::setPublicClient);
+        changed |= set(client.isBearerOnly(), false, client::setBearerOnly);
+        changed |= set(client.getClientAuthenticatorType(), "client-secret", client::setClientAuthenticatorType);
+        changed |= set(client.isStandardFlowEnabled(), true, client::setStandardFlowEnabled);
+        changed |= set(client.isDirectAccessGrantsEnabled(), false, client::setDirectAccessGrantsEnabled);
+        changed |= set(client.isImplicitFlowEnabled(), false, client::setImplicitFlowEnabled);
+        changed |= set(client.isServiceAccountsEnabled(), false, client::setServiceAccountsEnabled);
+        changed |= set(orEmpty(client.getRedirectUris()), List.of(settings.url() + "/*"), client::setRedirectUris);
+        changed |= set(orEmpty(client.getWebOrigins()), List.<String>of(), client::setWebOrigins);
+
+        Map<String, String> attributes = client.getAttributes() == null ? new HashMap<>() : new HashMap<>(client.getAttributes());
+        boolean attributesChanged = !"+".equals(attributes.put("post.logout.redirect.uris", "+"));
+        attributesChanged |= !"S256".equals(attributes.put("pkce.code.challenge.method", "S256"));
+        if (settings.loginTheme() != null) {
+            attributesChanged |= !settings.loginTheme().equals(attributes.put("login_theme", settings.loginTheme()));
+        }
+        client.setAttributes(attributes);
+        return changed || attributesChanged;
+    }
+
+    private static <T> boolean set(T current, T wanted, Consumer<T> setter) {
+        if (wanted.equals(current)) {
+            return false;
+        }
+        setter.accept(wanted);
+        return true;
+    }
+
+    private static List<String> orEmpty(List<String> list) {
+        return list == null ? List.of() : list;
     }
 
     @Override

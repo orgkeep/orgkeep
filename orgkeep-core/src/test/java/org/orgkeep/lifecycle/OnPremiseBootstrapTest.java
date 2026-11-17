@@ -4,8 +4,11 @@ import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.orgkeep.api.RealmProvisioner;
 import org.orgkeep.api.model.CreateRealmRequest;
+import org.orgkeep.api.model.DashboardClientSettings;
 import org.orgkeep.components.realm.AdminClient;
 import org.orgkeep.components.realm.BootstrapCredentials;
 import org.orgkeep.components.realm.RealmBootstrap;
@@ -62,6 +65,7 @@ class OnPremiseBootstrapTest {
         when(config.smtp()).thenReturn(Optional.empty());
         when(config.dashboard()).thenReturn(dashboard);
         when(dashboard.loginTheme()).thenReturn(Optional.empty());
+        when(dashboard.url()).thenReturn(Optional.empty());
         when(adminAccess.serverUrl()).thenReturn("http://keycloak:8080");
         when(credentialsSource.read()).thenReturn(Optional.empty());
 
@@ -200,6 +204,53 @@ class OnPremiseBootstrapTest {
 
         bootstrap.onStart(null);
 
+        verifyNoInteractions(adminAccess, realmService, realmBootstrap);
+    }
+
+    // ---- Dashboard client ----
+
+    private void existingRealm() {
+        when(adminAccess.probe()).thenReturn(Probe.OK);
+        when(realmService.exists("acme")).thenReturn(true);
+    }
+
+    @Test
+    void createsOrRepairsTheDashboardClientWhenTheUrlIsSet() {
+        existingRealm();
+        when(dashboard.url()).thenReturn(Optional.of("https://dashboard.acme.test/"));
+        when(dashboard.clientId()).thenReturn("orgkeep-dashboard");
+        when(dashboard.loginTheme()).thenReturn(Optional.of("orgkeep"));
+
+        bootstrap.onStart(null);
+
+        // the trailing slash is stripped
+        verify(realmService).ensureDashboardClient("acme",
+                new DashboardClientSettings("orgkeep-dashboard", "https://dashboard.acme.test", "orgkeep"));
+        verify(realmService, never()).setLoginTheme(any(), any(), any());
+    }
+
+    @Test
+    void withoutTheUrlTheClientIsLeftAloneAndOnlyTheThemeIsSet() {
+        existingRealm();
+        when(dashboard.url()).thenReturn(Optional.empty());
+        when(dashboard.clientId()).thenReturn("orgkeep-dashboard");
+        when(dashboard.loginTheme()).thenReturn(Optional.of("orgkeep"));
+
+        bootstrap.onStart(null);
+
+        verify(realmService, never()).ensureDashboardClient(any(), any());
+        verify(realmService).setLoginTheme("acme", "orgkeep-dashboard", "orgkeep");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"http://example.com", "https://a.com/path", "https://a.com/*", "https://user@a.com",
+            "ftp://a.com"})
+    void anInvalidDashboardUrlFailsBeforeAnyCall(String url) {
+        when(dashboard.url()).thenReturn(Optional.of(url));
+
+        IllegalStateException e = assertThrows(IllegalStateException.class, () -> bootstrap.onStart(null));
+
+        assertTrue(e.getMessage().contains("ORGKEEP_DASHBOARD_URL"), e.getMessage());
         verifyNoInteractions(adminAccess, realmService, realmBootstrap);
     }
 }

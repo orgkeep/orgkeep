@@ -5,7 +5,6 @@ import org.orgkeep.api.CatalogService;
 import org.orgkeep.api.OrgMemberService;
 import org.orgkeep.api.OrgService;
 import org.orgkeep.api.ProductService;
-import org.orgkeep.api.RealmProvisioner;
 import org.orgkeep.api.TeamService;
 import org.orgkeep.api.UserGroupService;
 import org.orgkeep.api.model.AddMemberRequest;
@@ -69,11 +68,6 @@ public class DemoSeeder {
     static final String PAUL_EMAIL = "paul@acme.test";
     static final String EMMA = "emma";
     static final String EMMA_EMAIL = "emma@acme.test";
-    // must match quarkus.oidc.client-id and the dev secret in the application.properties of orgkeep-dashboard,
-    // and orgkeep.dashboard.client-id (its default)
-    static final String DASHBOARD_CLIENT_ID = "orgkeep-dashboard";
-    static final String DASHBOARD_SECRET = "dashboard-dev-secret";
-    static final String DASHBOARD_URL = "http://localhost:8284";
     // fixed secrets of the catalog clients prod and sandbox (prod-demo-secret...): the demo APIs of the compose
     // (orgkeep-examples) introspect with them, without a secret generated in the dashboard first
     static final String CATALOG_SECRET_SUFFIX = "-demo-secret";
@@ -86,7 +80,6 @@ public class DemoSeeder {
     private final CatalogRoleService catalogRoleService;
     private final UserGroupService userGroupService;
     private final TeamService teamService;
-    private final RealmProvisioner realmProvisioner;
     private final KeycloakOrgs orgs;
     private final KeycloakUsers users;
     private final KeycloakClients clients;
@@ -101,7 +94,6 @@ public class DemoSeeder {
                 .orElseThrow(() -> new IllegalStateException("orgkeep.realm-name is required by the demo seeder"));
 
         enablePasswordGrant(realm);
-        ensureDashboardClient(realm);
 
         ensureOrg(realm);
         ensureOrgUser(realm);
@@ -257,37 +249,6 @@ public class DemoSeeder {
         client.setDirectAccessGrantsEnabled(true);
         clients.update(realm, clientUuid, client);
         log.info("Password grant enabled on the login client '{}' for the demo accounts", realm);
-    }
-
-    /**
-     * Login client of orgkeep-dashboard, run on http://localhost:8284 (mvn quarkus:dev or the demo compose).
-     * Created here because the dashboard never calls Keycloak itself: it only talks to the API of the core.
-     * Outside of the demo, the operator creates this client with its own secret and URL.
-     */
-    private void ensureDashboardClient(String realm) {
-        if (clients.findUuid(realm, DASHBOARD_CLIENT_ID).isPresent()) {
-            return;
-        }
-        createDashboardClient(realm);
-        // OnPremiseBootstrap, which sets it at each startup, ran before the client existed
-        config.dashboard().loginTheme()
-                .ifPresent(theme -> realmProvisioner.setLoginTheme(realm, DASHBOARD_CLIENT_ID, theme));
-    }
-
-    private void createDashboardClient(String realm) {
-        ClientRepresentation client = new ClientRepresentation();
-        client.setClientId(DASHBOARD_CLIENT_ID);
-        client.setName("Dashboard (demo)");
-        // confidential client: the dashboard backend holds the secret, the browser never talks to the token endpoint
-        client.setPublicClient(false);
-        client.setSecret(DASHBOARD_SECRET);
-        client.setStandardFlowEnabled(true);
-        client.setDirectAccessGrantsEnabled(false);
-        client.setRedirectUris(List.of(DASHBOARD_URL + "/*"));
-        // "+": the logout redirect accepts the same URIs as the login redirect
-        client.setAttributes(Map.of("post.logout.redirect.uris", "+"));
-        clients.create(realm, client);
-        log.info("Client '{}' created in realm '{}' for the dashboard on {}", DASHBOARD_CLIENT_ID, realm, DASHBOARD_URL);
     }
 
     // first and last name are required by Keycloak at login, a password grant fails without them

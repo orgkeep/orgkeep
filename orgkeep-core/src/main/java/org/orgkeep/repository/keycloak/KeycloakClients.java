@@ -250,6 +250,13 @@ public class KeycloakClients {
         return map == null ? Map.of() : map;
     }
 
+    /** The current secret of the confidential client, empty when Keycloak has none (public or bearer-only client). */
+    public Optional<String> secret(String realm, String clientUuid) {
+        return Optional.ofNullable(keycloak.realm(realm).clients().get(clientUuid).getSecret())
+                .map(credential -> credential.getValue())
+                .filter(value -> !value.isBlank());
+    }
+
     /** Generates a new secret for the confidential client: the previous one stops working at once. */
     public String regenerateSecret(String realm, String clientUuid) {
         return keycloak.realm(realm).clients().get(clientUuid).generateNewSecret().getValue();

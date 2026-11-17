@@ -2,6 +2,8 @@ package org.orgkeep.lifecycle;
 
 import org.orgkeep.api.RealmProvisioner;
 import org.orgkeep.api.model.CreateRealmRequest;
+import org.orgkeep.api.model.DashboardClientSettings;
+import org.orgkeep.api.model.UpdateLoginClientRequest;
 import org.orgkeep.api.model.SmtpSettings;
 import org.orgkeep.components.realm.AdminClient;
 import org.orgkeep.components.realm.BootstrapCredentials;
@@ -48,6 +50,8 @@ public class OnPremiseBootstrap {
         String clientId = config.keycloak().clientId();
         String clientSecret = required(config.keycloak().clientSecret(), "orgkeep.keycloak.client-secret",
                 "ORGKEEP_KEYCLOAK_CLIENT_SECRET");
+        // checked before any call to Keycloak, like the settings above
+        Optional<String> dashboardUrl = config.dashboard().url().map(OnPremiseBootstrap::checkedDashboardUrl);
         Optional<BootstrapCredentials> bootstrap = bootstrapCredentials.read();
 
         try {
@@ -91,7 +95,10 @@ public class OnPremiseBootstrap {
 
             // the configuration wins at each startup, a change made in the Keycloak console is overwritten
             config.smtp().ifPresent(smtp -> realmService.configureSmtp(realmName, toSmtpSettings(smtp)));
-            config.dashboard().loginTheme().ifPresent(theme -> setDashboardLoginTheme(realmName, theme));
+            dashboardUrl.ifPresentOrElse(
+                    url -> realmService.ensureDashboardClient(realmName, new DashboardClientSettings(
+                            config.dashboard().clientId(), url, config.dashboard().loginTheme().orElse(null))),
+                    () -> config.dashboard().loginTheme().ifPresent(theme -> setDashboardLoginTheme(realmName, theme)));
         } catch (WebApplicationException e) {
             int status = e.getResponse().getStatus();
             if (status == Response.Status.FORBIDDEN.getStatusCode()) {
@@ -126,9 +133,20 @@ public class OnPremiseBootstrap {
     private void setDashboardLoginTheme(String realmName, String theme) {
         String clientId = config.dashboard().clientId();
         if (!realmService.setLoginTheme(realmName, clientId, theme)) {
-            // created by the operator after the first startup (by DemoSeeder in the demo, which sets the theme itself)
+            // no orgkeep.dashboard.url: Orgkeep does not create the client, the operator may create it later
             log.info("No client '{}' in realm '{}' yet: login theme '{}' set at the next startup", clientId, realmName, theme);
         }
+    }
+
+    /** The URL without its trailing slash, when it is an origin the dashboard client may redirect to. */
+    private static String checkedDashboardUrl(String url) {
+        String origin = url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
+        if (!origin.matches(UpdateLoginClientRequest.ORIGIN)) {
+            throw new IllegalStateException(("orgkeep.dashboard.url (ORGKEEP_DASHBOARD_URL) must be an origin: https://host[:port], "
+                    + "or http://localhost[:port] for development, without path, user info or wildcard (got '%s')")
+                    .formatted(url));
+        }
+        return origin;
     }
 
     private static SmtpSettings toSmtpSettings(OrgkeepConfig.Smtp smtp) {

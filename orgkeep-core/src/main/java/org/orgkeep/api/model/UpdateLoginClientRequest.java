@@ -44,7 +44,7 @@ public record UpdateLoginClientRequest(
     }
 
     /** Scheme and host (and port): https anywhere, http on the local machine only. */
-    private static final String ORIGIN = "(https://[^/?#@*\\s:]+|http://(localhost|127\\.0\\.0\\.1))(:\\d{1,5})?";
+    public static final String ORIGIN = "(https://[^/?#@*\\s:]+|http://(localhost|127\\.0\\.0\\.1))(:\\d{1,5})?";
 
     /** An origin, then an optional path without wildcard, or a path ending with "/*". */
     static final String REDIRECT_URI = ORIGIN + "((/[^*\\s]*)?|/([^*\\s]*/)?\\*)";

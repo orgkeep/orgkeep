@@ -149,18 +149,10 @@ class DemoSeederTest {
         assertTrue(CatalogClaims.of(claims, "prod.shop").isEmpty(), claims.toString());
     }
 
+    // created by OnPremiseBootstrap when orgkeep.dashboard.url is set (not here): the demo seeds no client of its own
     @Test
-    void dashboardClientIsReadyForTheDashboardInDev() {
-        ClientRepresentation client = keycloak.realm(REALM).clients()
-                .findByClientId(DemoSeeder.DASHBOARD_CLIENT_ID).get(0);
-
-        assertFalse(client.isPublicClient());
-        assertTrue(client.isStandardFlowEnabled());
-        assertEquals(List.of("http://localhost:8284/*"), client.getRedirectUris());
-        assertEquals(DemoSeeder.DASHBOARD_SECRET,
-                keycloak.realm(REALM).clients().get(client.getId()).getSecret().getValue());
-        // set by the seeder: OnPremiseBootstrap ran before the client existed
-        assertEquals("orgkeep", client.getAttributes().get("login_theme"));
+    void theDemoDoesNotCreateTheDashboardClient() {
+        assertTrue(keycloak.realm(REALM).clients().findByClientId("orgkeep-dashboard").isEmpty());
         // white label: the login client of the users of the orgs keeps the pages of Keycloak
         ClientRepresentation loginClient = keycloak.realm(REALM).clients().findByClientId(REALM).get(0);
         assertNull(loginClient.getAttributes().get("login_theme"));

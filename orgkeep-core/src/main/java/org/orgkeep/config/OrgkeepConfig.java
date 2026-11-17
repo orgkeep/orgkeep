@@ -92,11 +92,18 @@ public interface OrgkeepConfig {
         boolean ssl();
     }
 
-    /** The Keycloak client of orgkeep-dashboard, created by the operator (by DemoSeeder in the demo). */
+    /** The Keycloak client of orgkeep-dashboard, created and repaired by Orgkeep when url is set (ON_PREM). */
     interface Dashboard {
-        /** Must match quarkus.oidc.dashboard.client-id of orgkeep-dashboard. */
+        /** Default orgkeep-dashboard. Also the client id of the dashboard's OIDC tenant. */
         @WithDefault("orgkeep-dashboard")
         String clientId();
+
+        /**
+         * Public URL of the dashboard, an origin (https://dashboard.example.com, http on localhost only).
+         * Set: the client is created or repaired at each startup, redirect &lt;url&gt;/*. Absent: no dashboard,
+         * nothing done.
+         */
+        Optional<String> url();
 
         /**
          * Login theme of the dashboard client only (e.g. orgkeep, see the orgkeep-theme module), set at each startup

@@ -105,23 +105,25 @@ Any other [Quarkus setting](https://quarkus.io/guides/all-config) works the same
 
 ## Dashboard (image `ghcr.io/orgkeep/orgkeep`)
 
-On top of everything above, the dashboard needs the Keycloak client the browser logs in with:
+On top of everything above, the dashboard needs its public URL. Orgkeep creates the Keycloak client the browser logs in
+with (`orgkeep-dashboard`) and repairs it at each startup, like the login client of the realm:
 
 | Variable | Default | What |
 |---|---|---|
-| `ORGKEEP_DASHBOARD_CLIENT_SECRET` | **required** | The secret of the dashboard client |
-| `QUARKUS_OIDC_DASHBOARD_CLIENT_ID` | `orgkeep-dashboard` | Its clientId. When changed, set `ORGKEEP_DASHBOARD_CLIENT_ID` (read by the core) to the same value |
+| `ORGKEEP_DASHBOARD_URL` | **required** | The public URL of the dashboard, an origin: `https://dashboard.example.com` (`http` on `localhost` only), without path. The client's redirect URI is this URL followed by `/*`. The image does not start without it |
+| `ORGKEEP_DASHBOARD_CLIENT_ID` | `orgkeep-dashboard` | The client id. A client left behind by a changed id is neither deleted nor touched |
 | `ORGKEEP_DASHBOARD_LOGIN_THEME` | none | `orgkeep` for the login page of the dashboard in the Orgkeep look (the theme must be in Keycloak) |
 
 ### The dashboard client in Keycloak
 
-Create it in the realm managed by Orgkeep (the demo, `ORGKEEP_DEMO_ENABLED=true`, creates it for `localhost:8284`):
+Nothing to create, and no secret to configure: Keycloak generates the secret when Orgkeep creates the client, and the
+dashboard reads it through Orgkeep. At each startup Orgkeep rewrites what it owns on the client (confidential, standard
+flow only, redirect URI, post logout redirect URIs `+`, PKCE `S256`, login theme): the configuration wins over a change
+made in the Keycloak console. The secret is never changed by a startup, as the session cookies of the users depend on it.
 
-- Client ID `orgkeep-dashboard`, **Client authentication on** (a confidential client: the secret stays on the
-  server), **Standard flow** only;
-- Valid redirect URIs: `https://dashboard.example.com/*`, the public URL of the dashboard;
-- Valid post logout redirect URIs: `+` (the same as the redirect URIs);
-- then copy its secret (tab **Credentials**) into `ORGKEEP_DASHBOARD_CLIENT_SECRET`.
+To rotate the secret, click **Regenerate** in the Keycloak console (Clients > `orgkeep-dashboard` > Credentials), then
+restart Orgkeep: until then, logins to the dashboard fail. A client deleted in the console is created again, with a new
+secret, at the next startup (the users have to log in again).
 
 Example:
 
@@ -133,12 +135,8 @@ docker run -p 8284:8284 \
   -e ORGKEEP_REALM_NAME=acme \
   -e ORGKEEP_OWNER_EMAIL=owner@acme.com -e ORGKEEP_OWNER_PASSWORD=... \
   -e ORGKEEP_OWNER_FIRST_NAME=Alice -e ORGKEEP_OWNER_LAST_NAME=Martin \
-  -e ORGKEEP_DASHBOARD_CLIENT_SECRET=... \
+  -e ORGKEEP_DASHBOARD_URL=https://dashboard.example.com \
   ghcr.io/orgkeep/orgkeep:0.1.0
 ```
 
 `KEYCLOAK_ADMIN_USER` and `KEYCLOAK_ADMIN_PASSWORD` are only for the first startup: remove them afterwards.
-
-On the first startup the realm does not exist yet, so neither does the client: start Orgkeep once with any value in
-`ORGKEEP_DASHBOARD_CLIENT_SECRET` (it is only used at login), create the client, then restart Orgkeep with its real
-secret.

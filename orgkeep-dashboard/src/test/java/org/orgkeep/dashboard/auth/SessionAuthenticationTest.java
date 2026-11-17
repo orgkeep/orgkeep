@@ -1,10 +1,12 @@
 package org.orgkeep.dashboard.auth;
 
+import org.orgkeep.api.DashboardClient;
 import org.orgkeep.api.OrgMemberService;
 import org.orgkeep.api.OrgService;
 import org.orgkeep.api.UserGroupService;
 import org.orgkeep.api.model.AddMemberRequest;
 import org.orgkeep.api.model.CreateOrgRequest;
+import org.orgkeep.api.model.DashboardClientCredentials;
 import io.quarkus.test.common.http.TestHTTPResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.Cookie;
@@ -33,6 +35,7 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.startsWith;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The two ways in: a bearer token (the applications of the realm owner) and the session cookie of the browser login
@@ -52,14 +55,14 @@ class SessionAuthenticationTest {
     private static final String ORG = "session-org";
     private static final String ORG_ADMIN = "olga@session-org.test";
     private static final String ORG_ADMIN_PASSWORD = "olga-password";
-    private static final String CLIENT_ID = "orgkeep-dashboard";
-    // %dev,test.quarkus.oidc.dashboard.credentials.secret
-    private static final String CLIENT_SECRET = "dashboard-dev-secret";
     private static final String CATALOGS = "/api/admin/catalogs";
 
     // created once for the class: the realm lives as long as the Keycloak of Dev Services
     private static boolean dataReady;
 
+    // the client of the dashboard is created by OnPremiseBootstrap from %test.orgkeep.dashboard.url
+    @Inject
+    DashboardClient dashboardClient;
     @Inject
     Keycloak keycloak;
     @Inject
@@ -81,7 +84,7 @@ class SessionAuthenticationTest {
         if (dataReady) {
             return;
         }
-        createDashboardClient();
+        enableDirectAccessGrants();
         createOrgAdmin();
         dataReady = true;
     }
@@ -163,6 +166,41 @@ class SessionAuthenticationTest {
                 .then().statusCode(403);
     }
 
+    // the bearer tenant decides, the session cookie sent along is not even looked at (the static DashboardTenantResolver picks the bearer tenant)
+    @Test
+    void aValidBearerTokenWithASessionCookieGoesToTheBearerTenant() {
+        given().cookies(login(OWNER, OWNER_PASSWORD))
+                .auth().oauth2(passwordGrant(ORG_ADMIN, ORG_ADMIN_PASSWORD))
+                .when().get(CATALOGS)
+                // the roles of the bearer (an org admin), not those of the owner's session
+                .then().statusCode(403);
+    }
+
+    // ---- Login and logout ----
+
+    @Test
+    void sendsAPkceChallengeToKeycloak() {
+        String location = given().redirects().follow(false)
+                .when().get("/api/auth/login")
+                .then().statusCode(302)
+                .extract().header("Location");
+
+        assertTrue(location.startsWith(realmUrl + "/protocol/openid-connect/auth"), location);
+        assertTrue(location.contains("code_challenge="), location);
+        assertTrue(location.contains("code_challenge_method=S256"), location);
+    }
+
+    @Test
+    void logoutEndsTheSessionAtKeycloak() {
+        String location = given().cookies(login(OWNER, OWNER_PASSWORD))
+                .redirects().follow(false)
+                .when().get("/api/auth/logout")
+                .then().statusCode(302)
+                .extract().header("Location");
+
+        assertTrue(location.startsWith(realmUrl + "/protocol/openid-connect/logout"), location);
+    }
+
     @Test
     void tellsTheFrontWhoIsLoggedIn() {
         given().cookies(login(ORG_ADMIN, ORG_ADMIN_PASSWORD))
@@ -219,9 +257,10 @@ class SessionAuthenticationTest {
 
     /** An access token of the realm, the way an application of the realm owner gets one. */
     private String passwordGrant(String username, String password) {
+        DashboardClientCredentials credentials = dashboardClient.credentials().orElseThrow();
         return given().formParam("grant_type", "password")
-                .formParam("client_id", CLIENT_ID)
-                .formParam("client_secret", CLIENT_SECRET)
+                .formParam("client_id", credentials.clientId())
+                .formParam("client_secret", credentials.secret())
                 .formParam("username", username)
                 .formParam("password", password)
                 .when().post(realmUrl + "/protocol/openid-connect/token")
@@ -229,17 +268,16 @@ class SessionAuthenticationTest {
                 .extract().path("access_token");
     }
 
-    /** The client of the browser login, created in dev by the DemoSeeder of the core. */
-    private void createDashboardClient() {
-        ClientRepresentation client = new ClientRepresentation();
-        client.setClientId(CLIENT_ID);
-        client.setSecret(CLIENT_SECRET);
-        client.setPublicClient(false);
-        client.setStandardFlowEnabled(true);
-        // only for passwordGrant() above: the tests need a bearer token too
+    /**
+     * Only for passwordGrant() above: the tests need a bearer token too. Done once after startup, so that
+     * OnPremiseBootstrap, which rewrites the flows of the client at each startup, does not undo it during the run.
+     */
+    private void enableDirectAccessGrants() {
+        String clientUuid = keycloak.realm(REALM).clients()
+                .findByClientId(dashboardClient.credentials().orElseThrow().clientId()).getFirst().getId();
+        ClientRepresentation client = keycloak.realm(REALM).clients().get(clientUuid).toRepresentation();
         client.setDirectAccessGrantsEnabled(true);
-        client.setRedirectUris(List.of(root + "*"));
-        keycloak.realm(REALM).clients().create(client).close();
+        keycloak.realm(REALM).clients().get(clientUuid).update(client);
     }
 
     /** An organisation, and a member put in its admin group, with a password to log in. */

@@ -10,8 +10,8 @@
 #     -t ghcr.io/orgkeep/orgkeep:$(mvn -q help:evaluate -Dexpression=project.version -DforceStdout) .
 #
 # Runtime configuration through environment variables: those of orgkeep-core (KEYCLOAK_URL, ORGKEEP_KEYCLOAK_CLIENT_SECRET,
-# KEYCLOAK_ADMIN_USER and KEYCLOAK_ADMIN_PASSWORD for the first startup only, ORGKEEP_REALM_NAME, ORGKEEP_OWNER_*...) plus ORGKEEP_DASHBOARD_CLIENT_SECRET, the secret
-# of the Keycloak client of the browser login (orgkeep-dashboard).
+# KEYCLOAK_ADMIN_USER and KEYCLOAK_ADMIN_PASSWORD for the first startup only, ORGKEEP_REALM_NAME, ORGKEEP_OWNER_*...) plus ORGKEEP_DASHBOARD_URL (required), the
+# public URL of the dashboard: Orgkeep creates the Keycloak client of the browser login (orgkeep-dashboard) from it.
 ####
 # TODO pin a tag (check registry.access.redhat.com/ubi9/openjdk-25), "latest" is not reproducible
 FROM registry.access.redhat.com/ubi9/openjdk-25:latest

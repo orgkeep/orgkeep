@@ -47,8 +47,17 @@ jobs:
             echo "::error::Tag $TAG does not match the version of the pom ($version)"
             exit 1
           fi
+          # help:evaluate silently prints an error message and exits 0 when the expression does not resolve (an old
+          # tag checked out before keycloak.version existed): catch that here, before any image is built or pushed,
+          # instead of failing only on the Keycloak image with a build-arg made of this very error message.
+          kc_version=$(mvn -B -q help:evaluate -Dexpression=keycloak.version -DforceStdout)
+          if ! [[ "$kc_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "::error::keycloak.version did not resolve to a version at tag $TAG (got '$kc_version'): check the pom at this tag"
+            exit 1
+          fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "keycloak-version=$kc_version" >> "$GITHUB_OUTPUT"
 
       # QEMU runs the arm64 steps of the Dockerfiles on the amd64 runner; buildx builds both platforms in one image
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
@@ -99,6 +108,7 @@ jobs:
           context: orgkeep-theme
           platforms: linux/amd64,linux/arm64
           push: true
+          build-args: KEYCLOAK_VERSION=${{ steps.version.outputs.keycloak-version }}
           labels: org.opencontainers.image.revision=${{ steps.version.outputs.revision }}
           annotations: |
             index:org.opencontainers.image.source=https://github.com/orgkeep/orgkeep

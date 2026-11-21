@@ -35,5 +35,27 @@ jobs:
       - name: Build and test
         run: mvn -B verify
 
+      # help:evaluate silently prints an error message and exits 0 when the expression does not resolve: checked
+      # here, before the image is built, instead of failing only on the FROM line with a build-arg made of this
+      # very error message. Also catches a Dockerfile left out of sync with the pom (its default ARG is for a
+      # manual `docker build`, see its comment; CI and the release workflow always pass --build-arg).
+      - name: Check the Keycloak version against the Dockerfile default
+        id: keycloak
+        run: |
+          kc_version=$(mvn -B -q help:evaluate -Dexpression=keycloak.version -DforceStdout)
+          if ! [[ "$kc_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "::error::keycloak.version did not resolve to a version (got '$kc_version')"
+            exit 1
+          fi
+          dockerfile_version=$(sed -n 's/^ARG KEYCLOAK_VERSION=//p' orgkeep-theme/Dockerfile)
+          if [ "$dockerfile_version" != "$kc_version" ]; then
+            echo "::error::orgkeep-theme/Dockerfile defaults to Keycloak $dockerfile_version, but keycloak.version of the pom is $kc_version: keep them in sync"
+            exit 1
+          fi
+          echo "version=$kc_version" >> "$GITHUB_OUTPUT"
+
       - name: Build the Keycloak image
-        run: docker build -t orgkeep-keycloak:ci orgkeep-theme
+        run: >-
+          docker build
+          --build-arg KEYCLOAK_VERSION=${{ steps.keycloak.outputs.version }}
+          -t orgkeep-keycloak:ci orgkeep-theme

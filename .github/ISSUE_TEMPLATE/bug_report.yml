@@ -37,7 +37,7 @@ body:
     attributes:
       label: Versions
       description: Orgkeep (image tag or commit) and Keycloak.
-      placeholder: Orgkeep 0.1.0, Keycloak 26.6.1
+      placeholder: Orgkeep 0.2.0, Keycloak 26.8.1
     validations:
       required: true
   - type: textarea

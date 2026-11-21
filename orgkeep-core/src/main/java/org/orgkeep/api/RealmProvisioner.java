@@ -5,6 +5,8 @@ import org.orgkeep.api.model.CreateRealmResponse;
 import org.orgkeep.api.model.DashboardClientSettings;
 import org.orgkeep.api.model.SmtpSettings;
 
+import java.util.Optional;
+
 public interface RealmProvisioner {
     /**
      * Creates the realm with its roles, its owner and the default catalog, then {@link #ensureDefaults}.
@@ -47,6 +49,18 @@ public interface RealmProvisioner {
      * runs their own Keycloak; not in SAAS. Idempotent.
      */
     void grantConsoleAccess(String name);
+
+    /**
+     * Makes the user named by the configuration the only direct holder of the realm roles of Orgkeep (realm-owner,
+     * realm-admin, realm-user): grants them what they lack, then removes these roles from every other direct holder
+     * and ends their sessions. The user is found by username, or by email when there is no username. Only direct role
+     * mappings are handled: a role received through a group or a composite stays. For ON_PREM, on an existing realm.
+     * All the checks come before any change; idempotent.
+     *
+     * @throws IllegalStateException if the user is not found, is disabled, has another email than the one given (when
+     *                               found by username) or is a member of an organisation
+     */
+    void enforceSingleOwner(String name, Optional<String> username, String email);
 
     void delete(String name);
     boolean exists(String name);

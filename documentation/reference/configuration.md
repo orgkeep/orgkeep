@@ -70,7 +70,8 @@ catalog: delete the realm and start again.
 ## Emails
 
 Invitations are sent by Keycloak, through the SMTP server of the realm. When `ORGKEEP_SMTP_HOST` is set, Orgkeep
-writes these settings on the realm at every startup; otherwise the realm keeps its own (set in the Keycloak console).
+writes these settings on the realm at every startup; otherwise Orgkeep starts normally and the realm keeps its own (set in the Keycloak console). With a host, the sender
+address is required: Orgkeep refuses to start without `ORGKEEP_SMTP_FROM`.
 
 | Variable | Default | What |
 |---|---|---|

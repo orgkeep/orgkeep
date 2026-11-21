@@ -26,8 +26,11 @@ Three forms, the same content:
 
   ```
   docker build -t ghcr.io/orgkeep/orgkeep-keycloak:$(mvn -q help:evaluate -Dexpression=project.version -DforceStdout) .
-  docker build --build-arg KEYCLOAK_VERSION=26.6.1 -t ... .     # another Keycloak version
+  docker build --build-arg KEYCLOAK_VERSION=26.7.4 -t ... .     # another Keycloak version
   ```
+
+  The default `KEYCLOAK_VERSION` tracks `keycloak.version` of the parent pom (the version Dev Services also run
+  on), passed with `--build-arg` by the build and release workflows: `mvn -q help:evaluate -Dexpression=keycloak.version -DforceStdout`.
 
 - **Folder**: copy or mount [`src/main/resources/theme/orgkeep`](src/main/resources/theme/orgkeep) in
   `/opt/keycloak/themes/orgkeep`. No `kc.sh build` needed;

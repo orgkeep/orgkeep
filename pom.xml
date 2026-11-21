@@ -45,6 +45,20 @@ dependencies: the core before the dashboard). One version for all: they are rele
         <lombok.version>1.18.42</lombok.version>
         <compiler-plugin.version>3.15.0</compiler-plugin.version>
         <surefire-plugin.version>3.5.4</surefire-plugin.version>
+
+        <!-- The single source of truth for the Keycloak version: Dev Services (dev and test, overriding the
+             default of the Quarkus platform) and the ghcr.io/orgkeep/orgkeep-keycloak image (orgkeep-theme/Dockerfile)
+             both run on it, so the tests run on the version that ships.
+             Not 26.8.2 (the latest at the time of writing): on that version, the Admin REST API refuses every
+             client-credentials token of a realm client, including orgkeep-admin itself (reproduced directly against
+             plain Keycloak, so this is a Keycloak-side regression, not an Orgkeep one); OnPremiseBootstrap then
+             refuses to start. Revisit once Keycloak fixes it.
+             Tracked by hand, no Dependabot or Renovate: bumping it needs the compatibility check above, which they
+             cannot do.
+             A test run from an IDE (not through mvn) does not see this property (it only reaches Dev Services via
+             the systemPropertyVariables of surefire/failsafe, or quarkus:dev's own configuration below) and falls
+             back to the default Keycloak version of the Quarkus platform instead. -->
+        <keycloak.version>26.8.1</keycloak.version>
     </properties>
 
     <dependencyManagement>
@@ -87,6 +101,13 @@ dependencies: the core before the dashboard). One version for all: they are rele
                             </goals>
                         </execution>
                     </executions>
+                    <!-- quarkus:dev (mvn quarkus:dev) runs its own forked JVM, not the one of surefire/failsafe below:
+                         pin the Keycloak Dev Services image there too, so dev and test run the same version. -->
+                    <configuration>
+                        <systemProperties>
+                            <quarkus.keycloak.devservices.image-name>quay.io/keycloak/keycloak:${keycloak.version}</quarkus.keycloak.devservices.image-name>
+                        </systemProperties>
+                    </configuration>
                 </plugin>
                 <!-- the annotation processors are declared by each module: the core has MapStruct, the dashboard not -->
                 <plugin>
@@ -104,12 +125,20 @@ dependencies: the core before the dashboard). One version for all: they are rele
                         <systemPropertyVariables>
                             <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                             <maven.home>${maven.home}</maven.home>
+                            <!-- overrides the default.image of quarkus-devservices-keycloak, so the tests run on the
+                                 Keycloak version we ship (keycloak.version above) -->
+                            <quarkus.keycloak.devservices.image-name>quay.io/keycloak/keycloak:${keycloak.version}</quarkus.keycloak.devservices.image-name>
                         </systemPropertyVariables>
                     </configuration>
                 </plugin>
                 <plugin>
                     <artifactId>maven-failsafe-plugin</artifactId>
                     <version>${surefire-plugin.version}</version>
+                    <configuration>
+                        <systemPropertyVariables>
+                            <quarkus.keycloak.devservices.image-name>quay.io/keycloak/keycloak:${keycloak.version}</quarkus.keycloak.devservices.image-name>
+                        </systemPropertyVariables>
+                    </configuration>
                 </plugin>
             </plugins>
         </pluginManagement>

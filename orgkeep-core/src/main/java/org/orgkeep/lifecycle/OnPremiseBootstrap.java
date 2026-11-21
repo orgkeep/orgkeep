@@ -52,6 +52,7 @@ public class OnPremiseBootstrap {
                 "ORGKEEP_KEYCLOAK_CLIENT_SECRET");
         // checked before any call to Keycloak, like the settings above
         Optional<String> dashboardUrl = config.dashboard().url().map(OnPremiseBootstrap::checkedDashboardUrl);
+        Optional<SmtpSettings> smtpSettings = smtpSettings(config.smtp());
         Optional<BootstrapCredentials> bootstrap = bootstrapCredentials.read();
 
         try {
@@ -94,7 +95,7 @@ public class OnPremiseBootstrap {
             realmService.grantConsoleAccess(realmName);
 
             // the configuration wins at each startup, a change made in the Keycloak console is overwritten
-            config.smtp().ifPresent(smtp -> realmService.configureSmtp(realmName, toSmtpSettings(smtp)));
+            smtpSettings.ifPresent(settings -> realmService.configureSmtp(realmName, settings));
             dashboardUrl.ifPresentOrElse(
                     url -> realmService.ensureDashboardClient(realmName, new DashboardClientSettings(
                             config.dashboard().clientId(), url, config.dashboard().loginTheme().orElse(null))),
@@ -149,9 +150,14 @@ public class OnPremiseBootstrap {
         return origin;
     }
 
-    private static SmtpSettings toSmtpSettings(OrgkeepConfig.Smtp smtp) {
-        return new SmtpSettings(smtp.host(), smtp.port(), smtp.from(), smtp.fromDisplayName().orElse(null),
-                smtp.username().orElse(null), smtp.password().orElse(null), smtp.starttls(), smtp.ssl());
+    /** Empty without a host (the realm keeps its settings); a host without a sender address is refused. */
+    private static Optional<SmtpSettings> smtpSettings(OrgkeepConfig.Smtp smtp) {
+        return smtp.host().filter(h -> !h.isBlank()).map(host -> {
+            String from = smtp.from().filter(f -> !f.isBlank()).orElseThrow(() -> new IllegalStateException(
+                    "orgkeep.smtp.from (ORGKEEP_SMTP_FROM) is required when orgkeep.smtp.host (ORGKEEP_SMTP_HOST) is set"));
+            return new SmtpSettings(host, smtp.port(), from, smtp.fromDisplayName().orElse(null),
+                    smtp.username().orElse(null), smtp.password().orElse(null), smtp.starttls(), smtp.ssl());
+        });
     }
 
     private static String required(Optional<String> value, String property, String envVar) {

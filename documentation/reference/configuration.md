@@ -60,12 +60,38 @@ catalog: delete the realm and start again.
 | Variable | Default | What |
 |---|---|---|
 | `ORGKEEP_REALM_NAME` | **required** | The realm managed by Orgkeep, created at the first startup. The API only accepts tokens of this realm |
-| `ORGKEEP_OWNER_EMAIL` | **required** | The initial realm owner |
-| `ORGKEEP_OWNER_PASSWORD` | **required** | Its initial password |
-| `ORGKEEP_OWNER_USERNAME` | the email | Its username |
+| `ORGKEEP_OWNER_EMAIL` | **required** | The realm owner: created with the realm, and the user the configuration names at every startup (see below) |
+| `ORGKEEP_OWNER_PASSWORD` | **required** when the realm is created | Its initial password. Not used afterwards |
+| `ORGKEEP_OWNER_USERNAME` | the email | Its username. At every startup, the user is looked up by this username when it is set, otherwise by the email |
 | `ORGKEEP_OWNER_FIRST_NAME` / `ORGKEEP_OWNER_LAST_NAME` | **required** when the realm is created | Keycloak asks for them at the first login otherwise |
 | `ORGKEEP_OWNER_TEMPORARY_PASSWORD` | `true` | The owner must change the password at the first login |
 | `ORGKEEP_MODE` | `on-prem` | `on-prem`: the realm owner also gets the Keycloak admin console of the realm. `saas` is reserved for the hosted offer |
+
+### The configuration decides who the realm owner is
+
+In `on-prem` mode, at every startup on an existing realm, the user named by `ORGKEEP_OWNER_USERNAME` (or by
+`ORGKEEP_OWNER_EMAIL` when no username is set) is the realm owner, and the only one: Orgkeep gives them the realm roles
+`realm-owner`, `realm-admin` and `realm-user` they lack, and removes these roles from every other user who holds them
+directly, and closes their sessions (a WARN line in the log names each of them). The Keycloak console access of the
+realm owner comes with `realm-owner`, so it goes with it. A co-owner added in the Keycloak console loses the roles at
+the next startup. Nothing is written when the realm already matches.
+
+To take over a realm whose owner left:
+
+1. Pick an existing user of the realm: enabled, and not a member of any organisation.
+2. Set `ORGKEEP_OWNER_USERNAME` (and `ORGKEEP_OWNER_EMAIL`, which must be that user's email) to this user.
+3. Restart Orgkeep.
+
+Orgkeep refuses to start, with a message naming the variables, when the user does not exist, is disabled (it is never
+re-enabled for you), has an email different from `ORGKEEP_OWNER_EMAIL` when found by username, or is a member of an
+organisation. Nothing is changed in these cases.
+
+Limits:
+
+- Only direct role mappings are handled. A user who holds one of the three roles through a group or a composite role
+  keeps it.
+- Console access given directly through the `realm-management` roles, without `realm-owner`, is left alone.
+- An access token already issued keeps its roles until it expires; the refresh tokens stop working at once.
 
 ## Emails
 

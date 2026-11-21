@@ -11,6 +11,7 @@ import org.keycloak.representations.idm.RoleRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -25,6 +26,11 @@ public class KeycloakUsers {
         return keycloak.realm(realm).users().searchByEmail(email, true).stream()
                 .findFirst()
                 .map(UserRepresentation::getId);
+    }
+
+    /** Exact match on the username (Keycloak stores usernames in lower case). */
+    public Optional<UserRepresentation> findByUsername(String realm, String username) {
+        return keycloak.realm(realm).users().search(username, true).stream().findFirst();
     }
 
     /** @return the id of the new user */
@@ -63,6 +69,33 @@ public class KeycloakUsers {
     public void addRealmRole(String realm, String userId, String roleName) {
         RoleRepresentation role = keycloak.realm(realm).roles().get(roleName).toRepresentation();
         keycloak.realm(realm).users().get(userId).roles().realmLevel().add(List.of(role));
+    }
+
+    /** Idempotent: removes the role mapping of the user, not the roles they get through a group or a composite. */
+    public void removeRealmRole(String realm, String userId, String roleName) {
+        RoleRepresentation role = keycloak.realm(realm).roles().get(roleName).toRepresentation();
+        keycloak.realm(realm).users().get(userId).roles().realmLevel().remove(List.of(role));
+    }
+
+    /** The names of the realm roles mapped directly to the user (neither through a composite nor a group). */
+    public Set<String> directRealmRoles(String realm, String userId) {
+        return keycloak.realm(realm).users().get(userId).roles().realmLevel().listAll().stream()
+                .map(RoleRepresentation::getName)
+                .collect(Collectors.toSet());
+    }
+
+    /** The users holding the realm role directly, all the pages. Those who have it through a group or a composite are not in it. */
+    public List<UserRepresentation> directHoldersOfRealmRole(String realm, String roleName) {
+        int pageSize = 100;
+        List<UserRepresentation> holders = new ArrayList<>();
+        while (true) {
+            List<UserRepresentation> page = keycloak.realm(realm).roles().get(roleName)
+                    .getUserMembers(holders.size(), pageSize);
+            holders.addAll(page);
+            if (page.size() < pageSize) {
+                return holders;
+            }
+        }
     }
 
     /** The names of the effective realm roles of the user: granted directly, through a composite role or a group. */

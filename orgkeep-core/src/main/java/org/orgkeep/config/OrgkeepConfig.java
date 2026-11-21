@@ -28,8 +28,11 @@ public interface OrgkeepConfig {
 
     SwaggerUi swaggerUi();
 
-    /** SMTP server of the realm, set at each startup in ON_PREM mode. Absent: the realm keeps its own settings. */
-    Optional<Smtp> smtp();
+    /**
+     * SMTP server of the realm, set at each startup in ON_PREM mode. Without a host, the realm keeps its own settings.
+     * Not an Optional group: its defaults (port, starttls, ssl) would make SmallRye consider it always present.
+     */
+    Smtp smtp();
 
     Dashboard dashboard();
 
@@ -71,13 +74,14 @@ public interface OrgkeepConfig {
     }
 
     interface Smtp {
-        String host();
+        /** Absent: Orgkeep leaves the SMTP settings of the realm alone. */
+        Optional<String> host();
 
         @WithDefault("25")
         int port();
 
-        /** Sender address, required by Keycloak. */
-        String from();
+        /** Sender address, required by Keycloak: checked at startup when the host is set. */
+        Optional<String> from();
 
         Optional<String> fromDisplayName();
 

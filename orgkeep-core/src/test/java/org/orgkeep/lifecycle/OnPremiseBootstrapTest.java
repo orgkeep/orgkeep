@@ -9,6 +9,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.orgkeep.api.RealmProvisioner;
 import org.orgkeep.api.model.CreateRealmRequest;
 import org.orgkeep.api.model.DashboardClientSettings;
+import org.orgkeep.api.model.SmtpSettings;
 import org.orgkeep.components.realm.AdminClient;
 import org.orgkeep.components.realm.BootstrapCredentials;
 import org.orgkeep.components.realm.RealmBootstrap;
@@ -41,6 +42,7 @@ class OnPremiseBootstrapTest {
     private final OrgkeepConfig.Owner owner = mock(OrgkeepConfig.Owner.class);
     private final OrgkeepConfig.Keycloak keycloak = mock(OrgkeepConfig.Keycloak.class);
     private final OrgkeepConfig.Dashboard dashboard = mock(OrgkeepConfig.Dashboard.class);
+    private final OrgkeepConfig.Smtp smtp = mock(OrgkeepConfig.Smtp.class);
     private final RealmProvisioner realmService = mock(RealmProvisioner.class);
     private final RealmBootstrap realmBootstrap = mock(RealmBootstrap.class);
     private final KeycloakAdminAccess adminAccess = mock(KeycloakAdminAccess.class);
@@ -62,7 +64,13 @@ class OnPremiseBootstrapTest {
         when(config.keycloak()).thenReturn(keycloak);
         when(keycloak.clientId()).thenReturn("orgkeep-admin");
         when(keycloak.clientSecret()).thenReturn(Optional.of("the-secret"));
-        when(config.smtp()).thenReturn(Optional.empty());
+        when(config.smtp()).thenReturn(smtp);
+        when(smtp.host()).thenReturn(Optional.empty());
+        when(smtp.from()).thenReturn(Optional.empty());
+        when(smtp.port()).thenReturn(25);
+        when(smtp.fromDisplayName()).thenReturn(Optional.empty());
+        when(smtp.username()).thenReturn(Optional.empty());
+        when(smtp.password()).thenReturn(Optional.empty());
         when(config.dashboard()).thenReturn(dashboard);
         when(dashboard.loginTheme()).thenReturn(Optional.empty());
         when(dashboard.url()).thenReturn(Optional.empty());
@@ -207,12 +215,69 @@ class OnPremiseBootstrapTest {
         verifyNoInteractions(adminAccess, realmService, realmBootstrap);
     }
 
-    // ---- Dashboard client ----
+    // ---- SMTP ----
+
+    @Test
+    void withoutSmtpHostTheRealmSmtpIsLeftAlone() {
+        existingRealm();
+
+        bootstrap.onStart(null);
+
+        verify(realmService, never()).configureSmtp(any(), any());
+    }
+
+    @Test
+    void aBlankSmtpHostIsTreatedAsNoHost() {
+        existingRealm();
+        when(smtp.host()).thenReturn(Optional.of(" "));
+
+        bootstrap.onStart(null);
+
+        verify(realmService, never()).configureSmtp(any(), any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", " "})
+    void smtpHostWithoutFromFailsBeforeAnyCallAndNamesTheVariable(String blankFrom) {
+        when(smtp.host()).thenReturn(Optional.of("smtp.example.com"));
+        when(smtp.from()).thenReturn(Optional.of(blankFrom));
+
+        assertFromRequired();
+    }
+
+    @Test
+    void smtpHostWithAbsentFromFailsBeforeAnyCallAndNamesTheVariable() {
+        when(smtp.host()).thenReturn(Optional.of("smtp.example.com"));
+
+        assertFromRequired();
+    }
+
+    private void assertFromRequired() {
+        IllegalStateException e = assertThrows(IllegalStateException.class, () -> bootstrap.onStart(null));
+
+        assertTrue(e.getMessage().contains("ORGKEEP_SMTP_FROM"));
+        verifyNoInteractions(realmService, adminAccess);
+    }
+
+    @Test
+    void smtpHostAndFromAreWrittenOnTheRealm() {
+        existingRealm();
+        when(smtp.host()).thenReturn(Optional.of("smtp.example.com"));
+        when(smtp.from()).thenReturn(Optional.of("no-reply@example.com"));
+        when(smtp.port()).thenReturn(587);
+
+        bootstrap.onStart(null);
+
+        verify(realmService).configureSmtp("acme", new SmtpSettings("smtp.example.com", 587, "no-reply@example.com",
+                null, null, null, false, false));
+    }
 
     private void existingRealm() {
         when(adminAccess.probe()).thenReturn(Probe.OK);
         when(realmService.exists("acme")).thenReturn(true);
     }
+
+    // ---- Dashboard client ----
 
     @Test
     void createsOrRepairsTheDashboardClientWhenTheUrlIsSet() {

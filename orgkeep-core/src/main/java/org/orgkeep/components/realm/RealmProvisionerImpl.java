@@ -28,9 +28,11 @@ import org.keycloak.representations.idm.UserRepresentation;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Consumer;
 
 @Slf4j
@@ -250,6 +252,69 @@ public class RealmProvisionerImpl implements RealmProvisioner {
         realms.addClientRoleToComposite(name, RealmRole.REALM_OWNER.getRoleName(), REALM_MANAGEMENT, REALM_ADMIN);
         log.info("Role '{}' of realm '{}' includes {}/{}: Keycloak console access",
                 RealmRole.REALM_OWNER.getRoleName(), name, REALM_MANAGEMENT, REALM_ADMIN);
+    }
+
+    @Override
+    public void enforceSingleOwner(String name, Optional<String> username, String email) {
+        // every check first: a startup that fails changes nothing
+        UserRepresentation owner = username
+                .map(u -> users.findByUsername(name, u))
+                .orElseGet(() -> users.findIdByEmail(name, email).flatMap(id -> users.find(name, id)))
+                .orElseThrow(() -> new IllegalStateException(("Realm '%s': the realm owner of the configuration was not "
+                        + "found (orgkeep.owner.username / ORGKEEP_OWNER_USERNAME = '%s', or orgkeep.owner.email / "
+                        + "ORGKEEP_OWNER_EMAIL = '%s' when no username is set). Create this user in the realm, or set "
+                        + "these properties to an existing user.").formatted(name, username.orElse(""), email)));
+        String ownerName = owner.getUsername();
+        if (!Boolean.TRUE.equals(owner.isEnabled())) {
+            throw new IllegalStateException(("Realm '%s': the realm owner of the configuration ('%s') is disabled. "
+                    + "Enable this user in the Keycloak console, or configure another user (orgkeep.owner.username / "
+                    + "ORGKEEP_OWNER_USERNAME, orgkeep.owner.email / ORGKEEP_OWNER_EMAIL).").formatted(name, ownerName));
+        }
+        if (username.isPresent() && (owner.getEmail() == null || !owner.getEmail().equalsIgnoreCase(email))) {
+            throw new IllegalStateException(("Realm '%s': user '%s' (orgkeep.owner.username / ORGKEEP_OWNER_USERNAME) "
+                    + "has the email '%s', not '%s' (orgkeep.owner.email / ORGKEEP_OWNER_EMAIL). Set both properties "
+                    + "to the same user.").formatted(name, ownerName, owner.getEmail(), email));
+        }
+        List<String> memberOf = orgs.organisationsOf(name, owner.getId());
+        if (!memberOf.isEmpty()) {
+            throw new IllegalStateException(("Realm '%s': the realm owner of the configuration ('%s') is a member of "
+                    + "the organisation(s) %s. A realm owner cannot be a member of an organisation: remove this user "
+                    + "from the organisation in the Keycloak console, or configure another user "
+                    + "(orgkeep.owner.username / ORGKEEP_OWNER_USERNAME, orgkeep.owner.email / ORGKEEP_OWNER_EMAIL).")
+                    .formatted(name, ownerName, memberOf));
+        }
+
+        // grant first: there is always at least one realm owner
+        Set<String> direct = users.directRealmRoles(name, owner.getId());
+        for (RealmRole role : RealmRole.values()) {
+            if (!direct.contains(role.getRoleName())) {
+                users.addRealmRole(name, owner.getId(), role.getRoleName());
+                log.info("Realm '{}': {} granted to {} (from the configuration)", name, role.getRoleName(), ownerName);
+            }
+        }
+
+        // then remove from every other direct holder: read all the holders first, then, user by user, remove their
+        // roles and close their sessions once, so a failure part-way never leaves a user stripped but still logged in
+        Map<String, List<RealmRole>> rolesToRemove = new LinkedHashMap<>();
+        Map<String, String> usernames = new HashMap<>();
+        for (RealmRole role : RealmRole.values()) {
+            for (UserRepresentation holder : users.directHoldersOfRealmRole(name, role.getRoleName())) {
+                if (!holder.getId().equals(owner.getId())) {
+                    rolesToRemove.computeIfAbsent(holder.getId(), id -> new ArrayList<>()).add(role);
+                    usernames.put(holder.getId(), holder.getUsername());
+                }
+            }
+        }
+        rolesToRemove.forEach((id, roles) -> {
+            String holderName = usernames.get(id);
+            for (RealmRole role : roles) {
+                users.removeRealmRole(name, id, role.getRoleName());
+                log.warn("Realm '{}': {} removed from {}: the configuration names {} as the only realm owner",
+                        name, role.getRoleName(), holderName, ownerName);
+            }
+            users.logout(name, id);
+            log.warn("Realm '{}': sessions of {} closed", name, holderName);
+        });
     }
 
     @Override

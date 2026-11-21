@@ -14,16 +14,24 @@ import org.orgkeep.api.model.CreateCatalogRequest;
 import org.orgkeep.api.model.OrgkeepApiClient;
 import org.orgkeep.api.model.RealmRole;
 import org.orgkeep.api.model.SmtpSettings;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.test.junit.QuarkusTest;
+import io.restassured.RestAssured;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.Response;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.keycloak.admin.client.CreatedResponseUtil;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.ClientScopeRepresentation;
 import org.keycloak.representations.idm.CredentialRepresentation;
+import org.keycloak.representations.idm.GroupRepresentation;
 import org.keycloak.representations.idm.RoleRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 
@@ -31,6 +39,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -51,6 +60,9 @@ class RealmProvisionerTest {
 
     @Inject
     Keycloak keycloak;
+
+    @ConfigProperty(name = "quarkus.keycloak.admin-client.server-url")
+    String keycloakUrl;
 
     private String realmName;
 
@@ -407,5 +419,232 @@ class RealmProvisionerTest {
         service.ensureDashboardClient(realmName, new DashboardClientSettings(DASHBOARD, "https://dashboard.acme.test", null));
 
         assertEquals("orgkeep", dashboardClient().getAttributes().get("login_theme"));
+    }
+
+    // ---- Realm owner from the configuration (enforceSingleOwner) ----
+
+    private static final String OWNER = "owner@acme.test";
+
+    private Set<String> directRoles(String userId) {
+        return keycloak.realm(realmName).users().get(userId).roles().realmLevel().listAll().stream()
+                .map(RoleRepresentation::getName)
+                .collect(Collectors.toSet());
+    }
+
+    private static Set<String> ownerRoles() {
+        return Arrays.stream(RealmRole.values()).map(RealmRole::getRoleName).collect(Collectors.toSet());
+    }
+
+    /** A user with a password, without any role, outside any organisation. */
+    private String plainUser(String username) {
+        UserRepresentation user = new UserRepresentation();
+        user.setUsername(username);
+        user.setEmail(username + "@acme.test");
+        user.setEmailVerified(true);
+        user.setFirstName(username);
+        user.setLastName("Test");
+        user.setEnabled(true);
+        CredentialRepresentation credential = new CredentialRepresentation();
+        credential.setType(CredentialRepresentation.PASSWORD);
+        credential.setValue("s3cret");
+        credential.setTemporary(false);
+        user.setCredentials(List.of(credential));
+        try (Response response = keycloak.realm(realmName).users().create(user)) {
+            return CreatedResponseUtil.getCreatedId(response);
+        }
+    }
+
+    private void giveOwnerRoles(String userId) {
+        List<RoleRepresentation> roles = ownerRoles().stream()
+                .map(name -> keycloak.realm(realmName).roles().get(name).toRepresentation())
+                .toList();
+        keycloak.realm(realmName).users().get(userId).roles().realmLevel().add(roles);
+    }
+
+    @Test
+    void anotherRealmOwnerLosesTheRolesTheConsoleAccessAndTheSessions() {
+        CreateRealmResponse response = service.create(new CreateRealmRequest(realmName, OWNER, "s3cret"));
+        service.grantConsoleAccess(realmName);
+        String other = plainUser("other");
+        giveOwnerRoles(other);
+        String refreshToken = logIn("other").path("refresh_token").asText();
+        assertTrue(effectiveClientRoles(other, "realm-management").contains("realm-admin"));
+
+        service.enforceSingleOwner(realmName, Optional.empty(), OWNER);
+
+        assertTrue(directRoles(other).stream().noneMatch(ownerRoles()::contains), directRoles(other).toString());
+        assertFalse(effectiveClientRoles(other, "realm-management").contains("realm-admin"));
+        assertEquals(400, refresh(refreshToken), "the sessions were closed");
+        assertTrue(directRoles(response.ownerId()).containsAll(ownerRoles()));
+    }
+
+    @Test
+    void theConfiguredUserWithoutTheRolesGetsThemByUsernameAndTheOriginalOwnerLosesThem() {
+        CreateRealmResponse response = service.create(new CreateRealmRequest(realmName, OWNER, "s3cret"));
+        String successor = plainUser("successor");
+
+        service.enforceSingleOwner(realmName, Optional.of("successor"), "successor@acme.test");
+
+        assertTrue(directRoles(successor).containsAll(ownerRoles()));
+        assertTrue(directRoles(response.ownerId()).stream().noneMatch(ownerRoles()::contains));
+    }
+
+    @Test
+    void theConfiguredUserIsFoundByEmailWhenThereIsNoUsername() {
+        CreateRealmResponse response = service.create(new CreateRealmRequest(realmName, OWNER, "s3cret"));
+        String successor = plainUser("successor");
+
+        service.enforceSingleOwner(realmName, Optional.empty(), "Successor@acme.test");
+
+        assertTrue(directRoles(successor).containsAll(ownerRoles()));
+        assertTrue(directRoles(response.ownerId()).stream().noneMatch(ownerRoles()::contains));
+    }
+
+    @Test
+    void anUnknownUserFailsAndChangesNothing() {
+        CreateRealmResponse response = service.create(new CreateRealmRequest(realmName, OWNER, "s3cret"));
+        Set<String> before = directRoles(response.ownerId());
+
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> service.enforceSingleOwner(realmName, Optional.of("nobody"), "nobody@acme.test"));
+
+        assertTrue(e.getMessage().contains("orgkeep.owner.username / ORGKEEP_OWNER_USERNAME = 'nobody'"), e.getMessage());
+        assertTrue(e.getMessage().contains("ORGKEEP_OWNER_EMAIL"), e.getMessage());
+        assertEquals(before, directRoles(response.ownerId()));
+    }
+
+    @Test
+    void aDisabledUserFailsAndStaysDisabled() {
+        CreateRealmResponse response = service.create(new CreateRealmRequest(realmName, OWNER, "s3cret"));
+        String successor = plainUser("successor");
+        UserRepresentation user = keycloak.realm(realmName).users().get(successor).toRepresentation();
+        user.setEnabled(false);
+        keycloak.realm(realmName).users().get(successor).update(user);
+
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> service.enforceSingleOwner(realmName, Optional.of("successor"), "successor@acme.test"));
+
+        assertTrue(e.getMessage().contains("is disabled"), e.getMessage());
+        assertFalse(keycloak.realm(realmName).users().get(successor).toRepresentation().isEnabled());
+        assertTrue(directRoles(successor).stream().noneMatch(ownerRoles()::contains));
+        assertTrue(directRoles(response.ownerId()).containsAll(ownerRoles()));
+    }
+
+    @Test
+    void aUsernameWithAnotherEmailFailsAndChangesNothing() {
+        CreateRealmResponse response = service.create(new CreateRealmRequest(realmName, OWNER, "s3cret"));
+        String successor = plainUser("successor");
+
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> service.enforceSingleOwner(realmName, Optional.of("successor"), "someone-else@acme.test"));
+
+        assertTrue(e.getMessage().contains("has the email 'successor@acme.test', not 'someone-else@acme.test'"),
+                e.getMessage());
+        assertTrue(directRoles(successor).stream().noneMatch(ownerRoles()::contains));
+        assertTrue(directRoles(response.ownerId()).containsAll(ownerRoles()));
+    }
+
+    @Test
+    void aMemberOfAnOrganisationFailsAndNoRoleChanges() {
+        CreateRealmResponse response = service.create(new CreateRealmRequest(realmName, OWNER, "s3cret"));
+        orgService.create(realmName, new CreateOrgRequest("acme", Set.of(), "member@acme.test", "s3cret", "Mia", "Member"));
+
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> service.enforceSingleOwner(realmName, Optional.empty(), "member@acme.test"));
+
+        assertTrue(e.getMessage().contains("[acme]"), e.getMessage());
+        String member = keycloak.realm(realmName).users().searchByEmail("member@acme.test", true).get(0).getId();
+        assertTrue(directRoles(member).stream().noneMatch(ownerRoles()::contains));
+        assertTrue(directRoles(response.ownerId()).containsAll(ownerRoles()));
+    }
+
+    @Test
+    void aSecondCallChangesNothingAndClosesNoSession() {
+        CreateRealmResponse response = service.create(new CreateRealmRequest(realmName, OWNER, "s3cret"));
+        String ownerRefresh = logIn(OWNER).path("refresh_token").asText();
+
+        service.enforceSingleOwner(realmName, Optional.empty(), OWNER);
+        service.enforceSingleOwner(realmName, Optional.empty(), OWNER);
+
+        assertEquals(ownerRoles(), directRoles(response.ownerId()).stream().filter(ownerRoles()::contains).collect(Collectors.toSet()));
+        assertEquals(200, refresh(ownerRefresh), "no session was closed");
+    }
+
+    // the limit of the rule: GET /roles/{role}/users only lists the direct holders
+    @Test
+    void aHolderThroughAGroupIsNotListedAndKeepsTheRole() {
+        service.create(new CreateRealmRequest(realmName, OWNER, "s3cret"));
+        String viaGroup = plainUser("via-group");
+        GroupRepresentation group = new GroupRepresentation();
+        group.setName("owners");
+        String groupId;
+        try (Response response = keycloak.realm(realmName).groups().add(group)) {
+            groupId = CreatedResponseUtil.getCreatedId(response);
+        }
+        keycloak.realm(realmName).groups().group(groupId).roles().realmLevel().add(List.of(
+                keycloak.realm(realmName).roles().get(RealmRole.REALM_OWNER.getRoleName()).toRepresentation()));
+        keycloak.realm(realmName).users().get(viaGroup).joinGroup(groupId);
+        Set<String> listed = keycloak.realm(realmName).roles().get(RealmRole.REALM_OWNER.getRoleName())
+                .getUserMembers(0, 100).stream().map(UserRepresentation::getId).collect(Collectors.toSet());
+        assertFalse(listed.contains(viaGroup), "only the direct holders are listed");
+
+        service.enforceSingleOwner(realmName, Optional.empty(), OWNER);
+
+        assertTrue(effectiveRealmRoles(viaGroup).contains(RealmRole.REALM_OWNER.getRoleName()));
+    }
+
+    // the other limit: console access given directly, without realm-owner, is outside the rule
+    @Test
+    void directConsoleAccessWithoutRealmOwnerIsKept() {
+        service.create(new CreateRealmRequest(realmName, OWNER, "s3cret"));
+        String admin = plainUser("console-admin");
+        String realmManagement = keycloak.realm(realmName).clients().findByClientId("realm-management").get(0).getId();
+        RoleRepresentation realmAdmin = keycloak.realm(realmName).clients().get(realmManagement)
+                .roles().get("realm-admin").toRepresentation();
+        keycloak.realm(realmName).users().get(admin).roles().clientLevel(realmManagement).add(List.of(realmAdmin));
+
+        service.enforceSingleOwner(realmName, Optional.empty(), OWNER);
+
+        assertTrue(effectiveClientRoles(admin, "realm-management").contains("realm-admin"));
+    }
+
+    private Set<String> effectiveRealmRoles(String userId) {
+        return keycloak.realm(realmName).users().get(userId).roles().realmLevel().listEffective().stream()
+                .map(RoleRepresentation::getName)
+                .collect(Collectors.toSet());
+    }
+
+    private Set<String> effectiveClientRoles(String userId, String clientId) {
+        String uuid = keycloak.realm(realmName).clients().findByClientId(clientId).get(0).getId();
+        return keycloak.realm(realmName).users().get(userId).roles().clientLevel(uuid).listEffective().stream()
+                .map(RoleRepresentation::getName)
+                .collect(Collectors.toSet());
+    }
+
+    /** Password grant on the login client of the realm (clientId = realm name), direct access enabled for the test. */
+    private JsonNode logIn(String username) {
+        ClientRepresentation login = keycloak.realm(realmName).clients().findByClientId(realmName).get(0);
+        if (!Boolean.TRUE.equals(login.isDirectAccessGrantsEnabled())) {
+            login.setDirectAccessGrantsEnabled(true);
+            keycloak.realm(realmName).clients().get(login.getId()).update(login);
+        }
+        String body = RestAssured.given()
+                .formParam("grant_type", "password").formParam("client_id", realmName)
+                .formParam("username", username).formParam("password", "s3cret")
+                .post(keycloakUrl + "/realms/" + realmName + "/protocol/openid-connect/token")
+                .then().statusCode(200).extract().asString();
+        try {
+            return new ObjectMapper().readTree(body);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private int refresh(String refreshToken) {
+        return RestAssured.given()
+                .formParam("grant_type", "refresh_token").formParam("client_id", realmName)
+                .formParam("refresh_token", refreshToken)
+                .post(keycloakUrl + "/realms/" + realmName + "/protocol/openid-connect/token")
+                .statusCode();
     }
 }

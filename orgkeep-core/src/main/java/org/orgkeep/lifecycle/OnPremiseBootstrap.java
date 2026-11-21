@@ -46,7 +46,6 @@ public class OnPremiseBootstrap {
 
         String realmName = required(config.realmName(), "orgkeep.realm-name", "ORGKEEP_REALM_NAME");
         String ownerEmail = required(config.owner().email(), "orgkeep.owner.email", "ORGKEEP_OWNER_EMAIL");
-        String ownerPassword = required(config.owner().password(), "orgkeep.owner.password", "ORGKEEP_OWNER_PASSWORD");
         String clientId = config.keycloak().clientId();
         String clientSecret = required(config.keycloak().clientSecret(), "orgkeep.keycloak.client-secret",
                 "ORGKEEP_KEYCLOAK_CLIENT_SECRET");
@@ -66,6 +65,7 @@ public class OnPremiseBootstrap {
             if (absent) {
                 BootstrapCredentials credentials = bootstrap.orElseThrow(() -> realmMissing(realmName, clientId));
                 // only checked when the owner is created: Keycloak asks for them at login otherwise
+                String ownerPassword = required(config.owner().password(), "orgkeep.owner.password", "ORGKEEP_OWNER_PASSWORD");
                 String firstName = required(config.owner().firstName(), "orgkeep.owner.first-name", "ORGKEEP_OWNER_FIRST_NAME");
                 String lastName = required(config.owner().lastName(), "orgkeep.owner.last-name", "ORGKEEP_OWNER_LAST_NAME");
                 CreateRealmRequest request = new CreateRealmRequest(realmName, ownerEmail, ownerPassword,
@@ -90,6 +90,8 @@ public class OnPremiseBootstrap {
                 // a realm created by an older version may lack what was added since
                 realmService.ensureDefaults(realmName);
                 log.info("Realm '{}' already exists, defaults checked", realmName);
+                // the configuration names the realm owner, and only them
+                realmService.enforceSingleOwner(realmName, config.owner().username(), ownerEmail);
             }
             // at each startup: also repairs a realm created by an older version
             realmService.grantConsoleAccess(realmName);

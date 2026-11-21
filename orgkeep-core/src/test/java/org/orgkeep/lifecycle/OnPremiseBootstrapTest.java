@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -213,6 +214,62 @@ class OnPremiseBootstrapTest {
         bootstrap.onStart(null);
 
         verifyNoInteractions(adminAccess, realmService, realmBootstrap);
+    }
+
+    // ---- Realm owner from the configuration ----
+
+    @Test
+    void existingRealmEnforcesTheOwnerByEmailWithoutAPassword() {
+        existingRealm();
+        when(owner.password()).thenReturn(Optional.empty());
+
+        bootstrap.onStart(null);
+
+        verify(realmService).enforceSingleOwner("acme", Optional.empty(), "owner@acme.test");
+    }
+
+    @Test
+    void existingRealmEnforcesTheOwnerByUsernameWhenSet() {
+        existingRealm();
+        when(owner.username()).thenReturn(Optional.of("alice"));
+
+        bootstrap.onStart(null);
+
+        verify(realmService).enforceSingleOwner("acme", Optional.of("alice"), "owner@acme.test");
+    }
+
+    @Test
+    void newRealmWithoutAPasswordFailsAndEnforcesNothing() {
+        when(credentialsSource.read()).thenReturn(Optional.of(MASTER));
+        when(adminAccess.probe()).thenReturn(Probe.REALM_NOT_FOUND);
+        when(owner.password()).thenReturn(Optional.empty());
+
+        IllegalStateException e = assertThrows(IllegalStateException.class, () -> bootstrap.onStart(null));
+
+        assertEquals("orgkeep.owner.password (ORGKEEP_OWNER_PASSWORD) is required in ON_PREM mode", e.getMessage());
+        verifyNoInteractions(realmBootstrap);
+        verify(realmService, never()).enforceSingleOwner(any(), any(), any());
+    }
+
+    @Test
+    void newRealmDoesNotEnforceTheOwner() {
+        when(credentialsSource.read()).thenReturn(Optional.of(MASTER));
+        when(adminAccess.probe()).thenReturn(Probe.REALM_NOT_FOUND, Probe.OK);
+
+        bootstrap.onStart(null);
+
+        verify(realmService, never()).enforceSingleOwner(any(), any(), any());
+    }
+
+    @Test
+    void aFailureOfTheOwnerCheckFailsTheStartup() {
+        existingRealm();
+        doThrow(new IllegalStateException("owner not found"))
+                .when(realmService).enforceSingleOwner(any(), any(), any());
+
+        IllegalStateException e = assertThrows(IllegalStateException.class, () -> bootstrap.onStart(null));
+
+        assertEquals("owner not found", e.getMessage());
     }
 
     // ---- SMTP ----

@@ -1,7 +1,5 @@
 package org.orgkeep.components.realm;
 
-import io.quarkus.arc.Arc;
-import io.quarkus.arc.ManagedContext;
 import jakarta.enterprise.context.ApplicationScoped;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -37,7 +35,7 @@ public class DashboardClientImpl implements DashboardClient {
         if (cached != null) {
             return Optional.of(cached);
         }
-        DashboardClientCredentials read = inRequestContext(this::read);
+        DashboardClientCredentials read = read();
         cache.set(read);
         return Optional.of(read);
     }
@@ -51,22 +49,5 @@ public class DashboardClientImpl implements DashboardClient {
         String secret = clients.secret(realm, uuid).orElseThrow(() -> new IllegalStateException(
                 "Dashboard client '%s' of realm '%s' has no secret".formatted(clientId, realm)));
         return new DashboardClientCredentials(clientId, secret);
-    }
-
-    /**
-     * The admin client is request scoped: the OIDC blocking executor that calls us has no request context, so one
-     * is activated for the call when none is active.
-     */
-    private static <T> T inRequestContext(java.util.function.Supplier<T> call) {
-        ManagedContext requestContext = Arc.container().requestContext();
-        if (requestContext.isActive()) {
-            return call.get();
-        }
-        requestContext.activate();
-        try {
-            return call.get();
-        } finally {
-            requestContext.terminate();
-        }
     }
 }

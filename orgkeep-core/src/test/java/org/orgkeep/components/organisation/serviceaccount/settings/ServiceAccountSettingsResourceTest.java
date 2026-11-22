@@ -23,7 +23,6 @@ import org.orgkeep.api.model.CreateOrgRequest;
 import org.orgkeep.api.model.CreateServiceAccountRequest;
 import org.orgkeep.api.model.LightweightTokens;
 import org.orgkeep.api.model.UpdateServiceAccountSettingsRequest;
-import org.orgkeep.fixtures.RequestScope;
 import org.orgkeep.fixtures.TestRealm;
 import org.orgkeep.web.CurrentRealm;
 
@@ -59,11 +58,9 @@ class ServiceAccountSettingsResourceTest {
     @BeforeAll
     void createRealm() {
         testRealm = TestRealm.create();
-        RequestScope.run(() -> {
-            orgService.create(testRealm.name(), new CreateOrgRequest("acme", Set.of(), null, null));
-            orgService.create(testRealm.name(), new CreateOrgRequest("globex", Set.of(), null, null));
-            serviceAccountService.create(testRealm.name(), "acme", new CreateServiceAccountRequest("batch", null, null));
-        });
+        orgService.create(testRealm.name(), new CreateOrgRequest("acme", Set.of(), null, null));
+        orgService.create(testRealm.name(), new CreateOrgRequest("globex", Set.of(), null, null));
+        serviceAccountService.create(testRealm.name(), "acme", new CreateServiceAccountRequest("batch", null, null));
     }
 
     @BeforeEach

@@ -20,7 +20,6 @@ import org.orgkeep.api.model.CreateProductRequest;
 import org.orgkeep.api.model.OrgMember;
 import org.orgkeep.api.model.RoleHolder;
 import org.orgkeep.api.model.UpdateCatalogRoleRequest;
-import org.orgkeep.fixtures.RequestScope;
 import org.orgkeep.fixtures.TestRealm;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -64,12 +63,10 @@ class CatalogRoleServiceTest {
     @BeforeAll
     void createRealm() {
         testRealm = TestRealm.create();
-        RequestScope.run(() -> {
-            // the login client, with fullScopeAllowed=false, as for the realm of the app
-            realmProvisioner.ensureDefaults(testRealm.name());
-            catalogService.create(testRealm.name(), new CreateCatalogRequest(CATALOG, "Production", null));
-            orgService.create(testRealm.name(), new CreateOrgRequest(ORG, Set.of(), null, null));
-        });
+        // the login client, with fullScopeAllowed=false, as for the realm of the app
+        realmProvisioner.ensureDefaults(testRealm.name());
+        catalogService.create(testRealm.name(), new CreateCatalogRequest(CATALOG, "Production", null));
+        orgService.create(testRealm.name(), new CreateOrgRequest(ORG, Set.of(), null, null));
     }
 
     @AfterEach

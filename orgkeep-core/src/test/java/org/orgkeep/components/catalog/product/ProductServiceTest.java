@@ -27,7 +27,6 @@ import org.orgkeep.api.model.Product;
 import org.orgkeep.api.model.QuotaCycle;
 import org.orgkeep.api.model.UpdateFeatureRequest;
 import org.orgkeep.api.model.UpdateProductRequest;
-import org.orgkeep.fixtures.RequestScope;
 import org.orgkeep.fixtures.TestRealm;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -81,10 +80,8 @@ class ProductServiceTest {
     @BeforeAll
     void createRealm() {
         testRealm = TestRealm.create();
-        RequestScope.run(() -> {
-            catalogService.create(realmName(), new CreateCatalogRequest(CATALOG, "Production", null));
-            orgService.create(realmName(), new CreateOrgRequest(ORG, Set.of(), null, null));
-        });
+        catalogService.create(realmName(), new CreateCatalogRequest(CATALOG, "Production", null));
+        orgService.create(realmName(), new CreateOrgRequest(ORG, Set.of(), null, null));
     }
 
     @AfterEach

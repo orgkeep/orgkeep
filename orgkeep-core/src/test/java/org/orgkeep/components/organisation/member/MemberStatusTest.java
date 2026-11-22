@@ -29,8 +29,6 @@ import org.orgkeep.repository.keycloak.KeycloakUsers;
 import org.orgkeep.web.CurrentRealm;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.quarkus.arc.Arc;
-import io.quarkus.arc.ManagedContext;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
@@ -499,7 +497,7 @@ class MemberStatusTest {
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
-            Future<?> disable = inRequest(executor, () -> orgService.setEnabled(testRealm.name(), ORG, false));
+            Future<?> disable = executor.submit(() -> orgService.setEnabled(testRealm.name(), ORG, false));
             assertTrue(inside.await(30, TimeUnit.SECONDS));
 
             assertThrowsExactly(ResourceBusyException.class,
@@ -528,7 +526,7 @@ class MemberStatusTest {
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
-            Future<?> remove = inRequest(executor, () -> memberService.remove(testRealm.name(), ORG, paulId));
+            Future<?> remove = executor.submit(() -> memberService.remove(testRealm.name(), ORG, paulId));
             assertTrue(inside.await(30, TimeUnit.SECONDS));
 
             assertThrowsExactly(ResourceBusyException.class,
@@ -556,19 +554,6 @@ class MemberStatusTest {
 
     private UserRepresentation user(String userId) {
         return testRealm.resource().users().get(userId).toRepresentation();
-    }
-
-    /** Runs the action on another thread inside a request context, like an HTTP request. */
-    private static Future<?> inRequest(ExecutorService executor, Runnable action) {
-        return executor.submit(() -> {
-            ManagedContext requestContext = Arc.container().requestContext();
-            requestContext.activate();
-            try {
-                action.run();
-            } finally {
-                requestContext.terminate();
-            }
-        });
     }
 
     /** The login client of the realm (clientId = realm name) accepts the password grant for the test. */

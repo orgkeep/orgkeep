@@ -33,7 +33,6 @@ import org.orgkeep.components.lock.HeldLocks;
 import org.orgkeep.components.lock.LockMode;
 import org.orgkeep.components.lock.LockRequest;
 import org.orgkeep.components.lock.ResourceLocks;
-import org.orgkeep.fixtures.RequestScope;
 import org.orgkeep.fixtures.TestRealm;
 import org.orgkeep.repository.keycloak.KeycloakClients;
 
@@ -85,12 +84,10 @@ class ServiceAccountSettingsServiceTest {
     @BeforeAll
     void createRealm() {
         testRealm = TestRealm.create();
-        RequestScope.run(() -> {
-            orgService.create(realm(), new CreateOrgRequest(ORG, Set.of(), null, null));
-            catalogService.create(realm(), new CreateCatalogRequest("prod", "Production", null));
-            productService.create(realm(), "prod", new CreateProductRequest("billing", "Billing", null));
-            productService.assign(realm(), ORG, "prod", "billing", new AssignProductRequest(1000L, QuotaCycle.MONTHLY));
-        });
+        orgService.create(realm(), new CreateOrgRequest(ORG, Set.of(), null, null));
+        catalogService.create(realm(), new CreateCatalogRequest("prod", "Production", null));
+        productService.create(realm(), "prod", new CreateProductRequest("billing", "Billing", null));
+        productService.assign(realm(), ORG, "prod", "billing", new AssignProductRequest(1000L, QuotaCycle.MONTHLY));
     }
 
     @AfterEach

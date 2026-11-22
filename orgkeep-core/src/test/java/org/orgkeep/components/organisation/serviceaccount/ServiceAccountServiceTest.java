@@ -36,7 +36,6 @@ import org.orgkeep.api.model.QuotaCycle;
 import org.orgkeep.api.model.ServiceAccount;
 import org.orgkeep.api.model.ServiceAccountCreated;
 import org.orgkeep.api.model.UpdateServiceAccountRequest;
-import org.orgkeep.fixtures.RequestScope;
 import org.orgkeep.fixtures.TestRealm;
 import org.orgkeep.repository.keycloak.KeycloakClients;
 import org.orgkeep.repository.keycloak.KeycloakOrgs;
@@ -82,13 +81,11 @@ class ServiceAccountServiceTest {
     @BeforeAll
     void createRealm() {
         testRealm = TestRealm.create();
-        RequestScope.run(() -> {
-            orgService.create(realm(), new CreateOrgRequest(ORG, Set.of(), null, null));
-            catalogService.create(realm(), new CreateCatalogRequest("prod", "Production", null));
-            catalogService.create(realm(), new CreateCatalogRequest("sandbox", "Sandbox", null));
-            productService.create(realm(), "prod", new CreateProductRequest("billing", "Billing", null));
-            productService.assign(realm(), ORG, "prod", "billing", new AssignProductRequest(1000L, QuotaCycle.MONTHLY));
-        });
+        orgService.create(realm(), new CreateOrgRequest(ORG, Set.of(), null, null));
+        catalogService.create(realm(), new CreateCatalogRequest("prod", "Production", null));
+        catalogService.create(realm(), new CreateCatalogRequest("sandbox", "Sandbox", null));
+        productService.create(realm(), "prod", new CreateProductRequest("billing", "Billing", null));
+        productService.assign(realm(), ORG, "prod", "billing", new AssignProductRequest(1000L, QuotaCycle.MONTHLY));
     }
 
     // Deletes the raw clients directly, not through the service: a service account that left the group of the org

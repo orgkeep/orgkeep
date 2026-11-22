@@ -6,7 +6,6 @@ import org.orgkeep.api.RealmProvisioner;
 import org.orgkeep.api.model.CreateCatalogRequest;
 import org.orgkeep.api.model.LightweightTokens;
 import org.orgkeep.api.model.UpdateLoginClientRequest;
-import org.orgkeep.fixtures.RequestScope;
 import org.orgkeep.fixtures.TestRealm;
 import org.orgkeep.web.CurrentRealm;
 import io.quarkus.test.InjectMock;
@@ -69,7 +68,7 @@ class LoginClientResourceTest {
     void createRealm() {
         testRealm = TestRealm.create();
         // creates the login client, as the bootstrap does for the realm of the app
-        RequestScope.run(() -> realmProvisioner.ensureDefaults(testRealm.name()));
+        realmProvisioner.ensureDefaults(testRealm.name());
     }
 
     @BeforeEach

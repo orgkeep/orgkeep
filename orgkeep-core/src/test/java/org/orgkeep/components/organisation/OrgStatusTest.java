@@ -19,8 +19,6 @@ import org.orgkeep.components.organisation.member.DisabledMembers;
 import org.orgkeep.fixtures.TestRealm;
 import org.orgkeep.repository.keycloak.KeycloakOrgs;
 import org.orgkeep.repository.keycloak.KeycloakUsers;
-import io.quarkus.arc.Arc;
-import io.quarkus.arc.ManagedContext;
 import io.quarkus.test.junit.QuarkusMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
@@ -375,7 +373,7 @@ class OrgStatusTest {
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
-            Future<?> add = inRequest(executor, () -> memberService.add(testRealm.name(), ORG,
+            Future<?> add = executor.submit(() -> memberService.add(testRealm.name(), ORG,
                     new AddMemberRequest("emma@acme.test", "Emma", "Roux")));
             assertTrue(addInside.await(30, TimeUnit.SECONDS));
 
@@ -408,7 +406,7 @@ class OrgStatusTest {
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
-            Future<?> disable = inRequest(executor, () -> orgService.setEnabled(testRealm.name(), ORG, false));
+            Future<?> disable = executor.submit(() -> orgService.setEnabled(testRealm.name(), ORG, false));
             assertTrue(disableInside.await(30, TimeUnit.SECONDS));
 
             assertThrowsExactly(ResourceBusyException.class, () -> memberService.add(testRealm.name(), ORG,
@@ -434,7 +432,7 @@ class OrgStatusTest {
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
-            Future<?> disable = inRequest(executor, () -> orgService.setEnabled(testRealm.name(), ORG, false));
+            Future<?> disable = executor.submit(() -> orgService.setEnabled(testRealm.name(), ORG, false));
             assertTrue(disableInside.await(30, TimeUnit.SECONDS));
 
             assertThrowsExactly(ResourceBusyException.class, () -> orgService.delete(testRealm.name(), ORG));
@@ -470,7 +468,7 @@ class OrgStatusTest {
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
-            Future<?> delete = inRequest(executor, () -> orgService.delete(testRealm.name(), ORG));
+            Future<?> delete = executor.submit(() -> orgService.delete(testRealm.name(), ORG));
             assertTrue(deleteInside.await(30, TimeUnit.SECONDS));
 
             assertThrowsExactly(ResourceBusyException.class,
@@ -502,7 +500,7 @@ class OrgStatusTest {
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
-            Future<?> delete = inRequest(executor, () -> orgService.delete(testRealm.name(), ORG));
+            Future<?> delete = executor.submit(() -> orgService.delete(testRealm.name(), ORG));
             assertTrue(deleteInside.await(30, TimeUnit.SECONDS));
 
             assertThrowsExactly(ResourceBusyException.class, () -> memberService.add(testRealm.name(), ORG,
@@ -539,7 +537,7 @@ class OrgStatusTest {
             Mockito.doAnswer(invocation -> {
                         Object org = invocation.callRealMethod();
                         // only the first read of remove: the next ones call the real method
-                        Future<?> disable = inRequest(executor,
+                        Future<?> disable = executor.submit(
                                 () -> orgService.setEnabled(testRealm.name(), ORG, false));
                         disable.get(60, TimeUnit.SECONDS);
                         return org;
@@ -577,7 +575,7 @@ class OrgStatusTest {
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
-            Future<?> add = inRequest(executor, () -> memberService.add(testRealm.name(), ORG,
+            Future<?> add = executor.submit(() -> memberService.add(testRealm.name(), ORG,
                     new AddMemberRequest("emma@acme.test", "Emma", "Roux")));
             assertTrue(addInside.await(30, TimeUnit.SECONDS));
 
@@ -666,7 +664,7 @@ class OrgStatusTest {
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
-            Future<?> disable = inRequest(executor, () -> orgService.setEnabled(testRealm.name(), ORG, false));
+            Future<?> disable = executor.submit(() -> orgService.setEnabled(testRealm.name(), ORG, false));
             assertTrue(disableInside.await(30, TimeUnit.SECONDS));
 
             long start = System.nanoTime();
@@ -706,7 +704,7 @@ class OrgStatusTest {
 
         ExecutorService executor = Executors.newFixedThreadPool(3);
         try {
-            Future<?> first = inRequest(executor, () -> orgService.create(testRealm.name(),
+            Future<?> first = executor.submit(() -> orgService.create(testRealm.name(),
                     new CreateOrgRequest("beta", Set.of(), null, null)));
             assertTrue(creationInside.await(30, TimeUnit.SECONDS));
 
@@ -715,7 +713,7 @@ class OrgStatusTest {
                     new CreateOrgRequest("beta", Set.of(), null, null)));
 
             // released while the second creation is waiting: it gets the lock, then "already exists"
-            Future<?> second = inRequest(executor, () -> orgService.create(testRealm.name(),
+            Future<?> second = executor.submit(() -> orgService.create(testRealm.name(),
                     new CreateOrgRequest("beta", Set.of(), null, null)));
             Thread.sleep(300);
             releaseCreation.countDown();
@@ -834,22 +832,6 @@ class OrgStatusTest {
         public void close() {
         }
     };
-
-    /**
-     * Runs the action on another thread inside a request context, like an HTTP request: the Keycloak admin client is
-     * a request scoped bean, the test thread has a context but a plain thread of an executor does not.
-     */
-    private static Future<?> inRequest(ExecutorService executor, Runnable action) {
-        return executor.submit(() -> {
-            ManagedContext requestContext = Arc.container().requestContext();
-            requestContext.activate();
-            try {
-                action.run();
-            } finally {
-                requestContext.terminate();
-            }
-        });
-    }
 
     /** The ids listed in the attribute disabled-members of the org. */
     private List<String> disabledMembers() {

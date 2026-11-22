@@ -4,7 +4,6 @@ import org.orgkeep.api.LoginClientService;
 import org.orgkeep.api.RealmProvisioner;
 import org.orgkeep.api.model.OrgkeepApiClient;
 import org.orgkeep.api.model.UpdateOrgkeepApiClientRequest;
-import org.orgkeep.fixtures.RequestScope;
 import org.orgkeep.fixtures.TestRealm;
 import org.orgkeep.web.CurrentRealm;
 import io.quarkus.test.InjectMock;
@@ -60,7 +59,7 @@ class OrgkeepApiClientResourceTest {
     void createRealm() {
         testRealm = TestRealm.create();
         // creates the login client and orgkeep-api, as the bootstrap does for the realm of the app
-        RequestScope.run(() -> realmProvisioner.ensureDefaults(testRealm.name()));
+        realmProvisioner.ensureDefaults(testRealm.name());
     }
 
     @BeforeEach

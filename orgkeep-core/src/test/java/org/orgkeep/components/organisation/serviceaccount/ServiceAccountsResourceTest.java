@@ -26,7 +26,6 @@ import org.orgkeep.api.model.CreateServiceAccountRequest;
 import org.orgkeep.api.model.QuotaCycle;
 import org.orgkeep.api.model.UpdateServiceAccountRequest;
 import org.orgkeep.api.model.UpdateServiceAccountStatusRequest;
-import org.orgkeep.fixtures.RequestScope;
 import org.orgkeep.fixtures.TestRealm;
 import org.orgkeep.web.CurrentRealm;
 
@@ -65,14 +64,12 @@ class ServiceAccountsResourceTest {
     @BeforeAll
     void createRealm() {
         testRealm = TestRealm.create();
-        RequestScope.run(() -> {
-            orgService.create(testRealm.name(), new CreateOrgRequest("acme", Set.of(), null, null));
-            orgService.create(testRealm.name(), new CreateOrgRequest("globex", Set.of(), null, null));
-            catalogService.create(testRealm.name(), new CreateCatalogRequest("prod", "Production", null));
-            catalogService.create(testRealm.name(), new CreateCatalogRequest("sandbox", "Sandbox", null));
-            productService.create(testRealm.name(), "prod", new CreateProductRequest("billing", "Billing", null));
-            productService.assign(testRealm.name(), "acme", "prod", "billing", new AssignProductRequest(10L, QuotaCycle.DAILY));
-        });
+        orgService.create(testRealm.name(), new CreateOrgRequest("acme", Set.of(), null, null));
+        orgService.create(testRealm.name(), new CreateOrgRequest("globex", Set.of(), null, null));
+        catalogService.create(testRealm.name(), new CreateCatalogRequest("prod", "Production", null));
+        catalogService.create(testRealm.name(), new CreateCatalogRequest("sandbox", "Sandbox", null));
+        productService.create(testRealm.name(), "prod", new CreateProductRequest("billing", "Billing", null));
+        productService.assign(testRealm.name(), "acme", "prod", "billing", new AssignProductRequest(10L, QuotaCycle.DAILY));
     }
 
     @BeforeEach

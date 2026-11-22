@@ -23,6 +23,7 @@ import org.orgkeep.api.model.GrantProductRequest;
 import org.orgkeep.api.model.ParamDefinition;
 import org.orgkeep.api.model.ParamType;
 import org.orgkeep.api.model.QuotaCycle;
+import org.orgkeep.api.exceptions.OrgNotFoundException;
 import org.orgkeep.api.model.TeamFeatureQuota;
 import org.orgkeep.fixtures.CatalogClaims;
 import org.orgkeep.fixtures.TestRealm;
@@ -30,10 +31,12 @@ import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.keycloak.admin.client.Keycloak;
+import org.junit.jupiter.api.TestInstance;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.CredentialRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
@@ -71,16 +74,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *   <li>Paul is in "ops" (the product, every feature bought, quota of team 300, searcher) and "analysts" (the product
  *       without feature, no quota); Claire is in no team giving anything.</li>
  * </ul>
+ * <p>
+ * One realm for the whole class (@BeforeAll); the fixture is rebuilt before every test (@BeforeEach) and torn
+ * down after it (@AfterEach).
  */
 @Slf4j
 @QuarkusTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class TeamTokenTest {
     private static final String ORG = "acme";
     private static final String PRODUCT = "shop-repository";
     private static final String BILLING = "billing";
     private static final String PASSWORD = "password";
 
-    @Inject Keycloak keycloak;
     @Inject RealmProvisioner realmProvisioner;
     @Inject CatalogService catalogService;
     @Inject ProductService productService;
@@ -96,9 +102,13 @@ class TeamTokenTest {
     private TestRealm testRealm;
     private String paulId;
 
+    @BeforeAll
+    void createRealm() {
+        testRealm = TestRealm.create();
+    }
+
     @BeforeEach
-    void beforeEach() {
-        testRealm = TestRealm.create(keycloak);
+    void setUpFixture() {
         String realm = testRealm.name();
         realmProvisioner.ensureDefaults(realm);
         enablePasswordGrant();
@@ -126,7 +136,27 @@ class TeamTokenTest {
     }
 
     @AfterEach
-    void afterEach() {
+    void cleanUp() {
+        try {
+            orgService.delete(testRealm.name(), ORG);
+        } catch (OrgNotFoundException ignored) {
+            // not created by this test
+        }
+        for (var catalog : catalogService.list(testRealm.name())) {
+            for (var product : productService.list(testRealm.name(), catalog.name())) {
+                productService.delete(testRealm.name(), catalog.name(), product.name());
+            }
+            for (var role : catalogRoleService.list(testRealm.name(), catalog.name())) {
+                catalogRoleService.delete(testRealm.name(), catalog.name(), role.name());
+            }
+            catalogService.delete(testRealm.name(), catalog.name());
+        }
+        testRealm.resource().users().list(0, 1000)
+                .forEach(user -> testRealm.resource().users().get(user.getId()).remove());
+    }
+
+    @AfterAll
+    void deleteRealm() {
         testRealm.close();
     }
 

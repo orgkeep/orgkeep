@@ -1,8 +1,13 @@
 package org.orgkeep.fixtures;
 
+import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
+import lombok.extern.slf4j.Slf4j;
+import org.eclipse.microprofile.config.ConfigProvider;
+import org.keycloak.OAuth2Constants;
 import org.keycloak.admin.client.CreatedResponseUtil;
 import org.keycloak.admin.client.Keycloak;
+import org.keycloak.admin.client.KeycloakBuilder;
 import org.keycloak.admin.client.resource.RealmResource;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.GroupRepresentation;
@@ -13,25 +18,59 @@ import org.keycloak.representations.idm.UserRepresentation;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
+@Slf4j
 public class TestRealm implements AutoCloseable {
 
+    // Deleting a realm is a REST round-trip to Keycloak that the next test does not need to wait for: close() hands
+    // it to this pool and returns immediately. One virtual thread per deletion, fire-and-forget (no shutdown: this
+    // pool lives as long as the test JVM).
+    private static final ExecutorService CLEANUP = Executors.newVirtualThreadPerTaskExecutor();
+
     private final String name;
+    private final Keycloak keycloak;
     private final RealmResource realm;
 
     private TestRealm(Keycloak keycloak, String name) {
+        this.keycloak = keycloak;
         this.name = name;
         this.realm = keycloak.realm(name);
     }
 
-    public static TestRealm create(Keycloak keycloak) {
+    /**
+     * Opens its own admin client of the master realm (credentials from KEYCLOAK_ADMIN_USER / KEYCLOAK_ADMIN_PASSWORD,
+     * admin/admin by default, the Dev Services defaults), instead of the @RequestScoped one the application uses: a
+     * class with one realm for every test (@BeforeAll) creates it outside any request context, and the realm must
+     * stay usable for the whole class, well beyond the single request a @RequestScoped bean would live for.
+     */
+    public static TestRealm create() {
         String name = "test-" + UUID.randomUUID().toString().substring(0, 8);
-        RealmRepresentation representation = new RealmRepresentation();
-        representation.setRealm(name);
-        representation.setEnabled(true);
-        representation.setOrganizationsEnabled(true);
-        keycloak.realms().create(representation);
+        var config = ConfigProvider.getConfig();
+        String serverUrl = config.getValue("quarkus.keycloak.admin-client.server-url", String.class);
+        // the bootstrap credentials of master (see BootstrapCredentialsSource), admin/admin in dev and test
+        String adminUser = config.getOptionalValue("KEYCLOAK_ADMIN_USER", String.class).orElse("admin");
+        String adminPassword = config.getOptionalValue("KEYCLOAK_ADMIN_PASSWORD", String.class).orElse("admin");
+        Keycloak keycloak = KeycloakBuilder.builder()
+                .serverUrl(serverUrl)
+                .realm("master")
+                .clientId("admin-cli")
+                .grantType(OAuth2Constants.PASSWORD)
+                .username(adminUser)
+                .password(adminPassword)
+                .build();
+        try {
+            RealmRepresentation representation = new RealmRepresentation();
+            representation.setRealm(name);
+            representation.setEnabled(true);
+            representation.setOrganizationsEnabled(true);
+            keycloak.realms().create(representation);
+        } catch (RuntimeException e) {
+            keycloak.close();
+            throw e;
+        }
         return new TestRealm(keycloak, name);
     }
 
@@ -71,11 +110,20 @@ public class TestRealm implements AutoCloseable {
         }
     }
 
-    /** A bare realm doesn't have the roles of Orgkeep (realm-owner...): a test creates the ones it needs. */
+    /**
+     * A bare realm doesn't have the roles of Orgkeep (realm-owner...): a test ensures the ones it needs exist.
+     * Idempotent: with one realm shared by every test of a class, more than one test may ask for the same role.
+     */
     public void createRealmRole(String roleName) {
-        RoleRepresentation role = new RoleRepresentation();
-        role.setName(roleName);
-        realm.roles().create(role);
+        try {
+            RoleRepresentation role = new RoleRepresentation();
+            role.setName(roleName);
+            realm.roles().create(role);
+        } catch (WebApplicationException e) {
+            if (e.getResponse().getStatus() != Response.Status.CONFLICT.getStatusCode()) {
+                throw e;
+            }
+        }
     }
 
     public void grantRealmRole(String userId, String roleName) {
@@ -104,9 +152,18 @@ public class TestRealm implements AutoCloseable {
                 .collect(Collectors.toSet());
     }
 
+    /** Deletes the realm in the background: the caller (and the next test) does not wait for it. */
     @Override
     public void close() {
-        realm.remove();
+        CLEANUP.submit(() -> {
+            try {
+                realm.remove();
+            } catch (RuntimeException e) {
+                log.warn("Failed to delete the throwaway realm '{}'", name, e);
+            } finally {
+                keycloak.close();
+            }
+        });
     }
 
     private String groupId(String path) {

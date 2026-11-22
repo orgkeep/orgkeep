@@ -6,6 +6,7 @@ import org.orgkeep.api.RealmProvisioner;
 import org.orgkeep.api.events.UserCreated;
 import org.orgkeep.api.exceptions.MemberNotFoundException;
 import org.orgkeep.api.exceptions.OperationNotAllowedException;
+import org.orgkeep.api.exceptions.OrgNotFoundException;
 import org.orgkeep.api.model.AddMemberRequest;
 import org.orgkeep.api.model.CreateOrgRequest;
 import org.orgkeep.api.model.OrgMember;
@@ -13,13 +14,17 @@ import org.orgkeep.api.model.SmtpSettings;
 import org.orgkeep.fixtures.TestRealm;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.keycloak.admin.client.Keycloak;
+import org.junit.jupiter.api.TestInstance;
 import org.keycloak.representations.idm.CredentialRepresentation;
+import org.keycloak.representations.idm.RealmRepresentation;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -33,14 +38,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * End to end: Keycloak really sends the email, to the Mailpit of compose-devservices.yml,
  * and the test reads it back through the Mailpit API.
+ * <p>
+ * One realm for the whole class: the org "acme" is deleted after each test (@AfterEach). Its members keep their
+ * unique random address (see {@code email} below), so they never need cleaning up for Mailpit's sake.
  */
 @QuarkusTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class InvitationMailerTest {
     // the Mailpit API as seen from the test (host port), Keycloak sends to mailpit:1025 inside the Docker network
     private static final String MAILPIT_API = "http://localhost:8025/api/v1";
     private static final String ORG = "acme";
 
-    @Inject Keycloak keycloak;
     @Inject OrgService orgService;
     @Inject OrgMemberService memberService;
     @Inject RealmProvisioner realmProvisioner;
@@ -50,14 +58,33 @@ class InvitationMailerTest {
     // Mailpit is shared by all tests (and the dev mode): a unique address per test isolates its emails
     private String email;
 
+    @BeforeAll
+    void createRealm() {
+        testRealm = TestRealm.create();
+    }
+
     @BeforeEach
     void setUp() {
-        testRealm = TestRealm.create(keycloak);
         email = "user-" + UUID.randomUUID().toString().substring(0, 8) + "@acme.test";
     }
 
     @AfterEach
-    void tearDown() {
+    void cleanUp() {
+        try {
+            orgService.delete(testRealm.name(), ORG);
+        } catch (OrgNotFoundException ignored) {
+            // not created by this test
+        }
+        // some tests rely on the realm having no SMTP server configured: undo configureSmtp() directly, the
+        // service has no "remove" operation. An empty map, not null: Keycloak only changes the fields that are
+        // present in the representation it receives, and a null field is left out by Jackson
+        RealmRepresentation update = new RealmRepresentation();
+        update.setSmtpServer(Map.of());
+        testRealm.resource().update(update);
+    }
+
+    @AfterAll
+    void deleteRealm() {
         testRealm.close();
     }
 

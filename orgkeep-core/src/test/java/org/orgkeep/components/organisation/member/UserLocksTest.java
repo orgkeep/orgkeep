@@ -7,6 +7,7 @@ import org.orgkeep.api.OrgService;
 import org.orgkeep.api.RealmProvisioner;
 import org.orgkeep.api.UserGroupService;
 import org.orgkeep.api.exceptions.MemberOfAnotherOrgException;
+import org.orgkeep.api.exceptions.OrgNotFoundException;
 import org.orgkeep.api.exceptions.ResourceBusyException;
 import org.orgkeep.api.model.AddMemberRequest;
 import org.orgkeep.api.model.CreateCatalogRequest;
@@ -25,10 +26,13 @@ import io.quarkus.arc.ManagedContext;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
 import jakarta.inject.Inject;
+import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.keycloak.admin.client.Keycloak;
+import org.junit.jupiter.api.TestInstance;
 import org.mockito.Mockito;
 
 import java.util.List;
@@ -48,15 +52,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 
 /**
- * The USER locks, with real services against the Keycloak of Dev Services, in a throwaway realm per test. A lock
+ * The USER locks, with real services against the Keycloak of Dev Services, in one realm for the whole class. A lock
  * belongs to a thread, so "another call in progress" is a second thread; the spy on {@link KeycloakOrgs} holds the
  * first call at a precise point (a latch) while the test makes the second call.
+ * <p>
+ * One realm for the whole class (@BeforeAll); the orgs "acme" and "globex" are rebuilt before every test
+ * (@BeforeEach) and torn down after it (@AfterEach), since the point of these tests is to add, remove and move
+ * members between them.
  */
+@Slf4j
 @QuarkusTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class UserLocksTest {
     private static final String EMAIL = "paul@acme.test";
 
-    @Inject Keycloak keycloak;
     @Inject RealmProvisioner realmProvisioner;
     @Inject OrgService orgService;
     @Inject OrgMemberService memberService;
@@ -68,16 +77,46 @@ class UserLocksTest {
 
     private TestRealm testRealm;
 
+    @BeforeAll
+    void createRealm() {
+        testRealm = TestRealm.create();
+    }
+
     @BeforeEach
-    void beforeEach() {
-        testRealm = TestRealm.create(keycloak);
+    void setUpFixture() {
         realmProvisioner.ensureDefaults(testRealm.name());
         orgService.create(testRealm.name(), new CreateOrgRequest("acme", Set.of(), null, null));
         orgService.create(testRealm.name(), new CreateOrgRequest("globex", Set.of(), null, null));
     }
 
     @AfterEach
-    void afterEach() {
+    void cleanUp() {
+        try {
+            for (String org : List.of("acme", "globex", "beta")) {
+                try {
+                    orgService.delete(testRealm.name(), org);
+                } catch (OrgNotFoundException ignored) {
+                    // not created by this test
+                }
+            }
+            testRealm.resource().clients().findByClientId("prod")
+                    .forEach(client -> testRealm.resource().clients().get(client.getId()).remove());
+            testRealm.resource().clientScopes().findAll().stream()
+                    .filter(scope -> "prod".equals(scope.getName()))
+                    .forEach(scope -> testRealm.resource().clientScopes().get(scope.getId()).remove());
+            testRealm.resource().users().list(0, 1000)
+                    .forEach(user -> testRealm.resource().users().get(user.getId()).remove());
+        } catch (RuntimeException e) {
+            // a spy stub armed by a failed test (Quarkus resets @InjectSpy after this method, not before) or a lock
+            // still held by a thread the test did not wait for would otherwise fail every following test
+            log.warn("Cleanup failed, recreating the test realm", e);
+            testRealm.close();
+            testRealm = TestRealm.create();
+        }
+    }
+
+    @AfterAll
+    void deleteRealm() {
         testRealm.close();
     }
 

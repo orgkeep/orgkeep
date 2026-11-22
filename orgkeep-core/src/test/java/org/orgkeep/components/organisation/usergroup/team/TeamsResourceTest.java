@@ -14,6 +14,7 @@ import org.orgkeep.api.model.CreateUserGroupRequest;
 import org.orgkeep.api.model.Feature;
 import org.orgkeep.api.model.FeatureQuota;
 import org.orgkeep.api.model.QuotaCycle;
+import org.orgkeep.api.exceptions.OrgNotFoundException;
 import org.orgkeep.api.exceptions.ResourceBusyException;
 import org.orgkeep.components.lock.HeldLocks;
 import org.orgkeep.components.lock.LockMode;
@@ -26,10 +27,12 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.security.TestSecurity;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.keycloak.admin.client.Keycloak;
+import org.junit.jupiter.api.TestInstance;
 import org.mockito.Mockito;
 
 import java.util.List;
@@ -50,15 +53,18 @@ import static org.hamcrest.Matchers.nullValue;
 /**
  * The REST side of the teams: security, status codes and JSON. What is written in Keycloak is checked by
  * TeamServiceTest. The roles in @TestSecurity use the form produced by OrgRolesAugmentor: "org-{org}:{role}".
+ * <p>
+ * One realm for the whole class (@BeforeAll); the fixture is rebuilt before every test (@BeforeEach) and torn
+ * down after it (@AfterEach).
  */
 @QuarkusTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class TeamsResourceTest {
     private static final String ORG = "it-teams-org";
     private static final String TEAM_PRODUCT = "/api/organisations/{org}/user-groups/{group}/products/{catalog}/{product}";
     private static final String TEAM_ROLE = "/api/organisations/{org}/user-groups/{group}/catalogs/{catalog}/roles/{role}";
     private static final String ADMIN = "org-it-teams-org:org-admin";
 
-    @Inject Keycloak keycloak;
     @Inject OrgService orgService;
     @Inject CatalogService catalogService;
     @Inject ProductService productService;
@@ -69,9 +75,13 @@ class TeamsResourceTest {
 
     private TestRealm testRealm;
 
+    @BeforeAll
+    void createRealm() {
+        testRealm = TestRealm.create();
+    }
+
     @BeforeEach
-    void beforeEach() {
-        testRealm = TestRealm.create(keycloak);
+    void setUpFixture() {
         Mockito.when(currentRealm.name()).thenReturn(testRealm.name());
         catalogService.create(testRealm.name(), new CreateCatalogRequest("prod", "Production", null));
         productService.create(testRealm.name(), "prod", new CreateProductRequest("billing", "Billing", null,
@@ -84,7 +94,25 @@ class TeamsResourceTest {
     }
 
     @AfterEach
-    void afterEach() {
+    void cleanUp() {
+        try {
+            orgService.delete(testRealm.name(), ORG);
+        } catch (OrgNotFoundException ignored) {
+            // not created by this test
+        }
+        for (var catalog : catalogService.list(testRealm.name())) {
+            for (var product : productService.list(testRealm.name(), catalog.name())) {
+                productService.delete(testRealm.name(), catalog.name(), product.name());
+            }
+            for (var role : catalogRoleService.list(testRealm.name(), catalog.name())) {
+                catalogRoleService.delete(testRealm.name(), catalog.name(), role.name());
+            }
+            catalogService.delete(testRealm.name(), catalog.name());
+        }
+    }
+
+    @AfterAll
+    void deleteRealm() {
         testRealm.close();
     }
 

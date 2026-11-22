@@ -2,6 +2,7 @@ package org.orgkeep.components.organisation.usergroup;
 
 import org.orgkeep.api.OrgMemberService;
 import org.orgkeep.api.OrgService;
+import org.orgkeep.api.exceptions.OrgNotFoundException;
 import org.orgkeep.api.model.AddMemberRequest;
 import org.orgkeep.api.model.CreateOrgRequest;
 import org.orgkeep.api.model.CreateUserGroupRequest;
@@ -12,10 +13,12 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.security.TestSecurity;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.keycloak.admin.client.Keycloak;
+import org.junit.jupiter.api.TestInstance;
 import org.mockito.Mockito;
 
 import java.util.Set;
@@ -30,8 +33,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * User groups managed by the org admins: security, status codes, and the effects in Keycloak (group tree, membership).
  * The roles in @TestSecurity use the form produced by OrgRolesAugmentor: "org-{org}:{role}".
+ * <p>
+ * One realm for the whole class (@BeforeAll); the org is rebuilt before every test (@BeforeEach) and torn down
+ * after it (@AfterEach), since a custom group created under a fixed name ("support") would otherwise collide.
  */
 @QuarkusTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class UserGroupsResourceTest {
     private static final String ORG = "it-groups-org";
     private static final String BASE = "/api/organisations/{org}/user-groups";
@@ -41,7 +48,6 @@ class UserGroupsResourceTest {
     private static final String OWNER = "org-it-groups-org:org-owner";
     private static final String ADMIN = "org-it-groups-org:org-admin";
 
-    @Inject Keycloak keycloak;
     @Inject OrgService orgService;
     @Inject OrgMemberService memberService;
     @InjectMock CurrentRealm currentRealm;
@@ -49,16 +55,31 @@ class UserGroupsResourceTest {
     private TestRealm testRealm;
     private String memberId;
 
+    @BeforeAll
+    void createRealm() {
+        testRealm = TestRealm.create();
+    }
+
     @BeforeEach
-    void beforeEach() {
-        testRealm = TestRealm.create(keycloak);
+    void setUpFixture() {
         Mockito.when(currentRealm.name()).thenReturn(testRealm.name());
         orgService.create(testRealm.name(), new CreateOrgRequest(ORG, Set.of(), null, null));
         memberId = memberService.add(testRealm.name(), ORG, new AddMemberRequest("bob@it-groups-org.test", "Bob", "Smith")).id();
     }
 
     @AfterEach
-    void afterEach() {
+    void cleanUp() {
+        try {
+            orgService.delete(testRealm.name(), ORG);
+        } catch (OrgNotFoundException ignored) {
+            // not created by this test
+        }
+        testRealm.resource().users().list(0, 1000)
+                .forEach(user -> testRealm.resource().users().get(user.getId()).remove());
+    }
+
+    @AfterAll
+    void deleteRealm() {
         testRealm.close();
     }
 

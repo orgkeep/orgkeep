@@ -2,6 +2,8 @@ package org.orgkeep.components.catalog.product;
 
 import org.orgkeep.api.CatalogService;
 import org.orgkeep.api.OrgService;
+import org.orgkeep.api.ProductService;
+import org.orgkeep.api.exceptions.ResourceNotFoundException;
 import org.orgkeep.api.model.AssignProductRequest;
 import org.orgkeep.api.model.CreateCatalogRequest;
 import org.orgkeep.api.model.CreateOrgRequest;
@@ -11,6 +13,7 @@ import org.orgkeep.api.model.ParamDefinition;
 import org.orgkeep.api.model.ParamType;
 import org.orgkeep.api.model.QuotaCycle;
 import org.orgkeep.api.model.UpdateFeatureRequest;
+import org.orgkeep.fixtures.RequestScope;
 import org.orgkeep.fixtures.TestRealm;
 import org.orgkeep.web.CurrentRealm;
 import io.quarkus.test.InjectMock;
@@ -18,10 +21,12 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.security.TestSecurity;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.keycloak.admin.client.Keycloak;
+import org.junit.jupiter.api.TestInstance;
 import org.mockito.Mockito;
 
 import java.util.List;
@@ -37,31 +42,57 @@ import static org.hamcrest.Matchers.nullValue;
 /**
  * Products and their assignment through the REST API: security, validation and status codes.
  * The behaviour in Keycloak is covered by ProductServiceTest.
+ * <p>
+ * The catalog and the org are created once (@BeforeAll); the products a test creates under a fixed name ("billing",
+ * "repo") are unassigned and deleted after each test (@AfterEach).
  */
 @QuarkusTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ProductsResourceTest {
     private static final String PRODUCTS = "/api/admin/catalogs/{catalog}/products";
     private static final String ASSIGNMENT = "/api/admin/organisations/{org}/catalogs/{catalog}/products/{product}";
     private static final String CATALOG = "prod";
     private static final String ORG = "acme";
 
-    @Inject Keycloak keycloak;
     @Inject CatalogService catalogService;
     @Inject OrgService orgService;
+    @Inject ProductService productService;
     @InjectMock CurrentRealm currentRealm;
 
     private TestRealm testRealm;
 
+    @BeforeAll
+    void createRealm() {
+        testRealm = TestRealm.create();
+        RequestScope.run(() -> {
+            catalogService.create(testRealm.name(), new CreateCatalogRequest(CATALOG, "Production", null));
+            orgService.create(testRealm.name(), new CreateOrgRequest(ORG, Set.of(), null, null));
+        });
+    }
+
     @BeforeEach
-    void beforeEach() {
-        testRealm = TestRealm.create(keycloak);
+    void stubCurrentRealm() {
         Mockito.when(currentRealm.name()).thenReturn(testRealm.name());
-        catalogService.create(testRealm.name(), new CreateCatalogRequest(CATALOG, "Production", null));
-        orgService.create(testRealm.name(), new CreateOrgRequest(ORG, Set.of(), null, null));
     }
 
     @AfterEach
-    void afterEach() {
+    void cleanUp() {
+        for (String product : List.of("billing", "repo")) {
+            try {
+                productService.unassign(testRealm.name(), ORG, CATALOG, product);
+            } catch (ResourceNotFoundException ignored) {
+                // not assigned by this test
+            }
+            try {
+                productService.delete(testRealm.name(), CATALOG, product);
+            } catch (ResourceNotFoundException ignored) {
+                // not created by this test
+            }
+        }
+    }
+
+    @AfterAll
+    void deleteRealm() {
         testRealm.close();
     }
 

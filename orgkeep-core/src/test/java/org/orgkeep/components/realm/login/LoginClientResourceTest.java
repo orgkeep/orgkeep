@@ -1,10 +1,12 @@
 package org.orgkeep.components.realm.login;
 
 import org.orgkeep.api.CatalogService;
+import org.orgkeep.api.LoginClientService;
 import org.orgkeep.api.RealmProvisioner;
 import org.orgkeep.api.model.CreateCatalogRequest;
 import org.orgkeep.api.model.LightweightTokens;
 import org.orgkeep.api.model.UpdateLoginClientRequest;
+import org.orgkeep.fixtures.RequestScope;
 import org.orgkeep.fixtures.TestRealm;
 import org.orgkeep.web.CurrentRealm;
 import io.quarkus.test.InjectMock;
@@ -17,12 +19,14 @@ import io.restassured.http.ContentType;
 import io.restassured.response.Response;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.keycloak.admin.client.Keycloak;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.ClientScopeRepresentation;
 import org.mockito.Mockito;
@@ -41,14 +45,18 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /**
  * Settings of the login client by the realm owner: status codes, the URI validation (the security of the realm
  * depends on it) and the effects on the Keycloak client.
+ * <p>
+ * One realm for the whole class: the login client is reset to its pristine state after each test (@AfterEach),
+ * including recreating it if a test deleted it, and the catalogs a test creates are deleted too.
  */
 @QuarkusTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class LoginClientResourceTest {
     private static final String BASE = "/api/admin/login-client";
 
-    @Inject Keycloak keycloak;
     @Inject RealmProvisioner realmProvisioner;
     @Inject CatalogService catalogService;
+    @Inject LoginClientService loginClientService;
     @InjectMock CurrentRealm currentRealm;
     @InjectSpy KeycloakClients clients;
 
@@ -57,16 +65,35 @@ class LoginClientResourceTest {
 
     private TestRealm testRealm;
 
-    @BeforeEach
-    void beforeEach() {
-        testRealm = TestRealm.create(keycloak);
-        Mockito.when(currentRealm.name()).thenReturn(testRealm.name());
+    @BeforeAll
+    void createRealm() {
+        testRealm = TestRealm.create();
         // creates the login client, as the bootstrap does for the realm of the app
-        realmProvisioner.ensureDefaults(testRealm.name());
+        RequestScope.run(() -> realmProvisioner.ensureDefaults(testRealm.name()));
+    }
+
+    @BeforeEach
+    void stubCurrentRealm() {
+        Mockito.when(currentRealm.name()).thenReturn(testRealm.name());
     }
 
     @AfterEach
-    void afterEach() {
+    void resetLoginClient() {
+        // recreates the login client if realmWithoutLoginClientReturns404 deleted it
+        realmProvisioner.ensureDefaults(testRealm.name());
+        loginClientService.update(testRealm.name(),
+                new UpdateLoginClientRequest(List.of(), List.of(), List.of(), List.of(), false));
+        for (String catalog : List.of("prod", "sandbox")) {
+            try {
+                catalogService.delete(testRealm.name(), catalog);
+            } catch (org.orgkeep.api.exceptions.CatalogNotFoundException ignored) {
+                // not created by this test
+            }
+        }
+    }
+
+    @AfterAll
+    void deleteRealm() {
         testRealm.close();
     }
 

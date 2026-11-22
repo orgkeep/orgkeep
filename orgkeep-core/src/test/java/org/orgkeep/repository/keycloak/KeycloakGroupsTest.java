@@ -3,10 +3,12 @@ package org.orgkeep.repository.keycloak;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.WebApplicationException;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.keycloak.admin.client.Keycloak;
+import org.junit.jupiter.api.TestInstance;
 import org.orgkeep.fixtures.TestRealm;
 
 import java.util.Map;
@@ -20,21 +22,30 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * The idempotent creation of the groups of an assignment relies on it.
  */
 @QuarkusTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class KeycloakGroupsTest {
-    @Inject Keycloak keycloak;
     @Inject KeycloakGroups groups;
 
     private TestRealm testRealm;
     private String parentId;
 
+    @BeforeAll
+    void createRealm() {
+        testRealm = TestRealm.create();
+    }
+
     @BeforeEach
-    void beforeEach() {
-        testRealm = TestRealm.create(keycloak);
+    void setUpFixture() {
         parentId = groups.createTopLevel(testRealm.name(), "parent");
     }
 
     @AfterEach
-    void afterEach() {
+    void cleanUp() {
+        testRealm.resource().groups().group(parentId).remove();
+    }
+
+    @AfterAll
+    void deleteRealm() {
         testRealm.close();
     }
 

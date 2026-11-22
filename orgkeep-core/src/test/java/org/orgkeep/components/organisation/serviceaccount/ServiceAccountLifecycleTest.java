@@ -5,15 +5,19 @@ import io.quarkus.arc.ManagedContext;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
 import jakarta.inject.Inject;
+import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.keycloak.admin.client.Keycloak;
+import org.junit.jupiter.api.TestInstance;
 import org.mockito.Mockito;
 import org.orgkeep.api.OrgMemberService;
 import org.orgkeep.api.OrgService;
 import org.orgkeep.api.ServiceAccountService;
 import org.orgkeep.api.exceptions.OperationNotAllowedException;
+import org.orgkeep.api.exceptions.OrgNotFoundException;
 import org.orgkeep.api.exceptions.ResourceBusyException;
 import org.orgkeep.api.model.AddMemberRequest;
 import org.orgkeep.api.model.CreateOrgRequest;
@@ -41,12 +45,16 @@ import static org.mockito.ArgumentMatchers.anyString;
 /**
  * Service accounts and the lifecycle of their org: disabling, enabling and deleting it, and the locks. The grants of
  * a disabled service account are in ServiceAccountTokenTest.
+ * <p>
+ * One realm for the whole class (@BeforeAll); the org is rebuilt before every test (@BeforeEach) and torn down
+ * after it (@AfterEach), since some tests delete it.
  */
+@Slf4j
 @QuarkusTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ServiceAccountLifecycleTest {
     private static final String ORG = "acme";
 
-    @Inject Keycloak keycloak;
     @Inject OrgService orgService;
     @Inject OrgMemberService memberService;
     @Inject ServiceAccountService serviceAccountService;
@@ -58,9 +66,13 @@ class ServiceAccountLifecycleTest {
     private String paulId;
     private String batchUserId;
 
+    @BeforeAll
+    void createRealm() {
+        testRealm = TestRealm.create();
+    }
+
     @BeforeEach
-    void beforeEach() {
-        testRealm = TestRealm.create(keycloak);
+    void setUpFixture() {
         orgService.create(realm(), new CreateOrgRequest(ORG, Set.of(), null, null));
         paulId = memberService.add(realm(), ORG, new AddMemberRequest("paul@acme.test", "Paul", "Test")).id();
         batchUserId = create("batch").serviceAccount().userId();
@@ -68,7 +80,26 @@ class ServiceAccountLifecycleTest {
     }
 
     @AfterEach
-    void afterEach() {
+    void cleanUp() {
+        try {
+            try {
+                orgService.delete(realm(), ORG);
+            } catch (OrgNotFoundException ignored) {
+                // already deleted by this test
+            }
+            testRealm.resource().users().list(0, 1000)
+                    .forEach(user -> testRealm.resource().users().get(user.getId()).remove());
+        } catch (RuntimeException e) {
+            // a spy stub armed by a failed test (Quarkus resets @InjectSpy after this method, not before) or a lock
+            // still held by a thread the test did not wait for would otherwise fail every following test
+            log.warn("Cleanup failed, recreating the test realm", e);
+            testRealm.close();
+            testRealm = TestRealm.create();
+        }
+    }
+
+    @AfterAll
+    void deleteRealm() {
         testRealm.close();
     }
 

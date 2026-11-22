@@ -11,6 +11,7 @@ import org.orgkeep.api.exceptions.OperationNotAllowedException;
 import org.orgkeep.api.exceptions.OrgNotFoundException;
 import org.orgkeep.api.exceptions.ProductNotAssignedException;
 import org.orgkeep.api.exceptions.ProductNotFoundException;
+import org.orgkeep.api.exceptions.ResourceNotFoundException;
 import org.orgkeep.api.exceptions.RoleNameTakenException;
 import org.orgkeep.api.model.AssignProductRequest;
 import org.orgkeep.api.model.CreateCatalogRequest;
@@ -26,14 +27,16 @@ import org.orgkeep.api.model.Product;
 import org.orgkeep.api.model.QuotaCycle;
 import org.orgkeep.api.model.UpdateFeatureRequest;
 import org.orgkeep.api.model.UpdateProductRequest;
+import org.orgkeep.fixtures.RequestScope;
 import org.orgkeep.fixtures.TestRealm;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.WebApplicationException;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.keycloak.admin.client.Keycloak;
+import org.junit.jupiter.api.TestInstance;
 import org.keycloak.admin.client.resource.RealmResource;
 import org.keycloak.representations.idm.ClientScopeRepresentation;
 import org.keycloak.representations.idm.GroupRepresentation;
@@ -52,10 +55,14 @@ import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Runs against the Keycloak of Dev Services, in a throwaway realm per test:
+ * Runs against the Keycloak of Dev Services, in one realm for the whole class:
  * the assertions read Keycloak directly to check what the service wrote there.
+ * <p>
+ * The catalog and the org are created once (@BeforeAll); PRODUCT and BILLING, created by most tests under these
+ * fixed names, are unassigned and deleted after each test (@AfterEach).
  */
 @QuarkusTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ProductServiceTest {
     private static final String CATALOG = "prod";
     private static final String PRODUCT = "shop-repository";
@@ -64,7 +71,6 @@ class ProductServiceTest {
     private static final ParamDefinition REGION = new ParamDefinition("region", ParamType.ENUM, true, "eu", List.of("eu", "us"));
     private static final FeatureQuota DAILY_200 = new FeatureQuota(200L, QuotaCycle.DAILY);
 
-    @Inject Keycloak keycloak;
     @Inject ProductService productService;
     @Inject CatalogService catalogService;
     @Inject CatalogRoleService catalogRoleService;
@@ -72,15 +78,38 @@ class ProductServiceTest {
 
     private TestRealm testRealm;
 
-    @BeforeEach
-    void beforeEach() {
-        testRealm = TestRealm.create(keycloak);
-        catalogService.create(realmName(), new CreateCatalogRequest(CATALOG, "Production", null));
-        orgService.create(realmName(), new CreateOrgRequest(ORG, Set.of(), null, null));
+    @BeforeAll
+    void createRealm() {
+        testRealm = TestRealm.create();
+        RequestScope.run(() -> {
+            catalogService.create(realmName(), new CreateCatalogRequest(CATALOG, "Production", null));
+            orgService.create(realmName(), new CreateOrgRequest(ORG, Set.of(), null, null));
+        });
     }
 
     @AfterEach
-    void afterEach() {
+    void cleanUp() {
+        for (String product : List.of(PRODUCT, BILLING)) {
+            try {
+                productService.unassign(realmName(), ORG, CATALOG, product);
+            } catch (ResourceNotFoundException ignored) {
+                // not assigned by this test
+            }
+            try {
+                productService.delete(realmName(), CATALOG, product);
+            } catch (ResourceNotFoundException ignored) {
+                // not created by this test
+            }
+        }
+        // createWithANameTakenByACatalogRole creates it: catalogRoles() lists every client role of CATALOG, so a
+        // leftover role would break the exact assertions of other tests
+        for (var role : catalogRoleService.list(realmName(), CATALOG)) {
+            catalogRoleService.delete(realmName(), CATALOG, role.name());
+        }
+    }
+
+    @AfterAll
+    void deleteRealm() {
         testRealm.close();
     }
 

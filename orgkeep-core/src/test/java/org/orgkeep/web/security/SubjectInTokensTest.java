@@ -7,16 +7,19 @@ import org.orgkeep.api.RealmProvisioner;
 import org.orgkeep.api.model.AddMemberRequest;
 import org.orgkeep.api.model.CreateOrgRequest;
 import org.orgkeep.api.model.UpdateLoginClientRequest;
+import org.orgkeep.fixtures.RequestScope;
 import org.orgkeep.fixtures.TestRealm;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.keycloak.admin.client.Keycloak;
+import org.junit.jupiter.api.TestInstance;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.CredentialRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
@@ -41,12 +44,15 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * dropped the sub mapper from the clients once (it is now in the "basic" client scope, a default scope of every new
  * client), so this checks it on real tokens of every kind of client the core serves: the login client,
  * orgkeep-api, and a client created like the one of the dashboard (lightweight tokens: see below).
+ * <p>
+ * One realm for the whole class (@BeforeAll/@AfterAll): the org "acme" and its member "paul" that every test
+ * needs are created and torn down per test (@BeforeEach/@AfterEach) since each test still wants its own clean copy.
  */
 @QuarkusTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class SubjectInTokensTest {
     private static final String PASSWORD = "password";
 
-    @Inject Keycloak keycloak;
     @Inject RealmProvisioner realmProvisioner;
     @Inject LoginClientService loginClientService;
     @Inject OrgService orgService;
@@ -59,10 +65,14 @@ class SubjectInTokensTest {
     private TestRealm testRealm;
     private String paulId;
 
+    @BeforeAll
+    void createRealm() {
+        testRealm = TestRealm.create();
+        RequestScope.run(() -> realmProvisioner.ensureDefaults(testRealm.name()));
+    }
+
     @BeforeEach
-    void beforeEach() {
-        testRealm = TestRealm.create(keycloak);
-        realmProvisioner.ensureDefaults(testRealm.name());
+    void addAcmeAndPaul() {
         orgService.create(testRealm.name(), new CreateOrgRequest("acme", Set.of(), null, null));
 
         UserRepresentation user = new UserRepresentation();
@@ -82,7 +92,19 @@ class SubjectInTokensTest {
     }
 
     @AfterEach
-    void afterEach() {
+    void removeAcmeAndPaul() {
+        orgService.delete(testRealm.name(), "acme");
+        testRealm.resource().users().get(paulId).remove();
+        // lightweightLoginClientTokenIsMarked turns it on and never off
+        loginClientService.update(testRealm.name(),
+                new UpdateLoginClientRequest(List.of(), List.of(), List.of(), null, false));
+        // aClientCreatedWithTheDefaultsHasTheSubject creates it and never removes it
+        testRealm.resource().clients().findByClientId("orgkeep-dashboard")
+                .forEach(client -> testRealm.resource().clients().get(client.getId()).remove());
+    }
+
+    @AfterAll
+    void deleteRealm() {
         testRealm.close();
     }
 

@@ -5,6 +5,7 @@ import org.orgkeep.api.OrgService;
 import org.orgkeep.api.RealmProvisioner;
 import org.orgkeep.api.exceptions.OperationNotAllowedException;
 import org.orgkeep.api.exceptions.OrgAlreadyExistsException;
+import org.orgkeep.api.exceptions.OrgNotFoundException;
 import org.orgkeep.api.exceptions.ResourceBusyException;
 import org.orgkeep.api.model.AddMemberRequest;
 import org.orgkeep.api.model.CreateOrgRequest;
@@ -24,11 +25,14 @@ import io.quarkus.test.junit.QuarkusMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
 import jakarta.inject.Inject;
+import lombok.extern.slf4j.Slf4j;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.keycloak.admin.client.Keycloak;
+import org.junit.jupiter.api.TestInstance;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.CredentialRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
@@ -67,13 +71,18 @@ import static org.mockito.ArgumentMatchers.eq;
 /**
  * Enabling and disabling an organisation, checked with real logins: Keycloak 26 lets the members of a disabled
  * organisation log in, so what matters is that their password grant fails.
+ * <p>
+ * One realm for the whole class (@BeforeAll); the fixture itself (the org "acme" with Paul) is rebuilt before
+ * every test (@BeforeEach) and torn down after it (@AfterEach), since every test here disables, enables, adds or
+ * removes members.
  */
+@Slf4j
 @QuarkusTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class OrgStatusTest {
     private static final String ORG = "acme";
     private static final String PASSWORD = "password";
 
-    @Inject Keycloak keycloak;
     @Inject RealmProvisioner realmProvisioner;
     @Inject OrgService orgService;
     @Inject OrgMemberService memberService;
@@ -89,17 +98,44 @@ class OrgStatusTest {
     private TestRealm testRealm;
     private String paulId;
 
+    @BeforeAll
+    void createRealm() {
+        testRealm = TestRealm.create();
+    }
+
     @BeforeEach
-    void beforeEach() {
-        testRealm = TestRealm.create(keycloak);
+    void setUpFixture() {
         realmProvisioner.ensureDefaults(testRealm.name());
         enablePasswordGrant();
         orgService.create(testRealm.name(), new CreateOrgRequest(ORG, Set.of(), null, null));
         paulId = member("paul");
     }
 
+    // Every user of the realm is deleted, not only Paul: tests create "claire", "rita", "ada", "frank", "emma" or
+    // "olga" (the owner of "beta"), and the org only removes its client and groups, not its members.
     @AfterEach
-    void afterEach() {
+    void cleanUp() {
+        try {
+            for (String org : List.of(ORG, "beta")) {
+                try {
+                    orgService.delete(testRealm.name(), org);
+                } catch (OrgNotFoundException ignored) {
+                    // not created by this test
+                }
+            }
+            testRealm.resource().users().list(0, 1000)
+                    .forEach(user -> testRealm.resource().users().get(user.getId()).remove());
+        } catch (RuntimeException e) {
+            // a spy stub armed by a failed test (Quarkus resets @InjectSpy after this method, not before) or a lock
+            // still held by a thread the test did not wait for would otherwise fail every following test
+            log.warn("Cleanup failed, recreating the test realm", e);
+            testRealm.close();
+            testRealm = TestRealm.create();
+        }
+    }
+
+    @AfterAll
+    void deleteRealm() {
         testRealm.close();
     }
 

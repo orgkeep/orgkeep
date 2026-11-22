@@ -13,12 +13,14 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.security.TestSecurity;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.keycloak.admin.client.Keycloak;
 import org.keycloak.representations.idm.ClientScopeRepresentation;
 import org.mockito.Mockito;
 
@@ -39,27 +41,54 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Catalogs managed by the realm owner: security, validation, status codes, and the effects in Keycloak
- * (client, client scope, default scopes). Each test works in a throwaway realm (see OrganisationsResourceTest).
+ * (client, client scope, default scopes).
+ * <p>
+ * One realm for the whole class: the catalog SANDBOX and the raw clients a test creates are deleted after each
+ * test (@AfterEach), directly through Keycloak (not the service layer, which refuses to delete a catalog that
+ * still has products).
  */
 @QuarkusTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class CatalogsResourceTest {
     private static final String BASE = "/api/admin/catalogs";
     private static final String SANDBOX = "products-sandbox";
 
-    @Inject Keycloak keycloak;
     @InjectMock CurrentRealm currentRealm;
 
     private TestRealm testRealm;
 
+    @BeforeAll
+    void createRealm() {
+        testRealm = TestRealm.create();
+    }
+
     @BeforeEach
-    void beforeEach() {
-        testRealm = TestRealm.create(keycloak);
+    void stubCurrentRealm() {
         Mockito.when(currentRealm.name()).thenReturn(testRealm.name());
     }
 
     @AfterEach
-    void afterEach() {
+    void cleanUp() {
+        deleteClientIfPresent(SANDBOX);
+        deleteScopeIfPresent(SANDBOX);
+        deleteClientIfPresent("not-a-catalog");
+        deleteClientIfPresent(testRealm.name());
+    }
+
+    @AfterAll
+    void deleteRealm() {
         testRealm.close();
+    }
+
+    private void deleteClientIfPresent(String clientId) {
+        testRealm.resource().clients().findByClientId(clientId)
+                .forEach(client -> testRealm.resource().clients().get(client.getId()).remove());
+    }
+
+    private void deleteScopeIfPresent(String name) {
+        testRealm.resource().clientScopes().findAll().stream()
+                .filter(scope -> name.equals(scope.getName()))
+                .forEach(scope -> testRealm.resource().clientScopes().get(scope.getId()).remove());
     }
 
     @Test

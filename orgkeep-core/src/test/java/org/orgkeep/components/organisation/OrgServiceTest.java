@@ -4,6 +4,7 @@ import org.orgkeep.api.CatalogService;
 import org.orgkeep.api.OrgMemberService;
 import org.orgkeep.api.OrgService;
 import org.orgkeep.api.ProductService;
+import org.orgkeep.api.exceptions.CatalogNotFoundException;
 import org.orgkeep.api.exceptions.MemberAlreadyExistsException;
 import org.orgkeep.api.exceptions.MemberOfAnotherOrgException;
 import org.orgkeep.api.exceptions.OrgAlreadyExistsException;
@@ -25,10 +26,11 @@ import org.orgkeep.fixtures.TestRealm;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.WebApplicationException;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.keycloak.admin.client.Keycloak;
+import org.junit.jupiter.api.TestInstance;
 import org.keycloak.admin.client.resource.RealmResource;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.MemberRepresentation;
@@ -47,11 +49,15 @@ import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @QuarkusTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class OrgServiceTest {
     private static final String ORG = "it-demo-org";
     private static final String OWNER_EMAIL = "owner@it-demo-org.test";
+    // every org and catalog name used by a test of this class: deleted after each test so the next one finds the
+    // realm as clean as it would with a fresh realm per test
+    private static final List<String> ALL_ORGS = List.of(ORG, "other-org", "third-org", "acme-corp");
+    private static final List<String> ALL_CATALOGS = List.of("prod", "sandbox");
 
-    @Inject Keycloak keycloak;
     @Inject OrgService orgService;
     @Inject OrgMemberService memberService;
     @Inject ProductService productService;
@@ -59,13 +65,37 @@ public class OrgServiceTest {
 
     private TestRealm testRealm;
 
-    @BeforeEach
-    public void beforeEach(){
-        testRealm = TestRealm.create(keycloak);
+    @BeforeAll
+    public void createRealm(){
+        testRealm = TestRealm.create();
     }
 
+    // Deleting an org only removes its client and groups, not its members (and a privileged member may be granted
+    // a realm role directly): members are deleted too. A catalog cannot be deleted while it still has products.
     @AfterEach
-    public void afterEach(){
+    public void cleanUp(){
+        for (String org : ALL_ORGS) {
+            try {
+                List<String> memberIds = memberService.list(testRealm.name(), org).stream().map(OrgMember::id).toList();
+                orgService.delete(testRealm.name(), org);
+                memberIds.forEach(id -> testRealm.resource().users().get(id).remove());
+            } catch (OrgNotFoundException ignored) {
+                // not created by this test
+            }
+        }
+        for (String catalog : ALL_CATALOGS) {
+            try {
+                productService.list(testRealm.name(), catalog)
+                        .forEach(product -> productService.delete(testRealm.name(), catalog, product.name()));
+                catalogService.delete(testRealm.name(), catalog);
+            } catch (CatalogNotFoundException ignored) {
+                // not created by this test
+            }
+        }
+    }
+
+    @AfterAll
+    public void deleteRealm(){
         testRealm.close();
     }
 

@@ -21,8 +21,6 @@ import org.orgkeep.components.lock.LockRequest;
 import org.orgkeep.components.lock.ResourceLocks;
 import org.orgkeep.fixtures.TestRealm;
 import org.orgkeep.repository.keycloak.KeycloakOrgs;
-import io.quarkus.arc.Arc;
-import io.quarkus.arc.ManagedContext;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
 import jakarta.inject.Inject;
@@ -131,10 +129,10 @@ class UserLocksTest {
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
-            Future<?> first = inRequest(executor, () -> add("acme"));
+            Future<?> first = executor.submit(() -> add("acme"));
             assertTrue(firstInside.await(30, TimeUnit.SECONDS));
 
-            Future<?> second = inRequest(executor, () -> add("globex"));
+            Future<?> second = executor.submit(() -> add("globex"));
             Thread.sleep(300);
             releaseFirst.countDown();
 
@@ -159,7 +157,7 @@ class UserLocksTest {
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
-            Future<?> first = inRequest(executor, () -> add("acme"));
+            Future<?> first = executor.submit(() -> add("acme"));
             assertTrue(firstInside.await(30, TimeUnit.SECONDS));
 
             assertThrowsExactly(ResourceBusyException.class, () -> add("globex"));
@@ -248,7 +246,7 @@ class UserLocksTest {
 
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
-            Future<?> removal = inRequest(executor, () -> memberService.remove(testRealm.name(), "acme", paulId));
+            Future<?> removal = executor.submit(() -> memberService.remove(testRealm.name(), "acme", paulId));
             assertTrue(removalInside.await(30, TimeUnit.SECONDS));
 
             assertThrowsExactly(ResourceBusyException.class,
@@ -306,19 +304,6 @@ class UserLocksTest {
 
     private String userId(String email) {
         return testRealm.resource().users().searchByEmail(email, true).getFirst().getId();
-    }
-
-    /** Runs the action on another thread inside a request context, like an HTTP request (see OrgStatusTest). */
-    private static Future<?> inRequest(ExecutorService executor, Runnable action) {
-        return executor.submit(() -> {
-            ManagedContext requestContext = Arc.container().requestContext();
-            requestContext.activate();
-            try {
-                action.run();
-            } finally {
-                requestContext.terminate();
-            }
-        });
     }
 
     /**

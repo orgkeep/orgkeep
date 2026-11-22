@@ -7,7 +7,6 @@ import org.orgkeep.api.RealmProvisioner;
 import org.orgkeep.api.model.AddMemberRequest;
 import org.orgkeep.api.model.CreateOrgRequest;
 import org.orgkeep.api.model.UpdateLoginClientRequest;
-import org.orgkeep.fixtures.RequestScope;
 import org.orgkeep.fixtures.TestRealm;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -68,7 +67,7 @@ class SubjectInTokensTest {
     @BeforeAll
     void createRealm() {
         testRealm = TestRealm.create();
-        RequestScope.run(() -> realmProvisioner.ensureDefaults(testRealm.name()));
+        realmProvisioner.ensureDefaults(testRealm.name());
     }
 
     @BeforeEach

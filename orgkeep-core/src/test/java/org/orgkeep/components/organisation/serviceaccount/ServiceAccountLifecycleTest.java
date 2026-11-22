@@ -1,7 +1,5 @@
 package org.orgkeep.components.organisation.serviceaccount;
 
-import io.quarkus.arc.Arc;
-import io.quarkus.arc.ManagedContext;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
 import jakarta.inject.Inject;
@@ -207,7 +205,7 @@ class ServiceAccountLifecycleTest {
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
-            Future<?> disable = inRequest(executor, () -> orgService.setEnabled(realm(), ORG, false));
+            Future<?> disable = executor.submit(() -> orgService.setEnabled(realm(), ORG, false));
             assertTrue(disableInside.await(30, TimeUnit.SECONDS));
 
             assertThrowsExactly(ResourceBusyException.class,
@@ -246,18 +244,5 @@ class ServiceAccountLifecycleTest {
 
     private String realm() {
         return testRealm.name();
-    }
-
-    /** Runs the action on another thread inside a request context: the Keycloak admin client is request scoped. */
-    private static Future<?> inRequest(ExecutorService executor, Runnable action) {
-        return executor.submit(() -> {
-            ManagedContext requestContext = Arc.container().requestContext();
-            requestContext.activate();
-            try {
-                action.run();
-            } finally {
-                requestContext.terminate();
-            }
-        });
     }
 }

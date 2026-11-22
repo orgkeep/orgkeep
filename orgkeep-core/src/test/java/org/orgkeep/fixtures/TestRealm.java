@@ -42,9 +42,10 @@ public class TestRealm implements AutoCloseable {
 
     /**
      * Opens its own admin client of the master realm (credentials from KEYCLOAK_ADMIN_USER / KEYCLOAK_ADMIN_PASSWORD,
-     * admin/admin by default, the Dev Services defaults), instead of the @RequestScoped one the application uses: a
-     * class with one realm for every test (@BeforeAll) creates it outside any request context, and the realm must
-     * stay usable for the whole class, well beyond the single request a @RequestScoped bean would live for.
+     * admin/admin by default, the Dev Services defaults), instead of the application's own singleton (see
+     * KeycloakAdminClientProducer). This is a plain fixture outside CDI: it owns and closes its own client, with a
+     * lifecycle independent from the application's (the whole test class, @BeforeAll to @AfterAll, not an HTTP
+     * request).
      */
     public static TestRealm create() {
         String name = "test-" + UUID.randomUUID().toString().substring(0, 8);

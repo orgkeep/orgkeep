@@ -21,8 +21,6 @@ import org.orgkeep.components.lock.LockRequest;
 import org.orgkeep.components.lock.ResourceLocks;
 import org.orgkeep.fixtures.TestRealm;
 import org.orgkeep.repository.keycloak.KeycloakGroups;
-import io.quarkus.arc.Arc;
-import io.quarkus.arc.ManagedContext;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
 import jakarta.inject.Inject;
@@ -137,7 +135,7 @@ class TeamLocksTest {
 
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
-            Future<?> first = inRequest(executor, () -> grant("ops", "a"));
+            Future<?> first = executor.submit(() -> grant("ops", "a"));
             assertTrue(inside.await(30, TimeUnit.SECONDS));
 
             // the call returns while the first one is still held on its latch: the second team did not wait for it
@@ -164,9 +162,9 @@ class TeamLocksTest {
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
-            Future<?> first = inRequest(executor, () -> grant("ops", "a"));
+            Future<?> first = executor.submit(() -> grant("ops", "a"));
             assertTrue(inside.await(30, TimeUnit.SECONDS));
-            Future<?> second = inRequest(executor, () -> grant("ops", "b"));
+            Future<?> second = executor.submit(() -> grant("ops", "b"));
             Thread.sleep(500);
             release.countDown();
 
@@ -190,7 +188,7 @@ class TeamLocksTest {
 
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
-            Future<?> first = inRequest(executor, () -> grant("ops", "a"));
+            Future<?> first = executor.submit(() -> grant("ops", "a"));
             assertTrue(inside.await(30, TimeUnit.SECONDS));
 
             assertThrowsExactly(ResourceBusyException.class, () -> grant("ops", "b"));
@@ -232,7 +230,7 @@ class TeamLocksTest {
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
             // a is already assigned: this is a renegotiation, whose first write is the assignment group
-            Future<?> renegotiation = inRequest(executor, () -> productService.assign(realm(), ORG, CATALOG, "a",
+            Future<?> renegotiation = executor.submit(() -> productService.assign(realm(), ORG, CATALOG, "a",
                     new AssignProductRequest(2000L, QuotaCycle.MONTHLY)));
             assertTrue(inside.await(30, TimeUnit.SECONDS));
 
@@ -259,7 +257,7 @@ class TeamLocksTest {
 
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
-            Future<?> write = inRequest(executor, () -> grant("ops", "a"));
+            Future<?> write = executor.submit(() -> grant("ops", "a"));
             assertTrue(inside.await(30, TimeUnit.SECONDS));
 
             long start = System.nanoTime();
@@ -348,19 +346,6 @@ class TeamLocksTest {
                 })
                 .doCallRealMethod()
                 .when(groups).replaceAttributes(anyString(), anyString(), any());
-    }
-
-    /** Runs the action on another thread inside a request context, like an HTTP request (see UserLocksTest). */
-    private static Future<?> inRequest(ExecutorService executor, Runnable action) {
-        return executor.submit(() -> {
-            ManagedContext requestContext = Arc.container().requestContext();
-            requestContext.activate();
-            try {
-                action.run();
-            } finally {
-                requestContext.terminate();
-            }
-        });
     }
 
     /** Takes a lock on its own thread and keeps it until closed, so the test thread really finds it held. */

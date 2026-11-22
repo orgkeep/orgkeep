@@ -26,7 +26,6 @@ import org.orgkeep.api.model.ParamType;
 import org.orgkeep.api.model.QuotaCycle;
 import org.orgkeep.api.model.UpdateLoginClientRequest;
 import org.orgkeep.fixtures.CatalogClaims;
-import org.orgkeep.fixtures.RequestScope;
 import org.orgkeep.fixtures.TestRealm;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -115,34 +114,32 @@ class LightweightTokenTest {
     @BeforeAll
     void createRealm() {
         testRealm = TestRealm.create();
-        RequestScope.run(() -> {
-            String realm = testRealm.name();
-            realmProvisioner.ensureDefaults(realm);
-            // the reason of a refused introspection is only in the events of the realm
-            var events = testRealm.resource().getRealmEventsConfig();
-            events.setEventsEnabled(true);
-            events.setEnabledEventTypes(List.of("INTROSPECT_TOKEN_ERROR"));
-            testRealm.resource().updateRealmEventsConfig(events);
-            // the password grant, for the test only (as DemoSeeder does)
-            var loginClient = testRealm.resource().clients().get(loginClientUuid());
-            ClientRepresentation client = loginClient.toRepresentation();
-            client.setDirectAccessGrantsEnabled(true);
-            loginClient.update(client);
+        String realm = testRealm.name();
+        realmProvisioner.ensureDefaults(realm);
+        // the reason of a refused introspection is only in the events of the realm
+        var events = testRealm.resource().getRealmEventsConfig();
+        events.setEventsEnabled(true);
+        events.setEnabledEventTypes(List.of("INTROSPECT_TOKEN_ERROR"));
+        testRealm.resource().updateRealmEventsConfig(events);
+        // the password grant, for the test only (as DemoSeeder does)
+        var loginClient = testRealm.resource().clients().get(loginClientUuid());
+        ClientRepresentation client = loginClient.toRepresentation();
+        client.setDirectAccessGrantsEnabled(true);
+        loginClient.update(client);
 
-            catalogService.create(realm, new CreateCatalogRequest("prod", "Production", null));
-            catalogService.create(realm, new CreateCatalogRequest("sandbox", "Sandbox", null));
-            productService.create(realm, "prod", new CreateProductRequest(PRODUCT, "Shop repository", null,
-                    List.of(new Feature("search", null), new Feature("dig", null)),
-                    List.of(new ParamDefinition("region", ParamType.ENUM, true, "eu", List.of("eu", "us")))));
-            orgService.create(realm, new CreateOrgRequest(ORG, Set.of(), null, null));
-            productService.assign(realm, ORG, "prod", PRODUCT,
-                    new AssignProductRequest(1000L, QuotaCycle.MONTHLY, List.of("search"), Map.of()));
+        catalogService.create(realm, new CreateCatalogRequest("prod", "Production", null));
+        catalogService.create(realm, new CreateCatalogRequest("sandbox", "Sandbox", null));
+        productService.create(realm, "prod", new CreateProductRequest(PRODUCT, "Shop repository", null,
+                List.of(new Feature("search", null), new Feature("dig", null)),
+                List.of(new ParamDefinition("region", ParamType.ENUM, true, "eu", List.of("eu", "us")))));
+        orgService.create(realm, new CreateOrgRequest(ORG, Set.of(), null, null));
+        productService.assign(realm, ORG, "prod", PRODUCT,
+                new AssignProductRequest(1000L, QuotaCycle.MONTHLY, List.of("search"), Map.of()));
 
-            paulId = member("paul");
-            userGroupService.create(realm, ORG, new CreateUserGroupRequest("ops"));
-            teamService.grantProduct(realm, ORG, "ops", "prod", PRODUCT, new GrantProductRequest(null, 300L, null));
-            userGroupService.addMember(realm, ORG, "ops", paulId);
-        });
+        paulId = member("paul");
+        userGroupService.create(realm, ORG, new CreateUserGroupRequest("ops"));
+        teamService.grantProduct(realm, ORG, "ops", "prod", PRODUCT, new GrantProductRequest(null, 300L, null));
+        userGroupService.addMember(realm, ORG, "ops", paulId);
     }
 
     @AfterEach

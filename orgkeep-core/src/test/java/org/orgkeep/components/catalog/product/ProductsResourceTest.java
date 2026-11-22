@@ -13,7 +13,6 @@ import org.orgkeep.api.model.ParamDefinition;
 import org.orgkeep.api.model.ParamType;
 import org.orgkeep.api.model.QuotaCycle;
 import org.orgkeep.api.model.UpdateFeatureRequest;
-import org.orgkeep.fixtures.RequestScope;
 import org.orgkeep.fixtures.TestRealm;
 import org.orgkeep.web.CurrentRealm;
 import io.quarkus.test.InjectMock;
@@ -64,10 +63,8 @@ class ProductsResourceTest {
     @BeforeAll
     void createRealm() {
         testRealm = TestRealm.create();
-        RequestScope.run(() -> {
-            catalogService.create(testRealm.name(), new CreateCatalogRequest(CATALOG, "Production", null));
-            orgService.create(testRealm.name(), new CreateOrgRequest(ORG, Set.of(), null, null));
-        });
+        catalogService.create(testRealm.name(), new CreateCatalogRequest(CATALOG, "Production", null));
+        orgService.create(testRealm.name(), new CreateOrgRequest(ORG, Set.of(), null, null));
     }
 
     @BeforeEach

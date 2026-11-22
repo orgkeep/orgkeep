@@ -5,6 +5,7 @@ import org.orgkeep.api.OrgService;
 import org.orgkeep.api.ProductService;
 import org.orgkeep.api.TeamService;
 import org.orgkeep.api.UserGroupService;
+import org.orgkeep.api.exceptions.OrgNotFoundException;
 import org.orgkeep.api.exceptions.ResourceBusyException;
 import org.orgkeep.api.model.AssignProductRequest;
 import org.orgkeep.api.model.CreateCatalogRequest;
@@ -25,10 +26,13 @@ import io.quarkus.arc.ManagedContext;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
 import jakarta.inject.Inject;
+import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.keycloak.admin.client.Keycloak;
+import org.junit.jupiter.api.TestInstance;
 import org.mockito.Mockito;
 
 import java.util.HashMap;
@@ -52,18 +56,22 @@ import static org.mockito.ArgumentMatchers.anyString;
 
 /**
  * The TEAM locks and the heavy operations on an org (#27), with real services against the Keycloak of Dev Services, in
- * a throwaway realm per test. A lock belongs to a thread, so "another call in progress" is a second thread; the spy
+ * one realm for the whole class. A lock belongs to a thread, so "another call in progress" is a second thread; the spy
  * on {@link KeycloakGroups} holds the first call at a precise point (a latch) while the test makes the second call.
  * <p>
  * Setup: the catalog "prod" with two simple products "a" and "b", assigned to the org "acme", which has two teams,
  * "ops" and "dev".
+ * <p>
+ * One realm for the whole class (@BeforeAll); the fixture is rebuilt before every test (@BeforeEach) and torn
+ * down after it (@AfterEach).
  */
+@Slf4j
 @QuarkusTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class TeamLocksTest {
     private static final String CATALOG = "prod";
     private static final String ORG = "acme";
 
-    @Inject Keycloak keycloak;
     @Inject OrgService orgService;
     @Inject CatalogService catalogService;
     @Inject ProductService productService;
@@ -75,9 +83,13 @@ class TeamLocksTest {
 
     private TestRealm testRealm;
 
+    @BeforeAll
+    void createRealm() {
+        testRealm = TestRealm.create();
+    }
+
     @BeforeEach
-    void beforeEach() {
-        testRealm = TestRealm.create(keycloak);
+    void setUpFixture() {
         catalogService.create(realm(), new CreateCatalogRequest(CATALOG, "Production", null));
         orgService.create(realm(), new CreateOrgRequest(ORG, Set.of(), null, null));
         for (String product : new String[]{"a", "b"}) {
@@ -89,7 +101,30 @@ class TeamLocksTest {
     }
 
     @AfterEach
-    void afterEach() {
+    void cleanUp() {
+        try {
+            try {
+                orgService.delete(realm(), ORG);
+            } catch (OrgNotFoundException ignored) {
+                // not created by this test
+            }
+            for (var catalog : catalogService.list(realm())) {
+                for (var product : productService.list(realm(), catalog.name())) {
+                    productService.delete(realm(), catalog.name(), product.name());
+                }
+                catalogService.delete(realm(), catalog.name());
+            }
+        } catch (RuntimeException e) {
+            // a spy stub armed by a failed test (Quarkus resets @InjectSpy after this method, not before) or a lock
+            // still held by a thread the test did not wait for would otherwise fail every following test
+            log.warn("Cleanup failed, recreating the test realm", e);
+            testRealm.close();
+            testRealm = TestRealm.create();
+        }
+    }
+
+    @AfterAll
+    void deleteRealm() {
         testRealm.close();
     }
 

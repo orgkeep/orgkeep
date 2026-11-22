@@ -8,17 +8,22 @@ import io.quarkus.test.security.oidc.ClaimType;
 import io.quarkus.test.security.oidc.OidcSecurity;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.keycloak.admin.client.Keycloak;
+import org.junit.jupiter.api.TestInstance;
+import org.keycloak.representations.idm.RealmRepresentation;
 import org.mockito.Mockito;
 import org.orgkeep.api.OrgService;
 import org.orgkeep.api.ServiceAccountService;
+import org.orgkeep.api.ServiceAccountSettingsService;
 import org.orgkeep.api.model.CreateOrgRequest;
 import org.orgkeep.api.model.CreateServiceAccountRequest;
 import org.orgkeep.api.model.LightweightTokens;
 import org.orgkeep.api.model.UpdateServiceAccountSettingsRequest;
+import org.orgkeep.fixtures.RequestScope;
 import org.orgkeep.fixtures.TestRealm;
 import org.orgkeep.web.CurrentRealm;
 
@@ -33,31 +38,57 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 /**
  * The four endpoints of the settings of the service accounts over REST: realm owner only, status codes, and what they
  * answer. What they write in Keycloak is in ServiceAccountSettingsServiceTest.
+ * <p>
+ * The orgs and the service account are created once (@BeforeAll); the realm default and the mode of "batch" are
+ * reset to false after each test (@AfterEach), since a few tests switch them.
  */
 @QuarkusTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ServiceAccountSettingsResourceTest {
     private static final String REALM_DEFAULTS = "/api/admin/service-accounts/settings";
     private static final String ONE = "/api/admin/organisations/{org}/service-accounts/{sa}/settings";
     private static final String OWNER = "realm-owner";
 
-    @Inject Keycloak keycloak;
     @Inject OrgService orgService;
     @Inject ServiceAccountService serviceAccountService;
+    @Inject ServiceAccountSettingsService settingsService;
     @InjectMock CurrentRealm currentRealm;
 
     private TestRealm testRealm;
 
-    @BeforeEach
-    void beforeEach() {
-        testRealm = TestRealm.create(keycloak);
-        Mockito.when(currentRealm.name()).thenReturn(testRealm.name());
-        orgService.create(testRealm.name(), new CreateOrgRequest("acme", Set.of(), null, null));
-        orgService.create(testRealm.name(), new CreateOrgRequest("globex", Set.of(), null, null));
-        serviceAccountService.create(testRealm.name(), "acme", new CreateServiceAccountRequest("batch", null, null));
+    @BeforeAll
+    void createRealm() {
+        testRealm = TestRealm.create();
+        RequestScope.run(() -> {
+            orgService.create(testRealm.name(), new CreateOrgRequest("acme", Set.of(), null, null));
+            orgService.create(testRealm.name(), new CreateOrgRequest("globex", Set.of(), null, null));
+            serviceAccountService.create(testRealm.name(), "acme", new CreateServiceAccountRequest("batch", null, null));
+        });
     }
 
+    @BeforeEach
+    void stubCurrentRealm() {
+        Mockito.when(currentRealm.name()).thenReturn(testRealm.name());
+    }
+
+    // update(false) itself writes the attribute, which assertNothingWritten expects absent: the realm attribute is
+    // removed directly, and "batch" is recreated from scratch instead.
     @AfterEach
-    void afterEach() {
+    void cleanUp() {
+        RealmRepresentation realm = testRealm.resource().toRepresentation();
+        if (realm.getAttributes() != null
+                && realm.getAttributes().remove(LightweightTokens.SERVICE_ACCOUNTS_REALM_ATTRIBUTE) != null) {
+            testRealm.resource().update(realm);
+        }
+        serviceAccountService.delete(testRealm.name(), "acme", "batch");
+        serviceAccountService.create(testRealm.name(), "acme", new CreateServiceAccountRequest("batch", null, null));
+        // clientCreatedByHandIsNeverSwitched creates it directly, never through the service
+        testRealm.resource().clients().findByClientId("org-acme.byhand")
+                .forEach(client -> testRealm.resource().clients().get(client.getId()).remove());
+    }
+
+    @AfterAll
+    void deleteRealm() {
         testRealm.close();
     }
 

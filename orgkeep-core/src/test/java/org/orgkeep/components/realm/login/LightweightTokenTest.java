@@ -26,17 +26,19 @@ import org.orgkeep.api.model.ParamType;
 import org.orgkeep.api.model.QuotaCycle;
 import org.orgkeep.api.model.UpdateLoginClientRequest;
 import org.orgkeep.fixtures.CatalogClaims;
+import org.orgkeep.fixtures.RequestScope;
 import org.orgkeep.fixtures.TestRealm;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.core.Response;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.keycloak.admin.client.CreatedResponseUtil;
-import org.keycloak.admin.client.Keycloak;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.ClientScopeRepresentation;
 import org.keycloak.representations.idm.CredentialRepresentation;
@@ -80,16 +82,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Setup: the model of TeamTokenTest, reduced to one product. "shop-repository" in prod (features search and dig,
  * parameter region), assigned to acme (1000 a month, search bought); Paul is in "ops", which gives the product with a
  * quota of team of 300. A second catalog, sandbox, where acme has nothing.
+ * <p>
+ * One realm and one scenario for the whole class (@BeforeAll): building it (two catalogs, a product, an org, a
+ * team, a member) is expensive and no test here changes it in a way another test would notice, except the lightweight
+ * toggle of the login client and Paul's membership of "ops", both reset after each test (@AfterEach).
  */
 @Slf4j
 @QuarkusTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class LightweightTokenTest {
     private static final String ORG = "acme";
     private static final String PRODUCT = "shop-repository";
     private static final String PASSWORD = "password";
     private static final String MARKER = LightweightTokens.MARKER_CLAIM;
 
-    @Inject Keycloak keycloak;
     @Inject RealmProvisioner realmProvisioner;
     @Inject LoginClientService loginClientService;
     @Inject CatalogService catalogService;
@@ -106,39 +112,54 @@ class LightweightTokenTest {
     private TestRealm testRealm;
     private String paulId;
 
-    @BeforeEach
-    void beforeEach() {
-        testRealm = TestRealm.create(keycloak);
-        String realm = testRealm.name();
-        realmProvisioner.ensureDefaults(realm);
-        // the reason of a refused introspection is only in the events of the realm
-        var events = testRealm.resource().getRealmEventsConfig();
-        events.setEventsEnabled(true);
-        events.setEnabledEventTypes(List.of("INTROSPECT_TOKEN_ERROR"));
-        testRealm.resource().updateRealmEventsConfig(events);
-        // the password grant, for the test only (as DemoSeeder does)
-        var loginClient = testRealm.resource().clients().get(loginClientUuid());
-        ClientRepresentation client = loginClient.toRepresentation();
-        client.setDirectAccessGrantsEnabled(true);
-        loginClient.update(client);
+    @BeforeAll
+    void createRealm() {
+        testRealm = TestRealm.create();
+        RequestScope.run(() -> {
+            String realm = testRealm.name();
+            realmProvisioner.ensureDefaults(realm);
+            // the reason of a refused introspection is only in the events of the realm
+            var events = testRealm.resource().getRealmEventsConfig();
+            events.setEventsEnabled(true);
+            events.setEnabledEventTypes(List.of("INTROSPECT_TOKEN_ERROR"));
+            testRealm.resource().updateRealmEventsConfig(events);
+            // the password grant, for the test only (as DemoSeeder does)
+            var loginClient = testRealm.resource().clients().get(loginClientUuid());
+            ClientRepresentation client = loginClient.toRepresentation();
+            client.setDirectAccessGrantsEnabled(true);
+            loginClient.update(client);
 
-        catalogService.create(realm, new CreateCatalogRequest("prod", "Production", null));
-        catalogService.create(realm, new CreateCatalogRequest("sandbox", "Sandbox", null));
-        productService.create(realm, "prod", new CreateProductRequest(PRODUCT, "Shop repository", null,
-                List.of(new Feature("search", null), new Feature("dig", null)),
-                List.of(new ParamDefinition("region", ParamType.ENUM, true, "eu", List.of("eu", "us")))));
-        orgService.create(realm, new CreateOrgRequest(ORG, Set.of(), null, null));
-        productService.assign(realm, ORG, "prod", PRODUCT,
-                new AssignProductRequest(1000L, QuotaCycle.MONTHLY, List.of("search"), Map.of()));
+            catalogService.create(realm, new CreateCatalogRequest("prod", "Production", null));
+            catalogService.create(realm, new CreateCatalogRequest("sandbox", "Sandbox", null));
+            productService.create(realm, "prod", new CreateProductRequest(PRODUCT, "Shop repository", null,
+                    List.of(new Feature("search", null), new Feature("dig", null)),
+                    List.of(new ParamDefinition("region", ParamType.ENUM, true, "eu", List.of("eu", "us")))));
+            orgService.create(realm, new CreateOrgRequest(ORG, Set.of(), null, null));
+            productService.assign(realm, ORG, "prod", PRODUCT,
+                    new AssignProductRequest(1000L, QuotaCycle.MONTHLY, List.of("search"), Map.of()));
 
-        paulId = member("paul");
-        userGroupService.create(realm, ORG, new CreateUserGroupRequest("ops"));
-        teamService.grantProduct(realm, ORG, "ops", "prod", PRODUCT, new GrantProductRequest(null, 300L, null));
-        userGroupService.addMember(realm, ORG, "ops", paulId);
+            paulId = member("paul");
+            userGroupService.create(realm, ORG, new CreateUserGroupRequest("ops"));
+            teamService.grantProduct(realm, ORG, "ops", "prod", PRODUCT, new GrantProductRequest(null, 300L, null));
+            userGroupService.addMember(realm, ORG, "ops", paulId);
+        });
     }
 
     @AfterEach
-    void afterEach() {
+    void resetScenario() {
+        // the lightweight toggle is global to the login client: several tests turn it on and never off
+        setLightweightTokens(false);
+        // theIntrospectionGivesTheCurrentRights removes Paul from "ops": put him back if needed
+        if (!testRealm.groupPaths(paulId).contains("/" + ORG + "/user-groups/ops")) {
+            userGroupService.addMember(testRealm.name(), ORG, "ops", paulId);
+        }
+        // theIntrospectionOfAServiceAccountToken creates it directly, outside of Orgkeep's service accounts
+        testRealm.resource().clients().findByClientId("batch")
+                .forEach(client -> testRealm.resource().clients().get(client.getId()).remove());
+    }
+
+    @AfterAll
+    void deleteRealm() {
         testRealm.close();
     }
 

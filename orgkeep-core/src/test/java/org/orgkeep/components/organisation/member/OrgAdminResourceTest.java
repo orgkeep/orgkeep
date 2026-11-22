@@ -2,6 +2,7 @@ package org.orgkeep.components.organisation.member;
 
 import org.orgkeep.api.OrgMemberService;
 import org.orgkeep.api.OrgService;
+import org.orgkeep.api.exceptions.OrgNotFoundException;
 import org.orgkeep.api.model.AddMemberRequest;
 import org.orgkeep.api.model.CreateOrgRequest;
 import org.orgkeep.fixtures.TestRealm;
@@ -12,11 +13,13 @@ import io.quarkus.test.security.TestSecurity;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.core.Response;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.keycloak.admin.client.CreatedResponseUtil;
-import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.RealmResource;
 import org.keycloak.representations.idm.GroupRepresentation;
 import org.keycloak.representations.idm.MemberRepresentation;
@@ -38,30 +41,52 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Member management by the org admins: security (only the admins of THIS org), status codes,
  * and the effects in Keycloak (membership, groups, roles).
  * The roles in @TestSecurity use the form produced by OrgRolesAugmentor: "org-{org}:{role}".
+ * <p>
+ * One realm for the whole class (@BeforeAll); the org (with its owner) is rebuilt before every test (@BeforeEach)
+ * and torn down after it (@AfterEach), since members are added, removed, and sometimes granted a realm role.
  */
 @QuarkusTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class OrgAdminResourceTest {
     private static final String ORG = "it-members-org";
     private static final String OWNER_EMAIL = "owner@it-members-org.test";
     private static final String BASE = "/api/organisations/{org}/members";
 
-    @Inject Keycloak keycloak;
     @Inject OrgService orgService;
     @Inject OrgMemberService memberService;
     @InjectMock CurrentRealm currentRealm;
 
     private TestRealm testRealm;
 
+    @BeforeAll
+    void createRealm() {
+        testRealm = TestRealm.create();
+    }
+
     @BeforeEach
-    void beforeEach() {
-        testRealm = TestRealm.create(keycloak);
+    void setUpFixture() {
         Mockito.when(currentRealm.name()).thenReturn(testRealm.name());
         orgService.create(testRealm.name(),
                 new CreateOrgRequest(ORG, Set.of("it-members-org.test"), OWNER_EMAIL, "changeme", "Olivia", "Owner"));
     }
 
+    // Every user of the realm is deleted too: several tests create users directly (dave, boss, sam, ada, frank,
+    // stranger...), and the org only removes its client and groups, not its members.
     @AfterEach
-    void afterEach() {
+    void cleanUp() {
+        for (String org : List.of(ORG, "other-org")) {
+            try {
+                orgService.delete(testRealm.name(), org);
+            } catch (OrgNotFoundException ignored) {
+                // not created by this test
+            }
+        }
+        testRealm.resource().users().list(0, 1000)
+                .forEach(user -> testRealm.resource().users().get(user.getId()).remove());
+    }
+
+    @AfterAll
+    void deleteRealm() {
         testRealm.close();
     }
 

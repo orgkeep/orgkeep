@@ -5,6 +5,7 @@ import org.orgkeep.api.OrgService;
 import org.orgkeep.api.ProductService;
 import org.orgkeep.api.TeamService;
 import org.orgkeep.api.UserGroupService;
+import org.orgkeep.api.exceptions.OrgNotFoundException;
 import org.orgkeep.api.exceptions.ResourceBusyException;
 import org.orgkeep.api.model.AssignProductRequest;
 import org.orgkeep.api.model.CreateCatalogRequest;
@@ -28,10 +29,13 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.security.TestSecurity;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
+import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.keycloak.admin.client.Keycloak;
+import org.junit.jupiter.api.TestInstance;
 import org.keycloak.representations.idm.RoleRepresentation;
 import org.mockito.Mockito;
 
@@ -57,16 +61,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The loops of the realm owner over the organisations a product is assigned to (update, deleteFeature): a busy
  * organisation is skipped, the others are done, and the call answers 409 at the end. Real services against the
- * Keycloak of Dev Services, in a throwaway realm per test. The product "billing" (feature "x", no metered feature) is
+ * Keycloak of Dev Services, in one realm for the whole class. The product "billing" (feature "x", no metered feature) is
  * assigned to the orgs "org-a", "org-b" and "org-c"; the test holds "org-b" from another thread.
+ * <p>
+ * One realm for the whole class: the fixture is rebuilt before every test (@BeforeEach) and fully torn down after
+ * it (@AfterEach), since several tests mutate it (update, deleteFeature) in ways the others must not see.
  */
+@Slf4j
 @QuarkusTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ProductLoopLocksTest {
     private static final String CATALOG = "prod";
     private static final String PRODUCT = "billing";
     private static final String TEAM = "ops";
 
-    @Inject Keycloak keycloak;
     @Inject OrgService orgService;
     @Inject CatalogService catalogService;
     @Inject ProductService productService;
@@ -77,9 +85,13 @@ class ProductLoopLocksTest {
 
     private TestRealm testRealm;
 
+    @BeforeAll
+    void createRealm() {
+        testRealm = TestRealm.create();
+    }
+
     @BeforeEach
-    void beforeEach() {
-        testRealm = TestRealm.create(keycloak);
+    void setUpFixture() {
         catalogService.create(realm(), new CreateCatalogRequest(CATALOG, "Production", null));
         productService.create(realm(), CATALOG, new CreateProductRequest(PRODUCT, "Billing", null,
                 List.of(new Feature("x", null)), List.of()));
@@ -132,7 +144,30 @@ class ProductLoopLocksTest {
     }
 
     @AfterEach
-    void afterEach() {
+    void cleanUp() {
+        try {
+            for (String org : List.of("org-a", "org-b", "org-c")) {
+                try {
+                    orgService.delete(realm(), org);
+                } catch (OrgNotFoundException ignored) {
+                    // not created by this test
+                }
+            }
+            for (var product : productService.list(realm(), CATALOG)) {
+                productService.delete(realm(), CATALOG, product.name());
+            }
+            catalogService.delete(realm(), CATALOG);
+        } catch (RuntimeException e) {
+            // a lock still held by a thread the test did not wait for (a failed assertion skips to a finally that
+            // releases the latch but does not join the thread) would otherwise fail every following test
+            log.warn("Cleanup failed, recreating the test realm", e);
+            testRealm.close();
+            testRealm = TestRealm.create();
+        }
+    }
+
+    @AfterAll
+    void deleteRealm() {
         testRealm.close();
     }
 

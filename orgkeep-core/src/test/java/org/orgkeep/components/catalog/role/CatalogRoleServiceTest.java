@@ -8,6 +8,7 @@ import org.orgkeep.api.ProductService;
 import org.orgkeep.api.RealmProvisioner;
 import org.orgkeep.api.exceptions.CatalogRoleNotFoundException;
 import org.orgkeep.api.exceptions.OperationNotAllowedException;
+import org.orgkeep.api.exceptions.ResourceNotFoundException;
 import org.orgkeep.api.exceptions.RoleNameTakenException;
 import org.orgkeep.api.exceptions.UserNotFoundException;
 import org.orgkeep.api.model.AddMemberRequest;
@@ -19,13 +20,15 @@ import org.orgkeep.api.model.CreateProductRequest;
 import org.orgkeep.api.model.OrgMember;
 import org.orgkeep.api.model.RoleHolder;
 import org.orgkeep.api.model.UpdateCatalogRoleRequest;
+import org.orgkeep.fixtures.RequestScope;
 import org.orgkeep.fixtures.TestRealm;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.keycloak.admin.client.Keycloak;
+import org.junit.jupiter.api.TestInstance;
 import org.keycloak.representations.AccessToken;
 
 import java.util.List;
@@ -38,14 +41,17 @@ import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Catalog roles against the Keycloak of Dev Services, in a throwaway realm per test, down to the access token.
+ * Catalog roles against the Keycloak of Dev Services, in one realm for the whole class, down to the access token.
+ * <p>
+ * The catalog, the org and the login client are created once (@BeforeAll); the catalog roles, product and users
+ * a test creates under fixed names are deleted after each test (@AfterEach).
  */
 @QuarkusTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class CatalogRoleServiceTest {
     private static final String CATALOG = "prod";
     private static final String ORG = "acme";
 
-    @Inject Keycloak keycloak;
     @Inject CatalogRoleService catalogRoleService;
     @Inject CatalogService catalogService;
     @Inject ProductService productService;
@@ -55,17 +61,39 @@ class CatalogRoleServiceTest {
 
     private TestRealm testRealm;
 
-    @BeforeEach
-    void beforeEach() {
-        testRealm = TestRealm.create(keycloak);
-        // the login client, with fullScopeAllowed=false, as for the realm of the app
-        realmProvisioner.ensureDefaults(testRealm.name());
-        catalogService.create(testRealm.name(), new CreateCatalogRequest(CATALOG, "Production", null));
-        orgService.create(testRealm.name(), new CreateOrgRequest(ORG, Set.of(), null, null));
+    @BeforeAll
+    void createRealm() {
+        testRealm = TestRealm.create();
+        RequestScope.run(() -> {
+            // the login client, with fullScopeAllowed=false, as for the realm of the app
+            realmProvisioner.ensureDefaults(testRealm.name());
+            catalogService.create(testRealm.name(), new CreateCatalogRequest(CATALOG, "Production", null));
+            orgService.create(testRealm.name(), new CreateOrgRequest(ORG, Set.of(), null, null));
+        });
     }
 
     @AfterEach
-    void afterEach() {
+    void cleanUp() {
+        for (String role : List.of("stats", "anonymous")) {
+            try {
+                catalogRoleService.delete(testRealm.name(), CATALOG, role);
+            } catch (ResourceNotFoundException ignored) {
+                // not created by this test
+            }
+        }
+        try {
+            productService.delete(testRealm.name(), CATALOG, "billing");
+        } catch (ResourceNotFoundException ignored) {
+            // not created by this test
+        }
+        testRealm.resource().users().searchByEmail("bot@acme.test", true)
+                .forEach(user -> testRealm.resource().users().get(user.getId()).remove());
+        testRealm.resource().users().searchByUsername("outsider", true)
+                .forEach(user -> testRealm.resource().users().get(user.getId()).remove());
+    }
+
+    @AfterAll
+    void deleteRealm() {
         testRealm.close();
     }
 

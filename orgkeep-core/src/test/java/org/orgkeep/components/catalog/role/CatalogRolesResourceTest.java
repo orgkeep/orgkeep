@@ -4,10 +4,12 @@ import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.security.TestSecurity;
 import jakarta.inject.Inject;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.keycloak.admin.client.Keycloak;
+import org.junit.jupiter.api.TestInstance;
 import org.mockito.Mockito;
 import org.orgkeep.api.CatalogRoleService;
 import org.orgkeep.api.CatalogService;
@@ -17,6 +19,7 @@ import org.orgkeep.api.model.CreateCatalogRequest;
 import org.orgkeep.api.model.CreateCatalogRoleRequest;
 import org.orgkeep.api.model.CreateOrgRequest;
 import org.orgkeep.api.model.CreateServiceAccountRequest;
+import org.orgkeep.fixtures.RequestScope;
 import org.orgkeep.fixtures.TestRealm;
 import org.orgkeep.web.CurrentRealm;
 
@@ -26,13 +29,18 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.nullValue;
 
-/** The reserved catalog roles given directly, over REST: realm owner only, and to a service account too. */
+/**
+ * The reserved catalog roles given directly, over REST: realm owner only, and to a service account too.
+ * <p>
+ * One realm and one fixture for the whole class (@BeforeAll): no test here destroys the catalog, the org, the
+ * role or the service account, so it does not need rebuilding between tests.
+ */
 @QuarkusTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class CatalogRolesResourceTest {
     private static final String HOLDERS = "/api/admin/catalogs/prod/roles/anonymous/users";
     private static final String ONE = HOLDERS + "/{userId}";
 
-    @Inject Keycloak keycloak;
     @Inject OrgService orgService;
     @Inject CatalogService catalogService;
     @Inject CatalogRoleService catalogRoleService;
@@ -42,19 +50,32 @@ class CatalogRolesResourceTest {
     private TestRealm testRealm;
     private String batchUserId;
 
-    @BeforeEach
-    void beforeEach() {
-        testRealm = TestRealm.create(keycloak);
-        Mockito.when(currentRealm.name()).thenReturn(testRealm.name());
-        catalogService.create(testRealm.name(), new CreateCatalogRequest("prod", "Production", null));
-        catalogRoleService.create(testRealm.name(), "prod", new CreateCatalogRoleRequest("anonymous", null, null, false));
-        orgService.create(testRealm.name(), new CreateOrgRequest("acme", Set.of(), null, null));
-        batchUserId = serviceAccountService.create(testRealm.name(), "acme",
-                new CreateServiceAccountRequest("batch", null, null)).serviceAccount().userId();
+    @BeforeAll
+    void createRealm() {
+        testRealm = TestRealm.create();
+        RequestScope.run(() -> {
+            catalogService.create(testRealm.name(), new CreateCatalogRequest("prod", "Production", null));
+            catalogRoleService.create(testRealm.name(), "prod", new CreateCatalogRoleRequest("anonymous", null, null, false));
+            orgService.create(testRealm.name(), new CreateOrgRequest("acme", Set.of(), null, null));
+            batchUserId = serviceAccountService.create(testRealm.name(), "acme",
+                    new CreateServiceAccountRequest("batch", null, null)).serviceAccount().userId();
+        });
     }
 
+    @BeforeEach
+    void stubCurrentRealm() {
+        Mockito.when(currentRealm.name()).thenReturn(testRealm.name());
+    }
+
+    // userOfAConsoleClientGets409 creates it directly
     @AfterEach
-    void afterEach() {
+    void removeConsoleClient() {
+        testRealm.resource().clients().findByClientId("console-client")
+                .forEach(client -> testRealm.resource().clients().get(client.getId()).remove());
+    }
+
+    @AfterAll
+    void deleteRealm() {
         testRealm.close();
     }
 

@@ -9,6 +9,7 @@ import org.orgkeep.api.TeamService;
 import org.orgkeep.api.UserGroupService;
 import org.orgkeep.api.exceptions.MemberNotFoundException;
 import org.orgkeep.api.exceptions.OperationNotAllowedException;
+import org.orgkeep.api.exceptions.OrgNotFoundException;
 import org.orgkeep.api.exceptions.ResourceBusyException;
 import org.orgkeep.api.model.AddMemberRequest;
 import org.orgkeep.api.model.AssignProductRequest;
@@ -39,11 +40,14 @@ import io.quarkus.test.security.oidc.OidcSecurity;
 import io.restassured.http.ContentType;
 import io.restassured.response.Response;
 import jakarta.inject.Inject;
+import lombok.extern.slf4j.Slf4j;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.keycloak.admin.client.Keycloak;
+import org.junit.jupiter.api.TestInstance;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.CredentialRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
@@ -85,14 +89,19 @@ import static org.mockito.ArgumentMatchers.eq;
  * <p>
  * The roles in @TestSecurity use the form produced by OrgRolesAugmentor: "org-{org}:{role}". @OidcSecurity gives the
  * principal the "sub" claim the resource reads as the caller.
+ * <p>
+ * One realm for the whole class (@BeforeAll); the fixture itself (the org, Paul, a catalog and a team) is rebuilt
+ * before every test (@BeforeEach) and torn down after it (@AfterEach), since members are disabled, removed, and
+ * other orgs ("globex", "beta") are sometimes created.
  */
+@Slf4j
 @QuarkusTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class MemberStatusTest {
     private static final String ORG = "acme";
     private static final String PASSWORD = "password";
     private static final String URL = "/api/organisations/{org}/members/{userId}/enabled";
 
-    @Inject Keycloak keycloak;
     @Inject RealmProvisioner realmProvisioner;
     @Inject CatalogService catalogService;
     @Inject ProductService productService;
@@ -114,9 +123,13 @@ class MemberStatusTest {
     private String paulId;
     private CatalogCredentials prod;
 
+    @BeforeAll
+    void createRealm() {
+        testRealm = TestRealm.create();
+    }
+
     @BeforeEach
-    void beforeEach() {
-        testRealm = TestRealm.create(keycloak);
+    void setUpFixture() {
         Mockito.when(currentRealm.name()).thenReturn(testRealm.name());
         realmProvisioner.ensureDefaults(testRealm.name());
         enablePasswordGrant();
@@ -144,8 +157,36 @@ class MemberStatusTest {
         userGroupService.addMember(realm, ORG, "ops", paulId);
     }
 
+    // Every org and user of the realm is deleted, and the catalog client and scope removed directly (the service
+    // refuses to delete a catalog that still has products): the next test rebuilds the fixture from a clean realm.
     @AfterEach
-    void afterEach() {
+    void cleanUp() {
+        try {
+            for (String org : List.of(ORG, "globex", "beta")) {
+                try {
+                    orgService.delete(testRealm.name(), org);
+                } catch (OrgNotFoundException ignored) {
+                    // not created by this test
+                }
+            }
+            testRealm.resource().clients().findByClientId("prod")
+                    .forEach(client -> testRealm.resource().clients().get(client.getId()).remove());
+            testRealm.resource().clientScopes().findAll().stream()
+                    .filter(scope -> "prod".equals(scope.getName()))
+                    .forEach(scope -> testRealm.resource().clientScopes().get(scope.getId()).remove());
+            testRealm.resource().users().list(0, 1000)
+                    .forEach(user -> testRealm.resource().users().get(user.getId()).remove());
+        } catch (RuntimeException e) {
+            // a spy stub armed by a failed test (Quarkus resets @InjectSpy after this method, not before) or a lock
+            // still held by a thread the test did not wait for would otherwise fail every following test
+            log.warn("Cleanup failed, recreating the test realm", e);
+            testRealm.close();
+            testRealm = TestRealm.create();
+        }
+    }
+
+    @AfterAll
+    void deleteRealm() {
         testRealm.close();
     }
 

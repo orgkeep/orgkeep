@@ -10,6 +10,7 @@ import org.orgkeep.api.ProductService;
 import org.orgkeep.api.RealmProvisioner;
 import org.orgkeep.api.TeamService;
 import org.orgkeep.api.UserGroupService;
+import org.orgkeep.api.exceptions.OrgNotFoundException;
 import org.orgkeep.api.model.AddMemberRequest;
 import org.orgkeep.api.model.AssignProductRequest;
 import org.orgkeep.api.model.CatalogCredentials;
@@ -31,10 +32,12 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.security.TestSecurity;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.keycloak.admin.client.Keycloak;
+import org.junit.jupiter.api.TestInstance;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.CredentialRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
@@ -70,14 +73,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * at 200 a day; the team "sales" gives every feature bought; Paul is in sales. Gus is a member of another org, globex.
  * The calls to the preview use @TestSecurity (the caller and its roles, without a token) and a mocked CurrentRealm
  * (the throwaway realm of the test).
+ * <p>
+ * One realm for the whole class (@BeforeAll); the fixture itself is rebuilt before every test (@BeforeEach) and
+ * fully torn down after it (@AfterEach), since some tests change the login client (default catalogs, lightweight
+ * tokens) in ways that others must not see.
  */
 @QuarkusTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class TokenPreviewTest {
     private static final String ORG = "acme";
     private static final String PASSWORD = "password";
     private static final String PREVIEW = "/api/admin/organisations/{org}/members/{userId}/token-preview";
 
-    @Inject Keycloak keycloak;
     @Inject RealmProvisioner realmProvisioner;
     @Inject CatalogService catalogService;
     @Inject LoginClientService loginClientService;
@@ -95,9 +102,13 @@ class TokenPreviewTest {
     private String paulId;
     private String gusId;
 
+    @BeforeAll
+    void createRealm() {
+        testRealm = TestRealm.create();
+    }
+
     @BeforeEach
-    void beforeEach() {
-        testRealm = TestRealm.create(keycloak);
+    void setUpFixture() {
         String realm = testRealm.name();
         Mockito.when(currentRealm.name()).thenReturn(realm);
         // the login client of the realm, with the password grant turned on for the real token, as DemoSeeder does
@@ -119,8 +130,31 @@ class TokenPreviewTest {
         userGroupService.addMember(realm, ORG, "sales", paulId);
     }
 
+    // Every org, user, and the catalog client and scope are deleted directly (the service refuses to delete a
+    // catalog that still has products), and the login client is reset: the next test rebuilds the fixture from a
+    // clean realm.
     @AfterEach
-    void afterEach() {
+    void cleanUp() {
+        for (String org : List.of(ORG, "globex")) {
+            try {
+                orgService.delete(testRealm.name(), org);
+            } catch (OrgNotFoundException ignored) {
+                // not created by this test
+            }
+        }
+        testRealm.resource().clients().findByClientId("prod")
+                .forEach(client -> testRealm.resource().clients().get(client.getId()).remove());
+        testRealm.resource().clientScopes().findAll().stream()
+                .filter(scope -> "prod".equals(scope.getName()))
+                .forEach(scope -> testRealm.resource().clientScopes().get(scope.getId()).remove());
+        testRealm.resource().users().list(0, 1000)
+                .forEach(user -> testRealm.resource().users().get(user.getId()).remove());
+        loginClientService.update(testRealm.name(),
+                new UpdateLoginClientRequest(List.of(), List.of(), List.of(), List.of(), false));
+    }
+
+    @AfterAll
+    void deleteRealm() {
         testRealm.close();
     }
 

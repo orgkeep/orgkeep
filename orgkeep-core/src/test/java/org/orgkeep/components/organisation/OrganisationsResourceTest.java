@@ -1,6 +1,8 @@
 package org.orgkeep.components.organisation;
 
 import org.orgkeep.api.OrgMemberService;
+import org.orgkeep.api.OrgService;
+import org.orgkeep.api.exceptions.OrgNotFoundException;
 import org.orgkeep.api.model.AddMemberRequest;
 import org.orgkeep.api.model.CreateOrgRequest;
 import org.orgkeep.api.model.UpdateOrgStatusRequest;
@@ -16,14 +18,17 @@ import io.quarkus.test.junit.mockito.InjectSpy;
 import io.quarkus.test.security.TestSecurity;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.keycloak.admin.client.Keycloak;
 import org.mockito.Mockito;
 
+import java.util.List;
 import java.util.Set;
 
 import static io.restassured.RestAssured.given;
@@ -40,15 +45,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>
  * - @TestSecurity runs a test as a given user with given roles, without any real token.
  * - @InjectMock replaces the CurrentRealm bean by a Mockito mock for this test class,
- *   so that every test works in its own throwaway realm instead of the bootstrapped one.
+ *   so that the whole class works in its own throwaway realm instead of the bootstrapped one.
+ * <p>
+ * One realm for the whole class (created once in @BeforeAll, deleted once in @AfterAll): creating and deleting a
+ * realm is the most expensive part of these tests. The org this class exercises (ORG) is therefore deleted after
+ * each test (@AfterEach) so every test still finds it absent at the start, as it did with a fresh realm each time.
+ * Quarkus resets @InjectMock / @InjectSpy before each test regardless of the test instance lifecycle, so the
+ * CurrentRealm stub is re-applied in @BeforeEach.
  */
 @QuarkusTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class OrganisationsResourceTest {
     private static final String ORG = "it-rest-org";
     // quarkus.rest.path=/api: RestAssured only knows the root path of the HTTP server, the prefix is in the URL
     private static final String BASE = "/api/admin/organisations";
 
-    @Inject Keycloak keycloak;
+    @Inject OrgService orgService;
     @Inject OrgMemberService memberService;
     // a spy on the real bean for this test class: calls go through, and a test can check that nothing was locked
     @InjectSpy InMemoryResourceLocks locks;
@@ -56,14 +68,36 @@ class OrganisationsResourceTest {
 
     private TestRealm testRealm;
 
+    @BeforeAll
+    void createRealm() {
+        testRealm = TestRealm.create();
+    }
+
     @BeforeEach
-    void beforeEach() {
-        testRealm = TestRealm.create(keycloak);
+    void stubCurrentRealm() {
         Mockito.when(currentRealm.name()).thenReturn(testRealm.name());
     }
 
+    // Deletes the orgs this class creates (ORG and, for createWithAnOwnerOfAnotherOrgReturns409WithoutNamingIt,
+    // "first-org"), and every user of the realm: deleting an org only removes its client and groups, not its
+    // members, and createWithAPrivilegedOwnerReturns409's "boss" is never a member of ORG (the add is refused
+    // before anything is created) so it would otherwise never be cleaned up. The next test finds the realm as
+    // clean as it would with a fresh realm per test.
     @AfterEach
-    void afterEach() {
+    void cleanUp() {
+        for (String org : List.of(ORG, "first-org")) {
+            try {
+                orgService.delete(testRealm.name(), org);
+            } catch (OrgNotFoundException ignored) {
+                // not created by this test
+            }
+        }
+        testRealm.resource().users().list(0, 1000)
+                .forEach(user -> testRealm.resource().users().get(user.getId()).remove());
+    }
+
+    @AfterAll
+    void deleteRealm() {
         testRealm.close();
     }
 

@@ -6,10 +6,12 @@ import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.keycloak.admin.client.Keycloak;
+import org.junit.jupiter.api.TestInstance;
 import org.keycloak.representations.idm.RoleRepresentation;
 import org.orgkeep.api.CatalogRoleService;
 import org.orgkeep.api.CatalogService;
@@ -18,6 +20,7 @@ import org.orgkeep.api.ProductService;
 import org.orgkeep.api.RealmProvisioner;
 import org.orgkeep.api.ServiceAccountService;
 import org.orgkeep.api.ServiceAccountSettingsService;
+import org.orgkeep.api.exceptions.OrgNotFoundException;
 import org.orgkeep.api.model.AssignProductRequest;
 import org.orgkeep.api.model.CatalogCredentials;
 import org.orgkeep.api.model.CreateCatalogRequest;
@@ -53,14 +56,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>
  * Part 1 only: a service account has no team yet, so it gets a catalog role granted directly on its user, which is
  * what puts the catalog in the audience of its token (a client only introspects the tokens it is the audience of).
+ * <p>
+ * One realm for the whole class (@BeforeAll); the fixture is rebuilt before every test (@BeforeEach) and torn
+ * down after it (@AfterEach), since some tests delete or disable the service account, or add a catalog.
  */
 @Slf4j
 @QuarkusTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ServiceAccountTokenTest {
     private static final String ORG = "acme";
     private static final String CLIENT_ID = "org-acme.billing";
 
-    @Inject Keycloak keycloak;
     @Inject RealmProvisioner realmProvisioner;
     @Inject OrgService orgService;
     @Inject CatalogService catalogService;
@@ -75,9 +81,13 @@ class ServiceAccountTokenTest {
     private final ObjectMapper json = new ObjectMapper();
     private TestRealm testRealm;
 
+    @BeforeAll
+    void createRealm() {
+        testRealm = TestRealm.create();
+    }
+
     @BeforeEach
-    void beforeEach() {
-        testRealm = TestRealm.create(keycloak);
+    void setUpFixture() {
         realmProvisioner.ensureDefaults(realm());
         catalogService.create(realm(), new CreateCatalogRequest("prod", "Production", null));
         catalogService.create(realm(), new CreateCatalogRequest("sandbox", "Sandbox", null));
@@ -88,7 +98,25 @@ class ServiceAccountTokenTest {
     }
 
     @AfterEach
-    void afterEach() {
+    void cleanUp() {
+        try {
+            orgService.delete(realm(), ORG);
+        } catch (OrgNotFoundException ignored) {
+            // not created by this test
+        }
+        for (var catalog : catalogService.list(realm())) {
+            for (var product : productService.list(realm(), catalog.name())) {
+                productService.delete(realm(), catalog.name(), product.name());
+            }
+            for (var role : catalogRoleService.list(realm(), catalog.name())) {
+                catalogRoleService.delete(realm(), catalog.name(), role.name());
+            }
+            catalogService.delete(realm(), catalog.name());
+        }
+    }
+
+    @AfterAll
+    void deleteRealm() {
         testRealm.close();
     }
 

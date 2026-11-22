@@ -5,10 +5,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.keycloak.admin.client.Keycloak;
+import org.junit.jupiter.api.TestInstance;
 import org.keycloak.representations.AccessToken;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.orgkeep.api.CatalogRoleService;
@@ -21,6 +23,7 @@ import org.orgkeep.api.ServiceAccountService;
 import org.orgkeep.api.TeamService;
 import org.orgkeep.api.UserGroupService;
 import org.orgkeep.api.exceptions.OperationNotAllowedException;
+import org.orgkeep.api.exceptions.OrgNotFoundException;
 import org.orgkeep.api.model.AddMemberRequest;
 import org.orgkeep.api.model.AssignProductRequest;
 import org.orgkeep.api.model.CreateCatalogRequest;
@@ -64,12 +67,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Setup: catalog "prod", a simple product "shop" (org quota 1000 a month) and a metered one "billing" (search bought,
  * 200 a day), assigned to acme. The team "ops" gives shop with a team quota of 300, the team "accounting" gives billing.
  * Paul, a person, is in both, the service account "batch" too: their tokens must carry the same catalog claims.
+ * <p>
+ * One realm for the whole class (@BeforeAll); the fixture is rebuilt before every test (@BeforeEach) and torn
+ * down after it (@AfterEach), since some tests move the service account out of its teams.
  */
 @QuarkusTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ServiceAccountTeamsTest {
     private static final String ORG = "acme";
 
-    @Inject Keycloak keycloak;
     @Inject RealmProvisioner realmProvisioner;
     @Inject CatalogService catalogService;
     @Inject CatalogRoleService catalogRoleService;
@@ -89,9 +95,13 @@ class ServiceAccountTeamsTest {
     private String paulId;
     private ServiceAccountCreated batch;
 
+    @BeforeAll
+    void createRealm() {
+        testRealm = TestRealm.create();
+    }
+
     @BeforeEach
-    void beforeEach() {
-        testRealm = TestRealm.create(keycloak);
+    void setUpFixture() {
         String realm = testRealm.name();
         realmProvisioner.ensureDefaults(realm);
         catalogService.create(realm, new CreateCatalogRequest("prod", "Production", null));
@@ -116,7 +126,25 @@ class ServiceAccountTeamsTest {
     }
 
     @AfterEach
-    void afterEach() {
+    void cleanUp() {
+        try {
+            orgService.delete(realm(), ORG);
+        } catch (OrgNotFoundException ignored) {
+            // not created by this test
+        }
+        testRealm.resource().clients().findByClientId("prod")
+                .forEach(client -> testRealm.resource().clients().get(client.getId()).remove());
+        testRealm.resource().clientScopes().findAll().stream()
+                .filter(scope -> "prod".equals(scope.getName()))
+                .forEach(scope -> testRealm.resource().clientScopes().get(scope.getId()).remove());
+        testRealm.resource().clients().findByClientId("console-client")
+                .forEach(client -> testRealm.resource().clients().get(client.getId()).remove());
+        testRealm.resource().users().list(0, 1000)
+                .forEach(user -> testRealm.resource().users().get(user.getId()).remove());
+    }
+
+    @AfterAll
+    void deleteRealm() {
         testRealm.close();
     }
 

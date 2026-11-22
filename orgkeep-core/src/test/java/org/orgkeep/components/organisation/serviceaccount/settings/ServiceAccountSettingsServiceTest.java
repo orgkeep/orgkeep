@@ -3,10 +3,11 @@ package org.orgkeep.components.organisation.serviceaccount.settings;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
 import jakarta.inject.Inject;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.keycloak.admin.client.Keycloak;
+import org.junit.jupiter.api.TestInstance;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.ClientScopeRepresentation;
 import org.keycloak.representations.idm.RealmRepresentation;
@@ -32,6 +33,7 @@ import org.orgkeep.components.lock.HeldLocks;
 import org.orgkeep.components.lock.LockMode;
 import org.orgkeep.components.lock.LockRequest;
 import org.orgkeep.components.lock.ResourceLocks;
+import org.orgkeep.fixtures.RequestScope;
 import org.orgkeep.fixtures.TestRealm;
 import org.orgkeep.repository.keycloak.KeycloakClients;
 
@@ -57,15 +59,18 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 
 /**
- * What the settings write in Keycloak (a real one, Dev Services), in a throwaway realm per test: the realm attribute,
+ * What the settings write in Keycloak (a real one, Dev Services), in one realm for the whole class: the realm attribute,
  * the client attribute and the marker scope of a service account, the order of the writes, the locks.
+ * <p>
+ * The org, the catalog and the product are created once (@BeforeAll); the service accounts a test creates and the
+ * realm default are reset after each test (@AfterEach).
  */
 @QuarkusTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ServiceAccountSettingsServiceTest {
     private static final String ORG = "acme";
     private static final Set<String> BASE_SCOPES = Set.of("basic", "roles", "service_account", "organization", "prod");
 
-    @Inject Keycloak keycloak;
     @Inject OrgService orgService;
     @Inject CatalogService catalogService;
     @Inject ProductService productService;
@@ -77,17 +82,29 @@ class ServiceAccountSettingsServiceTest {
 
     private TestRealm testRealm;
 
-    @BeforeEach
-    void beforeEach() {
-        testRealm = TestRealm.create(keycloak);
-        orgService.create(realm(), new CreateOrgRequest(ORG, Set.of(), null, null));
-        catalogService.create(realm(), new CreateCatalogRequest("prod", "Production", null));
-        productService.create(realm(), "prod", new CreateProductRequest("billing", "Billing", null));
-        productService.assign(realm(), ORG, "prod", "billing", new AssignProductRequest(1000L, QuotaCycle.MONTHLY));
+    @BeforeAll
+    void createRealm() {
+        testRealm = TestRealm.create();
+        RequestScope.run(() -> {
+            orgService.create(realm(), new CreateOrgRequest(ORG, Set.of(), null, null));
+            catalogService.create(realm(), new CreateCatalogRequest("prod", "Production", null));
+            productService.create(realm(), "prod", new CreateProductRequest("billing", "Billing", null));
+            productService.assign(realm(), ORG, "prod", "billing", new AssignProductRequest(1000L, QuotaCycle.MONTHLY));
+        });
     }
 
     @AfterEach
-    void afterEach() {
+    void cleanUp() {
+        // putWorksWhileTheServiceAccountAndTheOrgAreDisabled leaves the org disabled
+        orgService.setEnabled(realm(), ORG, true);
+        settingsService.updateRealmDefaults(realm(), request(false));
+        for (var serviceAccount : serviceAccountService.list(realm(), ORG)) {
+            serviceAccountService.delete(realm(), ORG, serviceAccount.name());
+        }
+    }
+
+    @AfterAll
+    void deleteRealm() {
         testRealm.close();
     }
 

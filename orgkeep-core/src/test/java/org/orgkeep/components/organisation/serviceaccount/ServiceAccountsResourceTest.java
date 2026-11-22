@@ -5,14 +5,17 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.security.TestSecurity;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.keycloak.admin.client.Keycloak;
+import org.junit.jupiter.api.TestInstance;
 import org.mockito.Mockito;
 import org.orgkeep.api.CatalogService;
 import org.orgkeep.api.OrgService;
 import org.orgkeep.api.ProductService;
+import org.orgkeep.api.ServiceAccountService;
 import org.orgkeep.api.ServiceAccountSettingsService;
 import org.orgkeep.api.model.UpdateServiceAccountSettingsRequest;
 import org.orgkeep.api.model.AssignProductRequest;
@@ -23,6 +26,7 @@ import org.orgkeep.api.model.CreateServiceAccountRequest;
 import org.orgkeep.api.model.QuotaCycle;
 import org.orgkeep.api.model.UpdateServiceAccountRequest;
 import org.orgkeep.api.model.UpdateServiceAccountStatusRequest;
+import org.orgkeep.fixtures.RequestScope;
 import org.orgkeep.fixtures.TestRealm;
 import org.orgkeep.web.CurrentRealm;
 
@@ -38,36 +42,57 @@ import static org.hamcrest.Matchers.notNullValue;
 /**
  * Service accounts of an org over REST: who may call, status codes, and that the secret only shows when generated.
  * The roles in @TestSecurity use the form produced by OrgRolesAugmentor: "org-{org}:{role}".
+ * <p>
+ * The orgs, catalogs and product are created once (@BeforeAll); the service accounts a test creates, the status
+ * of "acme" and the realm default of lightweight tokens are reset after each test (@AfterEach).
  */
 @QuarkusTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ServiceAccountsResourceTest {
     private static final String BASE = "/api/organisations/{org}/service-accounts";
     private static final String ONE = BASE + "/{sa}";
     private static final String ADMIN = "org-acme:org-admin";
 
-    @Inject Keycloak keycloak;
     @Inject OrgService orgService;
     @Inject CatalogService catalogService;
     @Inject ProductService productService;
+    @Inject ServiceAccountService serviceAccountService;
     @Inject ServiceAccountSettingsService settingsService;
     @InjectMock CurrentRealm currentRealm;
 
     private TestRealm testRealm;
 
+    @BeforeAll
+    void createRealm() {
+        testRealm = TestRealm.create();
+        RequestScope.run(() -> {
+            orgService.create(testRealm.name(), new CreateOrgRequest("acme", Set.of(), null, null));
+            orgService.create(testRealm.name(), new CreateOrgRequest("globex", Set.of(), null, null));
+            catalogService.create(testRealm.name(), new CreateCatalogRequest("prod", "Production", null));
+            catalogService.create(testRealm.name(), new CreateCatalogRequest("sandbox", "Sandbox", null));
+            productService.create(testRealm.name(), "prod", new CreateProductRequest("billing", "Billing", null));
+            productService.assign(testRealm.name(), "acme", "prod", "billing", new AssignProductRequest(10L, QuotaCycle.DAILY));
+        });
+    }
+
     @BeforeEach
-    void beforeEach() {
-        testRealm = TestRealm.create(keycloak);
+    void stubCurrentRealm() {
         Mockito.when(currentRealm.name()).thenReturn(testRealm.name());
-        orgService.create(testRealm.name(), new CreateOrgRequest("acme", Set.of(), null, null));
-        orgService.create(testRealm.name(), new CreateOrgRequest("globex", Set.of(), null, null));
-        catalogService.create(testRealm.name(), new CreateCatalogRequest("prod", "Production", null));
-        catalogService.create(testRealm.name(), new CreateCatalogRequest("sandbox", "Sandbox", null));
-        productService.create(testRealm.name(), "prod", new CreateProductRequest("billing", "Billing", null));
-        productService.assign(testRealm.name(), "acme", "prod", "billing", new AssignProductRequest(10L, QuotaCycle.DAILY));
     }
 
     @AfterEach
-    void afterEach() {
+    void cleanUp() {
+        settingsService.updateRealmDefaults(testRealm.name(), new UpdateServiceAccountSettingsRequest(false));
+        for (String org : List.of("acme", "globex")) {
+            orgService.setEnabled(testRealm.name(), org, true);
+            for (var serviceAccount : serviceAccountService.list(testRealm.name(), org)) {
+                serviceAccountService.delete(testRealm.name(), org, serviceAccount.name());
+            }
+        }
+    }
+
+    @AfterAll
+    void deleteRealm() {
         testRealm.close();
     }
 

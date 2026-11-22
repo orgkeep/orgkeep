@@ -3,10 +3,11 @@ package org.orgkeep.components.organisation.serviceaccount;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
 import jakarta.inject.Inject;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.keycloak.admin.client.Keycloak;
+import org.junit.jupiter.api.TestInstance;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.ClientScopeRepresentation;
 import org.keycloak.representations.idm.GroupRepresentation;
@@ -19,6 +20,7 @@ import org.orgkeep.api.UserGroupService;
 import org.orgkeep.api.ProductService;
 import org.orgkeep.api.ServiceAccountService;
 import org.orgkeep.api.exceptions.InvalidRequestException;
+import org.orgkeep.api.exceptions.OrgNotFoundException;
 import org.orgkeep.api.exceptions.ServiceAccountAlreadyExistsException;
 import org.orgkeep.api.exceptions.ServiceAccountNotFoundException;
 import org.orgkeep.api.exceptions.MemberNotFoundException;
@@ -34,6 +36,7 @@ import org.orgkeep.api.model.QuotaCycle;
 import org.orgkeep.api.model.ServiceAccount;
 import org.orgkeep.api.model.ServiceAccountCreated;
 import org.orgkeep.api.model.UpdateServiceAccountRequest;
+import org.orgkeep.fixtures.RequestScope;
 import org.orgkeep.fixtures.TestRealm;
 import org.orgkeep.repository.keycloak.KeycloakClients;
 import org.orgkeep.repository.keycloak.KeycloakOrgs;
@@ -52,14 +55,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 
 /**
- * What the service writes in Keycloak (a real one, Dev Services), in a throwaway realm per test: the client, its scopes
+ * What the service writes in Keycloak (a real one, Dev Services), in one realm for the whole class: the client, its scopes
  * and mapper, the group membership, the rollback. The grants of the tokens are in ServiceAccountTokenTest.
+ * <p>
+ * The org, the catalogs and the product are created once (@BeforeAll); the service accounts, members and extra
+ * clients a test creates are deleted after each test (@AfterEach).
  */
 @QuarkusTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ServiceAccountServiceTest {
     private static final String ORG = "acme";
 
-    @Inject Keycloak keycloak;
     @Inject OrgService orgService;
     @Inject CatalogService catalogService;
     @Inject ProductService productService;
@@ -73,18 +79,42 @@ class ServiceAccountServiceTest {
 
     private TestRealm testRealm;
 
-    @BeforeEach
-    void beforeEach() {
-        testRealm = TestRealm.create(keycloak);
-        orgService.create(realm(), new CreateOrgRequest(ORG, Set.of(), null, null));
-        catalogService.create(realm(), new CreateCatalogRequest("prod", "Production", null));
-        catalogService.create(realm(), new CreateCatalogRequest("sandbox", "Sandbox", null));
-        productService.create(realm(), "prod", new CreateProductRequest("billing", "Billing", null));
-        productService.assign(realm(), ORG, "prod", "billing", new AssignProductRequest(1000L, QuotaCycle.MONTHLY));
+    @BeforeAll
+    void createRealm() {
+        testRealm = TestRealm.create();
+        RequestScope.run(() -> {
+            orgService.create(realm(), new CreateOrgRequest(ORG, Set.of(), null, null));
+            catalogService.create(realm(), new CreateCatalogRequest("prod", "Production", null));
+            catalogService.create(realm(), new CreateCatalogRequest("sandbox", "Sandbox", null));
+            productService.create(realm(), "prod", new CreateProductRequest("billing", "Billing", null));
+            productService.assign(realm(), ORG, "prod", "billing", new AssignProductRequest(1000L, QuotaCycle.MONTHLY));
+        });
     }
 
+    // Deletes the raw clients directly, not through the service: a service account that left the group of the org
+    // (aClientWithTheAttributeButNoMembershipIsNotAServiceAccount) is invisible to serviceAccountService.list, and
+    // would otherwise leak into the next test.
     @AfterEach
-    void afterEach() {
+    void cleanUp() {
+        testRealm.resource().clients().findAll().stream()
+                .filter(client -> client.getClientId() != null
+                        && (client.getClientId().startsWith("org-acme.") || client.getClientId().startsWith("org-globex.")))
+                .forEach(client -> testRealm.resource().clients().get(client.getId()).remove());
+        testRealm.resource().clients().findByClientId("console-client")
+                .forEach(client -> testRealm.resource().clients().get(client.getId()).remove());
+        // paul@acme.test is added by two tests: removing it from the org (not deleting the user) would leave it
+        // behind for the second one, which would then reuse it instead of creating it, a different code path
+        testRealm.resource().users().list(0, 1000)
+                .forEach(user -> testRealm.resource().users().get(user.getId()).remove());
+        try {
+            orgService.delete(realm(), "globex");
+        } catch (OrgNotFoundException ignored) {
+            // not created by this test
+        }
+    }
+
+    @AfterAll
+    void deleteRealm() {
         testRealm.close();
     }
 

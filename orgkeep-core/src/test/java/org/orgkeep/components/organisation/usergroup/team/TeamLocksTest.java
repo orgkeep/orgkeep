@@ -31,7 +31,9 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.keycloak.representations.idm.GroupRepresentation;
 import org.mockito.Mockito;
+import org.mockito.stubbing.Answer;
 
 import java.util.HashMap;
 import java.util.List;
@@ -337,15 +339,19 @@ class TeamLocksTest {
         return testRealm.resource().getGroupByPath("/" + ORG + "/user-groups/" + team).getAttributes();
     }
 
-    /** Holds the first write of a group attribute until the latch is released (later calls are not held). */
+    /**
+     * Holds the first write of a group attribute until the latch is released (later calls are not held). Stubbed
+     * on the representation-based overload of {@code replaceAttributes} (#57): every held write exercised by these
+     * tests goes through it now, be it a team write or the first write of a renegotiation (the assignment group).
+     */
     private void holdTheFirstWrite(CountDownLatch inside, CountDownLatch release) {
-        Mockito.doAnswer(invocation -> {
-                    inside.countDown();
-                    release.await();
-                    return invocation.callRealMethod();
-                })
-                .doCallRealMethod()
-                .when(groups).replaceAttributes(anyString(), anyString(), any());
+        Answer<Object> hold = invocation -> {
+            inside.countDown();
+            release.await();
+            return invocation.callRealMethod();
+        };
+        Mockito.doAnswer(hold).doCallRealMethod()
+                .when(groups).replaceAttributes(anyString(), any(GroupRepresentation.class), any());
     }
 
     /** Takes a lock on its own thread and keeps it until closed, so the test thread really finds it held. */

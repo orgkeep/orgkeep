@@ -145,7 +145,8 @@ class ProductAssignTest {
     void productGroupCreatedMeanwhileIsAConflict() {
         productService.assign(realm(), ORG, CATALOG, "a", request());
         String assignmentPath = OrgGroups.assignment(ORG, CATALOG, "a");
-        Mockito.doReturn(Optional.empty()).doCallRealMethod().when(groups).findId(eq(realm()), eq(assignmentPath));
+        // assignLocked reads the full representation of an existing assignment, not just its id (#57)
+        Mockito.doReturn(Optional.empty()).doCallRealMethod().when(groups).find(eq(realm()), eq(assignmentPath));
 
         assertThrowsExactly(ProductAlreadyAssignedException.class,
                 () -> productService.assign(realm(), ORG, CATALOG, "a", request()));

@@ -60,14 +60,16 @@ public class TeamAlignment {
     }
 
     /**
-     * Realigns one team only, read again here (attributes included). For the callers holding the lock of that team
-     * and not the whole org (ORG shared + TEAM exclusive): the other teams are written by other callers and must not
-     * be touched from a snapshot. Nothing happens if the team is gone or does not give the product.
+     * Realigns one team only, given its representation (attributes included) rather than reading it again: for the
+     * caller holding the lock of that team and not the whole org (ORG shared + TEAM exclusive), typically with the
+     * representation it just wrote under that lock. It must be fresh (read under the lock, not stale): the other
+     * teams are written by other callers and must not be touched from a snapshot. Nothing happens if the team does
+     * not give the product.
      */
-    public void alignTeam(String realm, String orgName, String catalog, String product, String teamName) {
-        groups.find(realm, OrgGroups.userGroup(orgName, teamName))
-                .filter(team -> teamMapper.gives(attributes(team), catalog, product))
-                .ifPresent(team -> alignTeams(realm, orgName, catalog, product, List.of(team)));
+    public void alignTeam(String realm, String orgName, String catalog, String product, GroupRepresentation team) {
+        if (teamMapper.gives(attributes(team), catalog, product)) {
+            alignTeams(realm, orgName, catalog, product, List.of(team));
+        }
     }
 
     private void alignTeams(String realm, String orgName, String catalog, String product, List<GroupRepresentation> teams) {
@@ -116,7 +118,7 @@ public class TeamAlignment {
         Map<String, List<String>> attributes = attributes(team);
         Map<String, List<String>> updated = teamMapper.withoutProduct(attributes, catalog, product);
         if (!updated.equals(attributes)) {
-            groups.replaceAttributes(realm, team.getId(), updated);
+            groups.replaceAttributes(realm, team, updated);
         }
     }
 
@@ -162,7 +164,7 @@ public class TeamAlignment {
             TeamMapper.removeFeatureQuota(updated, catalog, product, feature);
             updated.remove(CatalogRoles.featureQuotasAttribute(catalog, product, feature));
             if (!updated.equals(attributes)) {
-                groups.replaceAttributes(realm, team.getId(), updated);
+                groups.replaceAttributes(realm, team, updated);
             }
         }
     }
@@ -220,7 +222,7 @@ public class TeamAlignment {
             updated.put(CatalogRoles.paramsAttribute(catalog, product), List.of(params));
         }
         if (!updated.equals(attributes)) {
-            groups.replaceAttributes(realm, team.getId(), updated);
+            groups.replaceAttributes(realm, team, updated);
         }
     }
 

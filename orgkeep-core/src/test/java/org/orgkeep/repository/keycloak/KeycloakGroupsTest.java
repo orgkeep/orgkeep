@@ -18,6 +18,7 @@ import org.keycloak.representations.idm.GroupRepresentation;
 import org.mockito.Mockito;
 import org.orgkeep.fixtures.TestRealm;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -233,6 +234,25 @@ class KeycloakGroupsTest {
         assertEquals(Optional.of(groupId), second);
         // package-private: the test is in the same package
         Mockito.verify(groups, Mockito.times(1)).matches(testRealm.name(), groupId, path);
+    }
+
+    // #57: a caller that already holds a fresh representation (typically read under the lock protecting the
+    // write) can write through it directly, instead of KeycloakGroups reading the group again. Same full-replace
+    // semantics as the id-based overload (an attribute left out of the new map is gone), and the representation's
+    // own id and path, carried along in the update, must come back unchanged.
+    @Test
+    void replaceAttributesFromARepresentationReplacesEverything() {
+        String path = "/parent/replaced-from-representation";
+        String groupId = groups.createChild(testRealm.name(), path, parentId, "replaced-from-representation",
+                Map.of("kept", List.of("no"), "removed", List.of("yes")));
+        GroupRepresentation group = groups.find(testRealm.name(), path).orElseThrow();
+
+        groups.replaceAttributes(testRealm.name(), group, Map.of("kept", List.of("yes")));
+
+        GroupRepresentation updated = testRealm.resource().getGroupByPath(path);
+        assertEquals(Map.of("kept", List.of("yes")), updated.getAttributes());
+        assertEquals(groupId, updated.getId());
+        assertEquals(path, updated.getPath());
     }
 
     private Optional<String> cachedId(String path) {

@@ -140,10 +140,11 @@ public class ProductServiceImpl implements ProductService {
         CatalogSetup.Ids ids = catalogSetup.get(realm, catalog);
         getProductRole(realm, catalog, ids, product);
 
-        // the values of the orgs follow the new schema: all checked before anything changes
+        // the values of the orgs follow the new schema: all checked before anything changes. Not reused by the
+        // write loop below, under its own per-org lock, taken later: a renegotiation in between must not be missed
         Map<String, String> assignments = assignments(realm, catalog, ids.clientUuid(), product);
-        assignments.forEach((org, path) -> groups.findId(realm, path)
-                .ifPresent(groupId -> withParams(org, groups.attributes(realm, groupId), request.params())));
+        assignments.forEach((org, path) -> groups.find(realm, path)
+                .ifPresent(group -> withParams(org, attributes(group), request.params())));
 
         // Keycloak ignores a null field on update: an empty description removes the current one
         clients.updateRole(realm, ids.clientUuid(), product, productMapper.toRoleRepresentation(
@@ -157,9 +158,8 @@ public class ProductServiceImpl implements ProductService {
         assignments.forEach((org, path) -> {
             try (HeldLocks ignored = locks.acquire(LockRequest.org(realm, org, LockMode.EXCLUSIVE))) {
                 // read again under the lock: the values may have been renegotiated since the check above
-                groups.findId(realm, path).ifPresent(groupId -> {
-                    groups.replaceAttributes(realm, groupId,
-                            withParams(org, groups.attributes(realm, groupId), request.params()));
+                groups.find(realm, path).ifPresent(group -> {
+                    groups.replaceAttributes(realm, group, withParams(org, attributes(group), request.params()));
                     // the teams carry a copy of the parameter values of their org
                     teamAlignment.align(realm, org, catalog, product);
                 });
@@ -262,12 +262,12 @@ public class ProductServiceImpl implements ProductService {
         List<String> busy = new ArrayList<>();
         assignments.forEach((org, path) -> {
             try (HeldLocks ignored = locks.acquire(LockRequest.org(realm, org, LockMode.EXCLUSIVE))) {
-                groups.findId(realm, path).ifPresent(groupId -> {
-                    Map<String, List<String>> attributes = new HashMap<>(groups.attributes(realm, groupId));
+                groups.find(realm, path).ifPresent(group -> {
+                    Map<String, List<String>> attributes = new HashMap<>(attributes(group));
                     List<String> bought = new ArrayList<>(attributes.getOrDefault(OrgGroups.BOUGHT_FEATURES_ATTRIBUTE, List.of()));
                     if (bought.remove(feature)) {
                         attributes.put(OrgGroups.BOUGHT_FEATURES_ATTRIBUTE, bought);
-                        groups.replaceAttributes(realm, groupId, attributes);
+                        groups.replaceAttributes(realm, group, attributes);
                     }
                 });
                 teamAlignment.forgetFeature(realm, org, catalog, product, feature);
@@ -324,12 +324,14 @@ public class ProductServiceImpl implements ProductService {
         TeamClaims.checkParamsFit(schema, params);
         Map<String, List<String>> attributes = productMapper.toAssignmentAttributes(request, params);
 
-        Optional<String> existingId = groups.findId(realm, OrgGroups.assignment(orgName, catalog, product));
+        Optional<GroupRepresentation> existing = groups.find(realm, OrgGroups.assignment(orgName, catalog, product));
         String groupId;
-        if (existingId.isPresent()) {
-            // already assigned: a new negotiation replaces the values
-            groupId = existingId.get();
-            groups.replaceAttributes(realm, groupId, attributes);
+        if (existing.isPresent()) {
+            // already assigned: a new negotiation replaces the values. Read under the ORG exclusive lock held by
+            // assign/assignLocked, with nothing writing the group in between: safe to write straight back on it
+            GroupRepresentation group = existing.get();
+            groupId = group.getId();
+            groups.replaceAttributes(realm, group, attributes);
             log.info("Product '{}' of catalog '{}' renegotiated by organisation '{}' in realm '{}'", product, catalog, orgName, realm);
             // idempotent, and what makes a repeated assign finish one that failed after the group was created
             serviceAccounts.makeCatalogAvailable(realm, orgName, catalog);
@@ -584,5 +586,9 @@ public class ProductServiceImpl implements ProductService {
                 .orElseThrow(() -> new OperationNotAllowedException(
                         "Organisation '%s' has no group %s: it was not created by Orgkeep"
                                 .formatted(orgName, OrgGroups.catalogs(orgName))));
+    }
+
+    private static Map<String, List<String>> attributes(GroupRepresentation group) {
+        return group.getAttributes() == null ? Map.of() : group.getAttributes();
     }
 }

@@ -186,24 +186,21 @@ public class KeycloakGroups {
         return attributes == null ? Map.of() : attributes;
     }
 
-    /** Sets the given attributes on the group, its other attributes are kept. */
-    public void putAttributes(String realm, String groupId, Map<String, List<String>> attributes) {
-        var group = keycloak.realm(realm).groups().group(groupId);
-        GroupRepresentation representation = group.toRepresentation();
-        Map<String, List<String>> merged = representation.getAttributes() == null
-                ? new HashMap<>()
-                : new HashMap<>(representation.getAttributes());
-        merged.putAll(attributes);
-        representation.setAttributes(merged);
-        group.update(representation);
-    }
-
     /** Replaces all the attributes of the group with these. */
     public void replaceAttributes(String realm, String groupId, Map<String, List<String>> attributes) {
-        var group = keycloak.realm(realm).groups().group(groupId);
-        GroupRepresentation representation = group.toRepresentation();
-        representation.setAttributes(attributes);
-        group.update(representation);
+        replaceAttributes(realm, keycloak.realm(realm).groups().group(groupId).toRepresentation(), attributes);
+    }
+
+    /**
+     * Like {@link #replaceAttributes(String, String, Map)}, but writes straight on this representation instead of
+     * reading the group again: for a caller that already holds one, read under the lock that protects the write
+     * (a stale representation, e.g. read before the lock was taken, must not be passed here). Sets the given
+     * attributes on {@code group} itself before writing it back: the representation is mutated, callers must not
+     * rely on its previous attributes afterward.
+     */
+    public void replaceAttributes(String realm, GroupRepresentation group, Map<String, List<String>> attributes) {
+        group.setAttributes(attributes);
+        keycloak.realm(realm).groups().group(group.getId()).update(group);
     }
 
     /**

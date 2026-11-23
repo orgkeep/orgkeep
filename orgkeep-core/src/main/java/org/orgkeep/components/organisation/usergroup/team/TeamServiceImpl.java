@@ -124,7 +124,12 @@ public class TeamServiceImpl implements TeamService {
     private TeamProduct grantProductLocked(String realm, String orgName, String team, String catalog, String product,
                                            GrantProductRequest request) {
         orgs.getByName(realm, orgName);
-        String teamId = teamId(realm, orgName, team);
+        if (!OrgGroups.isUserGroupName(team)) {
+            throw new UserGroupNotFoundException(orgName, team);
+        }
+        // the full group, read under the lock: its attributes are needed, and reused to write back without reading again
+        GroupRepresentation group = groups.find(realm, OrgGroups.userGroup(orgName, team))
+                .orElseThrow(() -> new UserGroupNotFoundException(orgName, team));
         String clientUuid = catalogSetup.get(realm, catalog).clientUuid();
         GroupRepresentation assignment = groups.find(realm, OrgGroups.assignment(orgName, catalog, product))
                 .orElseThrow(() -> new ProductNotAssignedException(orgName, catalog, product));
@@ -184,10 +189,11 @@ public class TeamServiceImpl implements TeamService {
         request.featureQuotas().forEach((feature, quota) -> featureQuotas.put(feature, new FeatureQuota(quota.quota(),
                 quota.cycle() != null ? quota.cycle() : orgProduct.featureQuotas().get(feature).cycle())));
 
-        groups.replaceAttributes(realm, teamId, teamMapper.withChoices(groups.attributes(realm, teamId),
+        groups.replaceAttributes(realm, group, teamMapper.withChoices(attributes(group),
                 catalog, product, request.features(), request.quota(), cycle, featureQuotas));
-        // this team only: the others are written under their own lock
-        alignment.alignTeam(realm, orgName, catalog, product, team);
+        // this team only: the others are written under their own lock. The representation just written already
+        // carries the new choices: no need to read the team again
+        alignment.alignTeam(realm, orgName, catalog, product, group);
         log.info("Product '{}' of catalog '{}' given by team '{}' of organisation '{}' in realm '{}'",
                 product, catalog, team, orgName, realm);
 
@@ -273,5 +279,9 @@ public class TeamServiceImpl implements TeamService {
 
     private static String displayName(RoleRepresentation role) {
         return role == null ? null : firstValue(role.getAttributes(), CatalogRoles.DISPLAY_NAME);
+    }
+
+    private static Map<String, List<String>> attributes(GroupRepresentation group) {
+        return group.getAttributes() == null ? Map.of() : group.getAttributes();
     }
 }

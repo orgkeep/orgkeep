@@ -174,7 +174,7 @@ public class ServiceAccounts {
         for (UserRepresentation user : users(realm, orgName)) {
             Optional<ClientRepresentation> client = clientOf(realm, orgName, user);
             if (client.isPresent()) {
-                clients.delete(realm, client.get().getId());
+                clients.delete(realm, client.get().getClientId(), client.get().getId());
                 deleted++;
             } else {
                 log.warn("User {} of the group {} is not the user of a service account of the organisation '{}' in "

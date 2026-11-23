@@ -137,15 +137,15 @@ public class ServiceAccountServiceImpl implements ServiceAccountService {
         } catch (RuntimeException e) {
             log.warn("Creation of service account '{}' in organisation '{}' of realm '{}' failed, rolling back",
                     request.name(), orgName, realm);
-            rollback(realm, clientUuid, e);
+            rollback(realm, OrgClients.serviceAccountClientId(orgName, request.name()), clientUuid, e);
             throw e;
         }
     }
 
     /** Deleting the client also deletes its user and its group membership. The group of the org is kept. */
-    private void rollback(String realm, String clientUuid, RuntimeException cause) {
+    private void rollback(String realm, String clientId, String clientUuid, RuntimeException cause) {
         try {
-            clients.delete(realm, clientUuid);
+            clients.delete(realm, clientId, clientUuid);
         } catch (RuntimeException rollbackFailure) {
             cause.addSuppressed(rollbackFailure);
         }
@@ -160,7 +160,7 @@ public class ServiceAccountServiceImpl implements ServiceAccountService {
             String rootId = groups.findId(realm, OrgGroups.root(orgName)).orElseThrow(() -> new IllegalStateException(
                     "Organisation '%s' has no group %s".formatted(orgName, OrgGroups.root(orgName))));
             // empty if a concurrent creation just made it: read it back
-            return groups.createChildIfAbsent(realm, rootId, OrgGroups.SERVICE_ACCOUNTS, Map.of())
+            return groups.createChildIfAbsent(realm, OrgGroups.serviceAccounts(orgName), rootId, OrgGroups.SERVICE_ACCOUNTS, Map.of())
                     .or(() -> groups.findId(realm, OrgGroups.serviceAccounts(orgName)))
                     .orElseThrow(() -> new IllegalStateException(
                             "Group %s not found".formatted(OrgGroups.serviceAccounts(orgName))));
@@ -272,7 +272,7 @@ public class ServiceAccountServiceImpl implements ServiceAccountService {
         resolve(realm, orgName, name);
         try (HeldLocks ignored = locks.acquire(LockRequest.org(realm, orgName, LockMode.EXCLUSIVE))) {
             ServiceAccounts.Resolved resolved = resolve(realm, orgName, name);
-            clients.delete(realm, resolved.client().getId());
+            clients.delete(realm, resolved.client().getClientId(), resolved.client().getId());
 
             OrganizationRepresentation org = orgs.getByName(realm, orgName);
             if (DisabledMembers.remove(org, List.of(resolved.user().getId()))) {

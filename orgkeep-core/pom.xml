@@ -71,6 +71,11 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-keycloak-admin-rest-client</artifactId>
         </dependency>
+        <!-- In-memory cache (name/path -> id of a Keycloak object), single instance like ResourceLocks -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-cache</artifactId>
+        </dependency>
         <!-- OpenAPI contract generated from the JAX-RS resources: /q/openapi, Swagger UI on /q/swagger-ui -->
         <dependency>
             <groupId>io.quarkus</groupId>

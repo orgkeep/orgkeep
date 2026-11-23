@@ -1,5 +1,11 @@
 package org.orgkeep.repository.keycloak;
 
+import io.quarkus.cache.Cache;
+import io.quarkus.cache.CacheInvalidate;
+import io.quarkus.cache.CacheKey;
+import io.quarkus.cache.CacheName;
+import io.quarkus.cache.CaffeineCache;
+import io.quarkus.cache.CompositeCacheKey;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
@@ -25,11 +31,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 /**
  * Keycloak clients and their client roles.
- * Clients are addressed by their internal id ("uuid"), except in {@link #findUuid}.
+ * Clients are addressed by their internal id ("uuid"), except in {@link #findUuid}, whose result is cached
+ * (realm + clientId -> uuid): a client's uuid never changes while it exists. {@link #create} and {@link #delete}
+ * keep the cache correct for the clients Orgkeep itself creates or deletes. A client changed outside Orgkeep (the
+ * Keycloak console, or a test's raw cleanup) is different: {@link #findUuid} verifies a cached uuid still resolves
+ * to the same clientId (one cheap GET by id, instead of trusting the cache blindly) and reads again if it does
+ * not, so a stale "found" never silently skips a creation that should run, blocks a read that should 404, or
+ * answers for a client renamed to something else in the meantime. See id-cache.md.
  */
 @ApplicationScoped
 @RequiredArgsConstructor
@@ -37,13 +50,64 @@ public class KeycloakClients {
     private static final int PAGE_SIZE = 100;
     /** Attribute of a client read by the theme selector of Keycloak, before the login theme of the realm. */
     private static final String LOGIN_THEME = "login_theme";
+    /** Cache of the internal id of a client, keyed by (realm, clientId): looked up by many requests, its id never changes. */
+    static final String CLIENT_UUID_CACHE = "client-uuid";
 
     private final Keycloak keycloak;
+    // @CacheName also registers the cache name at build time (a bean with no @CacheResult / @CacheInvalidate
+    // would otherwise go unregistered); lombok.config copies it onto this constructor parameter
+    @CacheName(CLIENT_UUID_CACHE)
+    private final Cache clientUuidCacheBean;
 
+    /**
+     * Not {@code @CacheResult}: only a positive result is cached (a client not found yet is not worth remembering,
+     * and could otherwise mask one created right after, outside this method, e.g. by a test's raw fixture), and a
+     * cache hit is verified (one GET by id, comparing the clientId) before being trusted, far cheaper than
+     * searching again. Neither is possible with a plain interceptor-based cache: nothing runs on a hit, and it
+     * caches whatever is returned.
+     */
     public Optional<String> findUuid(String realm, String clientId) {
+        CaffeineCache cache = clientUuidCache();
+        CompositeCacheKey key = new CompositeCacheKey(realm, clientId);
+        CompletableFuture<String> cached = cache.getIfPresent(key);
+        if (cached != null) {
+            String uuid = cached.join();
+            if (matches(realm, uuid, clientId)) {
+                return Optional.of(uuid);
+            }
+            cache.invalidate(key).await().indefinitely();
+        }
+        Optional<String> uuid = searchUuid(realm, clientId);
+        uuid.ifPresent(found -> cache.put(key, CompletableFuture.completedFuture(found)));
+        return uuid;
+    }
+
+    private Optional<String> searchUuid(String realm, String clientId) {
         return keycloak.realm(realm).clients().findByClientId(clientId).stream()
                 .findFirst()
                 .map(ClientRepresentation::getId);
+    }
+
+    /**
+     * Whether the client still exists and still has this clientId: a cheap GET by id, used to verify an id read
+     * from a cache before trusting it (here, and by {@link org.orgkeep.components.catalog.CatalogSetup#get}, whose
+     * own cache holds a client uuid). Comparing the clientId, not just existence, catches a client renamed in the
+     * console: a fresh search under the old clientId would no longer find it.
+     */
+    public boolean matches(String realm, String clientUuid, String clientId) {
+        try {
+            ClientRepresentation client = keycloak.realm(realm).clients().get(clientUuid).toRepresentation();
+            return clientId.equals(client.getClientId());
+        } catch (WebApplicationException e) {
+            if (!KeycloakErrors.isNotFound(e)) {
+                throw e;
+            }
+            return false;
+        }
+    }
+
+    private CaffeineCache clientUuidCache() {
+        return clientUuidCacheBean.as(CaffeineCache.class);
     }
 
     /** Full representation of the client, attributes included. */
@@ -54,12 +118,17 @@ public class KeycloakClients {
 
     /** @return the internal id of the new client, empty if one with this clientId already exists */
     public Optional<String> create(String realm, ClientRepresentation client) {
+        Optional<String> uuid;
         try(Response response = keycloak.realm(realm).clients().create(client)){
             if(KeycloakErrors.isConflict(response)){
-                return Optional.empty();
+                uuid = Optional.empty();
+            } else {
+                uuid = Optional.of(CreatedResponseUtil.getCreatedId(response));
             }
-            return Optional.of(CreatedResponseUtil.getCreatedId(response));
         }
+        // a stale positive entry left by a deletion done outside Orgkeep must not survive this creation
+        evictUuid(realm, client.getClientId());
+        return uuid;
     }
 
     /**
@@ -93,8 +162,15 @@ public class KeycloakClients {
         update(realm, clientUuid, client);
     }
 
-    public void delete(String realm, String clientUuid) {
+    /** Deletes the client and evicts its cached uuid (the clientId, not the one just deleted, if it is reused). */
+    @CacheInvalidate(cacheName = CLIENT_UUID_CACHE)
+    public void delete(@CacheKey String realm, @CacheKey String clientId, String clientUuid) {
         keycloak.realm(realm).clients().get(clientUuid).remove();
+    }
+
+    /** Evicts the cached uuid of the client: used where the eviction cannot be expressed as a method parameter. */
+    private void evictUuid(String realm, String clientId) {
+        clientUuidCacheBean.invalidate(new CompositeCacheKey(realm, clientId)).await().indefinitely();
     }
 
     public void createRole(String realm, String clientUuid, String roleName, String description) {

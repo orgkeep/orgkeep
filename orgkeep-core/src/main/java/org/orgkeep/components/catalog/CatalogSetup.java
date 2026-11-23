@@ -5,6 +5,10 @@ import org.orgkeep.api.model.Catalogs;
 import org.orgkeep.api.model.CreateCatalogRequest;
 import org.orgkeep.repository.keycloak.KeycloakClientScopes;
 import org.orgkeep.repository.keycloak.KeycloakClients;
+import io.quarkus.cache.Cache;
+import io.quarkus.cache.CacheName;
+import io.quarkus.cache.CaffeineCache;
+import io.quarkus.cache.CompositeCacheKey;
 import jakarta.enterprise.context.ApplicationScoped;
 import lombok.RequiredArgsConstructor;
 import org.keycloak.representations.idm.ClientScopeRepresentation;
@@ -13,6 +17,7 @@ import org.keycloak.representations.idm.RoleRepresentation;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 /**
@@ -22,9 +27,16 @@ import java.util.stream.Collectors;
 @ApplicationScoped
 @RequiredArgsConstructor
 public class CatalogSetup {
+    /** Cache of the ids of a catalog, keyed by (realm, name): they never change while the catalog exists. */
+    static final String CATALOG_IDS_CACHE = "catalog-ids";
+
     private final KeycloakClients clients;
     private final KeycloakClientScopes scopes;
     private final CatalogMapper catalogMapper;
+    // @CacheName also registers the cache name at build time (a bean with no @CacheResult / @CacheInvalidate
+    // would otherwise go unregistered); lombok.config copies it onto this constructor parameter
+    @CacheName(CATALOG_IDS_CACHE)
+    private final Cache catalogIdsCacheBean;
 
     /**
      * @param clientUuid internal id of the catalog client
@@ -78,14 +90,42 @@ public class CatalogSetup {
 
     /**
      * The ids of an existing catalog: a client whose client scope of the same name is marked as the scope of a catalog.
+     * Cached (realm, name -> ids): the heavy part of the lookup is {@link KeycloakClientScopes#find}, which reads
+     * every client scope of the realm with its mappers. A cache hit is verified (the client still exists with this
+     * name, a cheap GET by id) before being trusted, and read again otherwise: {@link #evict} keeps the cache
+     * correct when Orgkeep deletes the catalog, but the catalog's client can also go while this cache does not
+     * notice, e.g. a catalog with products deleted outside the service layer. Not {@code @CacheResult}: nothing
+     * runs on a hit, so it cannot verify one, nor only cache a positive result. {@link CatalogNotFoundException} is
+     * never served stale: it is never cached ({@code resolve} throws before the {@code put}).
      *
      * @throws CatalogNotFoundException otherwise
      */
     public Ids get(String realm, String name) {
+        CaffeineCache cache = catalogIdsCacheBean.as(CaffeineCache.class);
+        CompositeCacheKey key = new CompositeCacheKey(realm, name);
+        CompletableFuture<Ids> cached = cache.getIfPresent(key);
+        if (cached != null) {
+            Ids ids = cached.join();
+            if (clients.matches(realm, ids.clientUuid(), name)) {
+                return ids;
+            }
+            cache.invalidate(key).await().indefinitely();
+        }
+        Ids ids = resolve(realm, name);
+        cache.put(key, CompletableFuture.completedFuture(ids));
+        return ids;
+    }
+
+    private Ids resolve(String realm, String name) {
         return scopes.find(realm, name)
                 .filter(catalogMapper::isCatalog)
                 .flatMap(scope -> clients.findUuid(realm, name).map(clientUuid -> new Ids(clientUuid, scope.getId())))
                 .orElseThrow(() -> new CatalogNotFoundException(realm, name));
+    }
+
+    /** Evicts the cached ids of the catalog: called when it is deleted. */
+    public void evict(String realm, String name) {
+        catalogIdsCacheBean.invalidate(new CompositeCacheKey(realm, name)).await().indefinitely();
     }
 
     /** The catalogs of the realm: name → id of the client scope. */

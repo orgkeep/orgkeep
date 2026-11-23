@@ -105,7 +105,7 @@ public class OrgServiceImpl implements OrgService {
             // admin API calls are not transactional: undo the org, its client and its groups so that a retry starts clean.
             // A newly created owner user is kept, a retry will simply reuse it.
             log.warn("Provisioning of organisation '{}' in realm '{}' failed, rolling back", request.name(), realm);
-            rollback(realm, orgId, clientUuid, groupId, e);
+            rollback(realm, request.name(), orgId, clientUuid, groupId, e);
             throw e;
         }
 
@@ -366,11 +366,13 @@ public class OrgServiceImpl implements OrgService {
                     serviceAccountsDeleted, orgName, realm);
 
             orgs.delete(realm, org.getId());
-            clients.findUuid(realm, OrgClients.clientId(orgName))
-                    .ifPresent(clientUuid -> clients.delete(realm, clientUuid));
-            groups.findId(realm, OrgGroups.root(orgName)).ifPresentOrElse(
-                    groupId -> groups.delete(realm, groupId),
-                    () -> log.warn("Organisation '{}' had no group {}", orgName, OrgGroups.root(orgName)));
+            String orgClientId = OrgClients.clientId(orgName);
+            clients.findUuid(realm, orgClientId)
+                    .ifPresent(clientUuid -> clients.delete(realm, orgClientId, clientUuid));
+            String rootPath = OrgGroups.root(orgName);
+            groups.findId(realm, rootPath).ifPresentOrElse(
+                    groupId -> groups.delete(realm, rootPath, groupId),
+                    () -> log.warn("Organisation '{}' had no group {}", orgName, rootPath));
 
             log.info("Organisation '{}' deleted from realm '{}'", orgName, realm);
         }
@@ -401,12 +403,12 @@ public class OrgServiceImpl implements OrgService {
     /** Creates the group tree of the org, returns the id of the root group /{org}. */
     private String createOrgGroups(String realm, String orgName, String clientUuid) {
         String rootId = groups.createTopLevel(realm, orgName);
-        String userGroupsId = groups.createChild(realm, rootId, OrgGroups.USER_GROUPS);
-        groups.createChild(realm, rootId, OrgGroups.SERVICE_ACCOUNTS);
-        groups.createChild(realm, rootId, OrgGroups.CATALOGS);
+        String userGroupsId = groups.createChild(realm, OrgGroups.userGroups(orgName), rootId, OrgGroups.USER_GROUPS);
+        groups.createChild(realm, OrgGroups.serviceAccounts(orgName), rootId, OrgGroups.SERVICE_ACCOUNTS);
+        groups.createChild(realm, OrgGroups.catalogs(orgName), rootId, OrgGroups.CATALOGS);
 
-        String adminId = groups.createChild(realm, userGroupsId, OrgGroups.ADMIN);
-        String usersId = groups.createChild(realm, userGroupsId, OrgGroups.USERS);
+        String adminId = groups.createChild(realm, OrgGroups.admin(orgName), userGroupsId, OrgGroups.ADMIN);
+        String usersId = groups.createChild(realm, OrgGroups.users(orgName), userGroupsId, OrgGroups.USERS);
         clients.grantToGroup(realm, clientUuid, adminId, OrgRole.ORG_ADMIN.getRoleName());
         clients.grantToGroup(realm, clientUuid, usersId, OrgRole.ORG_USER.getRoleName());
         return rootId;
@@ -451,13 +453,13 @@ public class OrgServiceImpl implements OrgService {
         return ownerId;
     }
 
-    private void rollback(String realm, String orgId, String clientUuid, String groupId, RuntimeException cause) {
+    private void rollback(String realm, String orgName, String orgId, String clientUuid, String groupId, RuntimeException cause) {
         try {
             if (groupId != null) {
-                groups.delete(realm, groupId);
+                groups.delete(realm, OrgGroups.root(orgName), groupId);
             }
             if (clientUuid != null) {
-                clients.delete(realm, clientUuid);
+                clients.delete(realm, OrgClients.clientId(orgName), clientUuid);
             }
             orgs.delete(realm, orgId);
         } catch (RuntimeException rollbackFailure) {

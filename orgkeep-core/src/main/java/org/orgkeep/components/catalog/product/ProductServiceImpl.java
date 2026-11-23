@@ -335,14 +335,15 @@ public class ProductServiceImpl implements ProductService {
             serviceAccounts.makeCatalogAvailable(realm, orgName, catalog);
         } else {
             String catalogGroupId = catalogGroupId(realm, orgName, catalog);
+            String assignmentPath = OrgGroups.assignment(orgName, catalog, product);
             // a name already taken here means the product was assigned since the check above
-            groupId = groups.createChildIfAbsent(realm, catalogGroupId, product, attributes)
+            groupId = groups.createChildIfAbsent(realm, assignmentPath, catalogGroupId, product, attributes)
                     .orElseThrow(() -> new ProductAlreadyAssignedException(orgName, catalog, product));
             try {
                 clients.grantToGroup(realm, ids.clientUuid(), groupId, product);
             } catch (RuntimeException e) {
                 // admin API calls are not transactional: a group without the product role must not stay behind
-                groups.delete(realm, groupId);
+                groups.delete(realm, assignmentPath, groupId);
                 throw e;
             }
             log.info("Product '{}' of catalog '{}' assigned to organisation '{}' in realm '{}'", product, catalog, orgName, realm);
@@ -417,10 +418,11 @@ public class ProductServiceImpl implements ProductService {
         // a heavy operation on the org, like assign: exclusive, a single immediate try
         try (HeldLocks ignored = locks.tryAcquire(LockRequest.org(realm, orgName, LockMode.EXCLUSIVE))) {
             orgs.getByName(realm, orgName);
-            String groupId = groups.findId(realm, OrgGroups.assignment(orgName, catalog, product))
+            String assignmentPath = OrgGroups.assignment(orgName, catalog, product);
+            String groupId = groups.findId(realm, assignmentPath)
                     .orElseThrow(() -> new ProductNotAssignedException(orgName, catalog, product));
 
-            groups.delete(realm, groupId);
+            groups.delete(realm, assignmentPath, groupId);
             // the teams no longer give it, and without any product in the catalog, no catalog role of it either
             teamAlignment.revoke(realm, orgName, catalog, product);
             if (!teamAlignment.hasAssignment(realm, orgName, catalog)) {
@@ -565,15 +567,15 @@ public class ProductServiceImpl implements ProductService {
      * another call (console, another instance) created it: it is reused.
      */
     private String catalogGroupId(String realm, String orgName, String catalog) {
-        Optional<String> existing = groups.findId(realm, OrgGroups.catalog(orgName, catalog));
+        String path = OrgGroups.catalog(orgName, catalog);
+        Optional<String> existing = groups.findId(realm, path);
         if (existing.isPresent()) {
             return existing.get();
         }
-        return groups.createChildIfAbsent(realm, catalogsGroupId(realm, orgName), catalog, Map.of())
-                .or(() -> groups.findId(realm, OrgGroups.catalog(orgName, catalog)))
+        return groups.createChildIfAbsent(realm, path, catalogsGroupId(realm, orgName), catalog, Map.of())
+                .or(() -> groups.findId(realm, path))
                 // conflict, then gone again before the re-read: a 500 is acceptable for such an unlikely race
-                .orElseThrow(() -> new IllegalStateException(
-                        "Group %s is in conflict and not found".formatted(OrgGroups.catalog(orgName, catalog))));
+                .orElseThrow(() -> new IllegalStateException("Group %s is in conflict and not found".formatted(path)));
     }
 
     private String catalogsGroupId(String realm, String orgName) {

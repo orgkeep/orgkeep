@@ -54,13 +54,13 @@ public class KeycloakOrgs {
         return names;
     }
 
-    /** Full representation of the organisation with this exact name. */
+    /** Full representation of the organisation with this exact name, in one call. */
     public Optional<OrganizationRepresentation> findByName(String realm, String name) {
-        // search is a "contains" on name and domains: keep the exact name only
-        return keycloak.realm(realm).organizations().search(name, true, 0, 10).stream()
+        // search is a "contains" on name and domains: keep the exact name only. briefRepresentation=false asks for
+        // the full representation directly, instead of a second GET organizations/{id}
+        return keycloak.realm(realm).organizations().search(name, true, 0, 10, false).stream()
                 .filter(org -> name.equals(org.getName()))
-                .findFirst()
-                .map(org -> organisation(realm, org.getId()).toRepresentation());
+                .findFirst();
     }
 
     /** @throws OrgNotFoundException if no organisation has this name */

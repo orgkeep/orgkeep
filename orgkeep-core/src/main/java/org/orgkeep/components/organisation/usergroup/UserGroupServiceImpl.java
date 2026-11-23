@@ -86,7 +86,8 @@ public class UserGroupServiceImpl implements UserGroupService {
                 throw new UserGroupAlreadyExistsException(orgName, request.name());
             }
 
-            String groupId = groups.createChild(realm, userGroupsId(realm, orgName), request.name());
+            String groupId = groups.createChild(realm, OrgGroups.userGroup(orgName, request.name()),
+                    userGroupsId(realm, orgName), request.name());
             log.info("User group '{}' created in organisation '{}' of realm '{}'", request.name(), orgName, realm);
             // a new group grants nothing and has no member
             return new UserGroup(groupId, request.name(), false, Set.of(), List.of(), List.of(), List.of());
@@ -103,7 +104,7 @@ public class UserGroupServiceImpl implements UserGroupService {
                 throw new OperationNotAllowedException(
                         "The user group '%s' comes with the organisation and cannot be deleted".formatted(groupName));
             }
-            groups.delete(realm, groupId(realm, orgName, groupName));
+            groups.delete(realm, OrgGroups.userGroup(orgName, groupName), groupId(realm, orgName, groupName));
             log.info("User group '{}' deleted from organisation '{}' of realm '{}'", groupName, orgName, realm);
         }
     }

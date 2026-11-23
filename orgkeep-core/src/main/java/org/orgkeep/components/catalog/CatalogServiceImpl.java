@@ -119,13 +119,24 @@ public class CatalogServiceImpl implements CatalogService {
                 .orElseThrow(() -> new CatalogNotFoundException(realm, name));
     }
 
-    /** Deletes what exists of the catalog: the scope first, so that no client is left with the claim of a deleted catalog. */
+    /**
+     * Deletes what exists of the catalog: the scope first, so that no client is left with the claim of a deleted
+     * catalog. Evicted from CatalogSetup's cache both before and after the two deletes, not only after: the admin
+     * API is not transactional, and deleting takes no lock on the catalog, so a concurrent read could re-cache the
+     * ids between the first eviction and the deletes below. Evicting again in the finally closes that window; the
+     * first eviction still matters on its own, to keep it short for the common, uncontended case.
+     */
     private void remove(String realm, String name) {
-        scopes.findId(realm, name).ifPresent(scopeId -> {
-            scopes.removeRealmDefault(realm, scopeId);
-            scopes.removeRealmOptional(realm, scopeId);
-            scopes.delete(realm, scopeId);
-        });
-        clients.findUuid(realm, name).ifPresent(clientUuid -> clients.delete(realm, clientUuid));
+        catalogSetup.evict(realm, name);
+        try {
+            scopes.findId(realm, name).ifPresent(scopeId -> {
+                scopes.removeRealmDefault(realm, scopeId);
+                scopes.removeRealmOptional(realm, scopeId);
+                scopes.delete(realm, scopeId);
+            });
+            clients.findUuid(realm, name).ifPresent(clientUuid -> clients.delete(realm, name, clientUuid));
+        } finally {
+            catalogSetup.evict(realm, name);
+        }
     }
 }

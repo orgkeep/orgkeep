@@ -135,7 +135,7 @@ class ProductAssignTest {
         assertEquals("b", assigned.product());
         // the conflict branch really ran: the creation of the catalogue group was tried, and refused by Keycloak
         // (twice: the first assignment created the group, the second one tried again and got the conflict)
-        Mockito.verify(groups, Mockito.times(2)).createChildIfAbsent(eq(realm()), anyString(), eq(CATALOG), anyMap());
+        Mockito.verify(groups, Mockito.times(2)).createChildIfAbsent(eq(realm()), eq(catalogPath), anyString(), eq(CATALOG), anyMap());
         assertTrue(groups.findId(realm(), OrgGroups.assignment(ORG, CATALOG, "b")).isPresent());
         assertTrue(groups.findId(realm(), OrgGroups.assignment(ORG, CATALOG, "a")).isPresent());
     }

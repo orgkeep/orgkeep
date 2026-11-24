@@ -36,6 +36,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.keycloak.representations.idm.GroupRepresentation;
+import org.keycloak.representations.idm.OrganizationRepresentation;
 import org.keycloak.representations.idm.ProtocolMapperRepresentation;
 import org.keycloak.representations.idm.RoleRepresentation;
 
@@ -335,6 +336,7 @@ public class ProductServiceImpl implements ProductService {
             log.info("Product '{}' of catalog '{}' renegotiated by organisation '{}' in realm '{}'", product, catalog, orgName, realm);
             // idempotent, and what makes a repeated assign finish one that failed after the group was created
             serviceAccounts.makeCatalogAvailable(realm, orgName, catalog);
+            recordAssignment(realm, orgName, catalog, product);
         } else {
             String catalogGroupId = catalogGroupId(realm, orgName, catalog);
             String assignmentPath = OrgGroups.assignment(orgName, catalog, product);
@@ -352,6 +354,7 @@ public class ProductServiceImpl implements ProductService {
             // the service accounts of the org can now ask for the catalog (scope=<catalog>): the counterpart of what
             // unassign does with the last product of a catalog
             serviceAccounts.makeCatalogAvailable(realm, orgName, catalog);
+            recordAssignment(realm, orgName, catalog, product);
             // a first assignment needs no alignment: a team can only give a product already assigned, and
             // unassign erases the choices of the teams
             return orgProduct(catalog, product, groupId, request, params);
@@ -359,6 +362,20 @@ public class ProductServiceImpl implements ProductService {
         // the teams giving the product follow what the org negotiated: quota, bought features, parameters
         teamAlignment.align(realm, orgName, catalog, product);
         return orgProduct(catalog, product, groupId, request, params);
+    }
+
+    /**
+     * Adds "catalog/product" to the assigned-products attribute of the org, a display copy for the organisation
+     * list (see AssignedProducts), once the group that grants the product is written. The org is read fresh
+     * under the ORG exclusive lock assign already holds, to keep short the window where another instance could
+     * overwrite it. A failure after the group is written leaves the attribute without the value: the same PUT
+     * again finds the group already there and only adds the value (idempotent).
+     */
+    private void recordAssignment(String realm, String orgName, String catalog, String product) {
+        OrganizationRepresentation org = orgs.getByName(realm, orgName);
+        if (AssignedProducts.add(org, AssignedProducts.value(catalog, product))) {
+            orgs.update(realm, org);
+        }
     }
 
     private OrgProduct orgProduct(String catalog, String product, String groupId, AssignProductRequest request,
@@ -419,11 +436,16 @@ public class ProductServiceImpl implements ProductService {
     public void unassign(String realm, String orgName, String catalog, String product) {
         // a heavy operation on the org, like assign: exclusive, a single immediate try
         try (HeldLocks ignored = locks.tryAcquire(LockRequest.org(realm, orgName, LockMode.EXCLUSIVE))) {
-            orgs.getByName(realm, orgName);
+            OrganizationRepresentation org = orgs.getByName(realm, orgName);
             String assignmentPath = OrgGroups.assignment(orgName, catalog, product);
             String groupId = groups.findId(realm, assignmentPath)
                     .orElseThrow(() -> new ProductNotAssignedException(orgName, catalog, product));
 
+            // removed before the group: a failure after this leaves the group, the same DELETE again finds it
+            // and finishes the job (idempotent)
+            if (AssignedProducts.remove(org, AssignedProducts.value(catalog, product))) {
+                orgs.update(realm, org);
+            }
             groups.delete(realm, assignmentPath, groupId);
             // the teams no longer give it, and without any product in the catalog, no catalog role of it either
             teamAlignment.revoke(realm, orgName, catalog, product);

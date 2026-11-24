@@ -159,8 +159,9 @@ class ProductsResourceTest {
                 .body("name", equalTo(ORG));
         given().when().get("/api/admin/organisations?catalog={catalog}&product={product}", CATALOG, "billing")
                 .then().statusCode(200)
-                .body("name", contains(ORG))
-                .body("[0].products", contains("prod/billing"));
+                .body("items.name", contains(ORG))
+                .body("items[0].products", contains("prod/billing"))
+                .body("total", equalTo(1));
 
         given().when().delete(PRODUCTS + "/{product}", CATALOG, "billing")
                 .then().statusCode(409);

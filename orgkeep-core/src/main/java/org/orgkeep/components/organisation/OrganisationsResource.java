@@ -6,6 +6,7 @@ import org.orgkeep.api.model.CreateOrgRequest;
 import org.orgkeep.api.model.CreateOrgResponse;
 import org.orgkeep.api.model.OrgDetails;
 import org.orgkeep.api.model.OrgSummary;
+import org.orgkeep.api.model.Page;
 import org.orgkeep.api.model.UpdateOrgStatusRequest;
 import org.orgkeep.web.CurrentRealm;
 import jakarta.annotation.security.RolesAllowed;
@@ -27,8 +28,6 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 import org.eclipse.microprofile.openapi.annotations.responses.APIResponseSchema;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import org.jboss.resteasy.reactive.ResponseStatus;
-
-import java.util.List;
 
 /**
  * Management of the organisations of the realm, by the realm owner.
@@ -60,8 +59,9 @@ public class OrganisationsResource {
     @Operation(summary = "List organisations",
             description = "Paginated, optionally filtered on the name and on an assigned product: catalog and product "
                     + "together, or a catalog alone (any of its products), or a product alone (in any catalog). "
-                    + "An unknown catalog or product gives an empty list.")
-    public List<OrgSummary> list(@QueryParam("search") String search,
+                    + "An unknown catalog or product gives an empty list. The total counts every organisation "
+                    + "matching the filters, whatever first and max.")
+    public Page<OrgSummary> list(@QueryParam("search") String search,
                                  @QueryParam("catalog") String catalog,
                                  @QueryParam("product") String product,
                                  @QueryParam("first") @DefaultValue("0") @Min(0) int first,

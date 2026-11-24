@@ -4,6 +4,7 @@ import org.orgkeep.api.model.CreateOrgRequest;
 import org.orgkeep.api.model.CreateOrgResponse;
 import org.orgkeep.api.model.OrgDetails;
 import org.orgkeep.api.model.OrgSummary;
+import org.orgkeep.api.model.Page;
 
 import java.util.List;
 
@@ -29,8 +30,17 @@ public interface OrgService {
      * @param catalog optional, keeps the organisations with a product of this catalog
      * @param product optional, keeps the organisations this product is assigned to (in any catalog, or in the one given).
      *                An unknown catalog or product gives an empty list, like any filter that matches nothing
+     * @return the page, with the total number of organisations matching search, catalog and product (whatever
+     *         first and max)
      */
-    List<OrgSummary> list(String realm, String search, String catalog, String product, int first, int max);
+    Page<OrgSummary> list(String realm, String search, String catalog, String product, int first, int max);
+
+    /**
+     * Names of the organisations matching the search, for a picker: one call, no total.
+     *
+     * @param search optional, matches organisation names (not exact)
+     */
+    List<String> names(String realm, String search, int max);
 
     /** @throws org.orgkeep.api.exceptions.OrgNotFoundException if no organisation has this name */
     OrgDetails get(String realm, String orgName);

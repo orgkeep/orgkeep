@@ -2,14 +2,17 @@ package org.orgkeep.components.organisation.member;
 
 import org.orgkeep.api.OrgMemberService;
 import org.orgkeep.api.events.UserCreated;
+import org.orgkeep.api.exceptions.InvalidRequestException;
 import org.orgkeep.api.exceptions.MemberAlreadyExistsException;
 import org.orgkeep.api.exceptions.MemberNotFoundException;
 import org.orgkeep.api.exceptions.OperationNotAllowedException;
+import org.orgkeep.api.exceptions.UserGroupNotFoundException;
 import org.orgkeep.api.model.AddMemberRequest;
 import org.orgkeep.api.model.OrgClients;
 import org.orgkeep.api.model.OrgGroups;
 import org.orgkeep.api.model.OrgMember;
 import org.orgkeep.api.model.OrgRole;
+import org.orgkeep.api.model.Page;
 import org.orgkeep.components.lock.HeldLocks;
 import org.orgkeep.components.lock.LockMode;
 import org.orgkeep.components.lock.LockRequest;
@@ -24,12 +27,16 @@ import io.vertx.core.eventbus.EventBus;
 import jakarta.enterprise.context.ApplicationScoped;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.keycloak.representations.idm.MemberRepresentation;
 import org.keycloak.representations.idm.OrganizationRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Slf4j
 @ApplicationScoped
@@ -46,26 +53,143 @@ public class OrgMemberServiceImpl implements OrgMemberService {
     private final ResourceLocks locks;
     private final ServiceAccounts serviceAccounts;
 
+    /**
+     * Paginated, without a Keycloak call per member (see InvitationMailer.isPending): the number of calls stays
+     * the same whatever the number of members. Three sources, chosen so that each page is exact (see
+     * members.md): no filter reads the owners then the default group users, paged by Keycloak; search and team
+     * read every matching page and are sliced here, since their results are small.
+     *
+     * @throws InvalidRequestException if search and team are both given
+     */
     @Override
-    public List<OrgMember> list(String realm, String orgName) {
+    public Page<OrgMember> list(String realm, String orgName, String search, String team, int first, int max) {
+        boolean hasSearch = search != null && !search.isBlank();
+        boolean hasTeam = team != null && !team.isBlank();
+        if (hasSearch && hasTeam) {
+            throw new InvalidRequestException("search and team cannot be used together");
+        }
         OrganizationRepresentation org = orgs.getByName(realm, orgName);
 
-        // three calls whatever the number of members, rather than the roles of each member:
-        // the owners (role granted directly) and the admins (members of the admin group)
-        Set<String> ownerIds = clients.findUuid(realm, OrgClients.clientId(orgName))
-                .map(clientUuid -> clients.usersWithRole(realm, clientUuid, OrgRole.ORG_OWNER.getRoleName()))
-                .orElse(Set.of());
+        // one call whatever the number of members, rather than the role of each member: the admins
+        // (members of the admin group)
         Set<String> adminIds = groups.findId(realm, OrgGroups.admin(orgName))
                 .map(adminGroupId -> groups.memberIds(realm, adminGroupId))
                 .orElse(Set.of());
+        // read once, by the single call that returns both the ids and the full representations, and shared by
+        // the three branches below: only listNoFilter needs the full representations
+        List<UserRepresentation> ownerUsers = clients.findUuid(realm, OrgClients.clientId(orgName))
+                .map(clientUuid -> clients.listUsersWithRole(realm, clientUuid, OrgRole.ORG_OWNER.getRoleName()))
+                .orElse(List.of());
 
-        // the service accounts are members of the Keycloak organisation: not people, not listed
-        Set<String> serviceAccountIds = serviceAccounts.userIds(realm, orgName);
-        return orgs.members(realm, org.getId()).stream()
-                .filter(member -> !serviceAccountIds.contains(member.getId()))
-                .map(member -> memberMapper.toOrgMember(member, roleOf(member.getId(), ownerIds, adminIds),
-                        invitations.isPending(realm, member)))
+        if (hasTeam) {
+            return listByTeam(realm, orgName, team, adminIds, ownerUsers, first, max);
+        }
+        if (hasSearch) {
+            return listBySearch(realm, org, search, adminIds, ownerUsers, first, max);
+        }
+        return listNoFilter(realm, org, orgName, adminIds, ownerUsers, first, max);
+    }
+
+    /**
+     * Owners (sorted by username), then the members of the default group users, paged by Keycloak: that group
+     * never holds a service account, and every member stays in it (UserGroupServiceImpl.removeMember), so it is
+     * exact. The page is the concatenation of the two, cut at [first, first + max): with o owners, if first < o
+     * the page starts at owners[first..] and continues with group members from 0, otherwise group members start
+     * at first - o. A group member who is also an owner (console only) is skipped: the page is one shorter.
+     * <p>
+     * An organisation created outside Orgkeep may have no group "users": treated as an empty group rather than
+     * failing (same pattern as {@link ServiceAccounts#users}, for its own group), so the page still shows the
+     * owners.
+     */
+    private Page<OrgMember> listNoFilter(String realm, OrganizationRepresentation org, String orgName,
+                                         Set<String> adminIds, List<UserRepresentation> ownerUsers, int first, int max) {
+        Set<String> ownerIds = ownerUsers.stream().map(UserRepresentation::getId).collect(Collectors.toSet());
+        List<OrgMember> owners = ownerUsers.stream()
+                // owners are never pending (see members.md)
+                .map(user -> memberMapper.toOrgMember(user, OrgRole.ORG_OWNER, Boolean.FALSE))
+                .sorted(Comparator.comparing(OrgMember::username))
                 .toList();
+        Optional<String> usersGroupId = groups.findId(realm, OrgGroups.users(orgName));
+
+        List<OrgMember> page = new ArrayList<>();
+        int remaining = max;
+        if (first < owners.size()) {
+            List<OrgMember> ownersFromFirst = owners.subList(first, owners.size());
+            int fromOwners = Math.min(remaining, ownersFromFirst.size());
+            page.addAll(ownersFromFirst.subList(0, fromOwners));
+            remaining -= fromOwners;
+            int fromGroup = remaining;
+            if (fromGroup > 0) {
+                usersGroupId.ifPresent(groupId ->
+                        page.addAll(groupMembers(realm, groupId, 0, fromGroup, ownerIds, adminIds)));
+            }
+        } else {
+            int groupFirst = first - owners.size();
+            int groupMax = remaining;
+            usersGroupId.ifPresent(groupId ->
+                    page.addAll(groupMembers(realm, groupId, groupFirst, groupMax, ownerIds, adminIds)));
+        }
+
+        long memberCount = serviceAccounts.peopleCount(realm, orgName, orgs.memberCount(realm, org.getId()));
+        return new Page<>(page, memberCount);
+    }
+
+    private List<OrgMember> groupMembers(String realm, String groupId, int groupFirst, int groupMax,
+                                         Set<String> ownerIds, Set<String> adminIds) {
+        return groups.membersPage(realm, groupId, groupFirst, groupMax).stream()
+                // a member of the group who is also an owner (added through the console) is already in the
+                // page: shown once, as an owner
+                .filter(user -> !ownerIds.contains(user.getId()))
+                .map(user -> memberMapper.toOrgMember(user, roleOf(user.getId(), ownerIds, adminIds), invitations.isPending(user)))
+                .toList();
+    }
+
+    /**
+     * Every member whose username, email or first name matches, read page by page and sliced here: the search
+     * results of an organisation are small enough. Service accounts never match a search by username or email
+     * (see service-accounts.md), but are dropped the same way as elsewhere, by the group.
+     */
+    private Page<OrgMember> listBySearch(String realm, OrganizationRepresentation org, String search,
+                                         Set<String> adminIds, List<UserRepresentation> ownerUsers, int first, int max) {
+        Set<String> ownerIds = ownerUsers.stream().map(UserRepresentation::getId).collect(Collectors.toSet());
+        Set<String> serviceAccountIds = serviceAccounts.userIds(realm, org.getName());
+        List<MemberRepresentation> people = orgs.searchMembers(realm, org.getId(), search).stream()
+                .filter(member -> !serviceAccountIds.contains(member.getId()))
+                .toList();
+        List<OrgMember> items = people.stream()
+                .skip(first)
+                .limit(max)
+                .map(member -> memberMapper.toOrgMember(member, roleOf(member.getId(), ownerIds, adminIds),
+                        invitations.isPending(member)))
+                .toList();
+        return new Page<>(items, people.size());
+    }
+
+    /** Every member of the team, read whole (a team is small) and sliced here. Admin and users are accepted. */
+    private Page<OrgMember> listByTeam(String realm, String orgName, String team, Set<String> adminIds,
+                                       List<UserRepresentation> ownerUsers, int first, int max) {
+        String groupId = teamGroupId(realm, orgName, team);
+        Set<String> ownerIds = ownerUsers.stream().map(UserRepresentation::getId).collect(Collectors.toSet());
+        Set<String> serviceAccountIds = serviceAccounts.userIds(realm, orgName);
+        List<UserRepresentation> people = groups.membersFull(realm, groupId).stream()
+                .filter(member -> !serviceAccountIds.contains(member.getId()))
+                .toList();
+        List<OrgMember> items = people.stream()
+                .skip(first)
+                .limit(max)
+                .map(member -> memberMapper.toOrgMember(member, roleOf(member.getId(), ownerIds, adminIds),
+                        invitations.isPending(member)))
+                .toList();
+        return new Page<>(items, people.size());
+    }
+
+    /** @throws UserGroupNotFoundException if no user group of the organisation has this name */
+    private String teamGroupId(String realm, String orgName, String team) {
+        if (!OrgGroups.isUserGroupName(team)) {
+            throw new UserGroupNotFoundException(orgName, team);
+        }
+        return groups.findId(realm, OrgGroups.userGroup(orgName, team))
+                .orElseThrow(() -> new UserGroupNotFoundException(orgName, team));
     }
 
     /** The highest role wins: an owner who is also in the admin group is shown as owner. */
@@ -117,7 +241,7 @@ public class OrgMemberServiceImpl implements OrgMemberService {
         log.info("User {} added to organisation '{}' in realm '{}'", request.email(), orgName, realm);
         // a new member only joined the users group
         UserRepresentation user = users.get(realm, userId);
-        return memberMapper.toOrgMember(user, OrgRole.ORG_USER, invitations.isPending(realm, user));
+        return memberMapper.toOrgMember(user, OrgRole.ORG_USER, invitations.isPending(user));
     }
 
     @Override
@@ -227,7 +351,7 @@ public class OrgMemberServiceImpl implements OrgMemberService {
                 .map(adminGroupId -> groups.memberIds(realm, adminGroupId))
                 .orElse(Set.of());
         UserRepresentation user = users.get(realm, userId);
-        return memberMapper.toOrgMember(user, roleOf(userId, Set.of(), adminIds), invitations.isPending(realm, user));
+        return memberMapper.toOrgMember(user, roleOf(userId, Set.of(), adminIds), invitations.isPending(user));
     }
 
     /**

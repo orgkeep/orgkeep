@@ -33,6 +33,8 @@ import java.util.Set;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.notNullValue;
@@ -85,7 +87,7 @@ class OrganisationsResourceTest {
     // clean as it would with a fresh realm per test.
     @AfterEach
     void cleanUp() {
-        for (String org : List.of(ORG, "first-org")) {
+        for (String org : List.of(ORG, "first-org", "other-org")) {
             try {
                 orgService.delete(testRealm.name(), org);
             } catch (OrgNotFoundException ignored) {
@@ -248,9 +250,50 @@ class OrganisationsResourceTest {
 
     @Test
     @TestSecurity(user = "owner", roles = "realm-owner")
-    void listWithTooLargePageReturns400() {
-        given().when().get(BASE + "?max=1000")
+    void listWithInvalidPagingReturns400() {
+        given().when().get(BASE + "?max=101")
                 .then().statusCode(400);
+        given().when().get(BASE + "?first=-1")
+                .then().statusCode(400);
+    }
+
+    @Test
+    @TestSecurity(user = "owner", roles = "realm-owner")
+    void totalCountsEveryOrganisationMatchingSearch() {
+        create();
+        orgService.create(testRealm.name(), new CreateOrgRequest("other-org", Set.of(), null, null));
+
+        given().when().get(BASE)
+                .then().statusCode(200)
+                .body("total", equalTo(2));
+        given().when().get(BASE + "?search=other")
+                .then().statusCode(200)
+                .body("items.name", contains("other-org"))
+                .body("total", equalTo(1));
+    }
+
+    // no real catalog is needed: an unknown one is enough to exercise the filtered path's total (the business logic
+    // of the filter itself is covered by OrgServiceTest)
+    @Test
+    @TestSecurity(user = "owner", roles = "realm-owner")
+    void totalWithCatalogFilterCountsTheFilteredSet() {
+        create();
+
+        given().when().get(BASE + "?catalog=unknown")
+                .then().statusCode(200)
+                .body("items", empty())
+                .body("total", equalTo(0));
+    }
+
+    @Test
+    @TestSecurity(user = "owner", roles = "realm-owner")
+    void pageBeyondTheEndIsEmptyWithTheSameTotal() {
+        create();
+
+        given().when().get(BASE + "?first=50&max=10")
+                .then().statusCode(200)
+                .body("items", empty())
+                .body("total", equalTo(1));
     }
 
     @Test
@@ -260,7 +303,8 @@ class OrganisationsResourceTest {
 
         given().when().get(BASE)
                 .then().statusCode(200)
-                .body("name", hasItem(ORG));
+                .body("items.name", hasItem(ORG))
+                .body("total", notNullValue());
     }
 
     @Test

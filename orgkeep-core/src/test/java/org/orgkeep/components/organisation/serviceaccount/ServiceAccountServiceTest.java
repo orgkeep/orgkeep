@@ -173,8 +173,8 @@ class ServiceAccountServiceTest {
         ServiceAccountCreated created = create("billing", List.of());
         String saUserId = created.serviceAccount().userId();
 
-        assertEquals(List.of(paulId), memberService.list(realm(), ORG).stream().map(OrgMember::id).toList());
-        assertEquals(1, orgService.list(realm(), null, null, null, 0, 10).getFirst().memberCount());
+        assertEquals(List.of(paulId), memberService.list(realm(), ORG, null, null, 0, 100).items().stream().map(OrgMember::id).toList());
+        assertEquals(1, orgService.list(realm(), null, null, null, 0, 10).items().getFirst().memberCount());
 
         assertThrowsExactly(MemberNotFoundException.class, () -> memberService.remove(realm(), ORG, saUserId));
         assertThrowsExactly(MemberNotFoundException.class,
@@ -267,17 +267,20 @@ class ServiceAccountServiceTest {
         create("billing", List.of());
 
         assertEquals(Set.of(paulId, ciId),
-                memberService.list(realm(), ORG).stream().map(OrgMember::id).collect(Collectors.toSet()));
-        assertEquals(2, orgService.list(realm(), null, null, null, 0, 10).getFirst().memberCount());
+                memberService.list(realm(), ORG, null, null, 0, 100).items().stream().map(OrgMember::id).collect(Collectors.toSet()));
+        assertEquals(2, orgService.list(realm(), null, null, null, 0, 10).items().getFirst().memberCount());
         assertEquals(List.of("billing"), serviceAccountService.list(realm(), ORG).stream().map(ServiceAccount::name).toList());
 
         assertFalse(memberService.setEnabled(realm(), ORG, ciId, false, paulId).enabled());
         memberService.remove(realm(), ORG, ciId);
-        assertEquals(List.of(paulId), memberService.list(realm(), ORG).stream().map(OrgMember::id).toList());
+        assertEquals(List.of(paulId), memberService.list(realm(), ORG, null, null, 0, 100).items().stream().map(OrgMember::id).toList());
     }
 
     // a client of the console whose service-account user is added to the org by hand is no service account of Orgkeep
-    // either way: without the group it is a member like another
+    // either way: without the group it is a member like another. Not in the group /{org}/user-groups/users either
+    // (added by hand, not through Orgkeep's add), so the unfiltered list does not show it: a known console limit
+    // (members.md), shared with the member count, which still counts it. search still finds it: it reads the
+    // organisation members directly, dropping only the ids of the service-accounts group
     @Test
     void aConsoleServiceAccountUserAddedToTheOrgIsNotInTheGroupSoNotFiltered() {
         String uuid = testRealm.createClient("console-client");
@@ -287,7 +290,8 @@ class ServiceAccountServiceTest {
         String userId = testRealm.resource().clients().get(uuid).getServiceAccountUser().getId();
         orgs.addMember(realm(), testRealm.resource().organizations().search("acme", true, 0, 1).getFirst().getId(), userId);
 
-        assertEquals(List.of(userId), memberService.list(realm(), ORG).stream().map(OrgMember::id).toList());
+        assertEquals(List.of(userId),
+                memberService.list(realm(), ORG, "console-client", null, 0, 100).items().stream().map(OrgMember::id).toList());
         assertEquals(List.of(), serviceAccountService.list(realm(), ORG));
     }
 

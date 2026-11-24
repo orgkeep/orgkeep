@@ -476,13 +476,6 @@ public class KeycloakClients {
         }
     }
 
-    /** Ids of the users holding the role directly. */
-    public Set<String> usersWithRole(String realm, String clientUuid, String roleName) {
-        return listUsersWithRole(realm, clientUuid, roleName).stream()
-                .map(UserRepresentation::getId)
-                .collect(Collectors.toSet());
-    }
-
     /** Users holding the role directly (not through a group or a composite), brief representations. */
     public List<UserRepresentation> listUsersWithRole(String realm, String clientUuid, String roleName) {
         return roles(realm, clientUuid).get(roleName).getUserMembers();

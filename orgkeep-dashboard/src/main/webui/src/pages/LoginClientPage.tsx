@@ -13,6 +13,7 @@ import {
   Table,
   TagsInput,
   Text,
+  TextInput,
   Title,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
@@ -330,13 +331,14 @@ function ServiceAccountDefaultsSection() {
 }
 
 // The values of the form: without lightweightTokens, saved on its own by LightweightTokensSection (left out of
-// the request, the core keeps the mode)
+// the request, the core keeps the mode). homeUrl is never left out: an empty field removes it (sent as "")
 function toValues(client: LoginClient): UpdateLoginClientRequest {
   return {
     redirectUris: client.redirectUris,
     postLogoutRedirectUris: client.postLogoutRedirectUris,
     webOrigins: client.webOrigins,
     defaultCatalogs: client.defaultCatalogs,
+    homeUrl: client.homeUrl ?? '',
   };
 }
 
@@ -395,6 +397,12 @@ function SettingsForm({ client }: { client: LoginClient }) {
               label: catalog.displayName ? `${catalog.displayName} (${catalog.name})` : catalog.name,
             }))}
             {...form.getInputProps('defaultCatalogs')}
+          />
+          <TextInput
+            label={t('loginClient.settings.homeUrl')}
+            description={t('loginClient.settings.homeUrlDescription')}
+            placeholder="https://app.example.com/"
+            {...form.getInputProps('homeUrl')}
           />
 
           {update.error && (

@@ -662,6 +662,8 @@
       "webOriginsDescription": "Origins allowed to call Keycloak from a browser (CORS): https://app.example.com, or + for the origins of the redirect URIs.",
       "defaultCatalogs": "Default catalogs",
       "defaultCatalogsDescription": "In every token of this client. The other catalogs are only in a token when the application asks for them (scope=<catalog>).",
+      "homeUrl": "Home URL",
+      "homeUrlDescription": "The link shown to invited members after they choose their password, on Keycloak's last page. Leave empty to show no link.",
       "saved": "Saved."
     },
     "orgkeepApi": {

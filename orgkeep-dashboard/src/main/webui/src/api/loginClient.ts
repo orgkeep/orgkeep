@@ -19,6 +19,8 @@ export interface LoginClient {
   defaultCatalogs: string[];
   // lightweight access tokens: the APIs of the realm owner read the roles and the catalogs by introspection
   lightweightTokens: boolean;
+  // the client's baseUrl: the "Back to Application" link on Keycloak's last page after an invitation. Null when not set
+  homeUrl: string | null;
 }
 
 // The three lists of URIs are replaced whole
@@ -29,6 +31,8 @@ export interface UpdateLoginClientRequest {
   defaultCatalogs: string[];
   // optional: left out, the core keeps the current mode
   lightweightTokens?: boolean;
+  // optional: left out, the core keeps the current home URL; an empty string removes it
+  homeUrl?: string;
 }
 
 // The client orgkeep-api (OrgkeepApiClientResource in orgkeep-core): the login client of the screens an integrator

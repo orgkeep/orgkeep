@@ -15,8 +15,9 @@ public interface RealmProvisioner {
     CreateRealmResponse create(CreateRealmRequest request);
 
     /**
-     * Sets the SMTP server Keycloak uses for the emails of the realm, replacing the previous one.
-     * Without it, users created without password receive no invitation.
+     * Sets the SMTP server Keycloak uses for the emails of the realm, replacing the keys Orgkeep manages (host,
+     * port, from, fromDisplayName, starttls, ssl, auth, user, password) and keeping the others (reply-to, envelope
+     * from... set in the Keycloak console). Without it, users created without password receive no invitation.
      */
     void configureSmtp(String name, SmtpSettings smtp);
 

@@ -2,14 +2,12 @@ package org.orgkeep.components.realm;
 
 import org.orgkeep.api.model.CreateRealmRequest;
 import org.orgkeep.api.model.OrgkeepApiClient;
-import org.orgkeep.api.model.SmtpSettings;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.CredentialRepresentation;
 import org.keycloak.representations.idm.RealmRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 import org.mapstruct.*;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -102,25 +100,6 @@ public interface RealmMapper {
         user.setEnabled(true);
         user.setClientRoles(Map.of("realm-management", List.of("realm-admin")));
         return user;
-    }
-
-    /** The "smtpServer" map of the realm representation, with the keys of the Email tab of the Keycloak console. */
-    default Map<String, String> toSmtpServer(SmtpSettings smtp) {
-        Map<String, String> server = new HashMap<>();
-        server.put("host", smtp.host());
-        server.put("port", String.valueOf(smtp.port()));
-        server.put("from", smtp.from());
-        if (smtp.fromDisplayName() != null) {
-            server.put("fromDisplayName", smtp.fromDisplayName());
-        }
-        server.put("starttls", String.valueOf(smtp.starttls()));
-        server.put("ssl", String.valueOf(smtp.ssl()));
-        server.put("auth", String.valueOf(smtp.username() != null));
-        if (smtp.username() != null) {
-            server.put("user", smtp.username());
-            server.put("password", smtp.password());
-        }
-        return server;
     }
 
     @Named("adminUsername")

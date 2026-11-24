@@ -1,10 +1,10 @@
-import { useState } from 'react';
-import { Alert, Badge, Button, Center, Group, Loader, Stack, Table, Text, Title } from '@mantine/core';
-import { useDisclosure } from '@mantine/hooks';
+import { useEffect, useState } from 'react';
+import { Alert, Badge, Button, Center, Group, Loader, Pagination, Stack, Table, Text, TextInput, Title } from '@mantine/core';
+import { useDebouncedValue, useDisclosure } from '@mantine/hooks';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 import { useCurrentUser } from '../api/currentUser';
-import { type OrgMember, useOrgMembers, useRemoveOrgMember, useSetMemberEnabled } from '../api/organisations';
+import { type OrgMember, PAGE_SIZE, useOrgMembers, useRemoveOrgMember, useSetMemberEnabled } from '../api/organisations';
 import ConfirmModal from '../components/ConfirmModal';
 import AddMemberModal from './AddMemberModal';
 import { ROLE_COLORS } from './orgRoles';
@@ -17,7 +17,10 @@ export default function OrgMembersPage() {
   const { t } = useTranslation();
   // the :org part of the route /orgs/:org/members, like a @PathParam. Always set on this route, hence the "!"
   const org = useParams().org!;
-  const { data: members, isPending, error } = useOrgMembers(org);
+  const [search, setSearch] = useState('');
+  const [debouncedSearch] = useDebouncedValue(search.trim(), 300);
+  const [page, setPage] = useState(1);
+  const { data: memberPage, isPending, error } = useOrgMembers(org, { search: debouncedSearch, page });
   const removeMember = useRemoveOrgMember(org);
   const [addOpened, { open: openAdd, close: closeAdd }] = useDisclosure();
   const [removeTarget, setRemoveTarget] = useState<OrgMember | null>(null);
@@ -26,6 +29,21 @@ export default function OrgMembersPage() {
   const [statusTarget, setStatusTarget] = useState<OrgMember | null>(null);
   // /api/me gives no id, so the current user is recognised by the username, which the members list has too
   const { data: currentUser } = useCurrentUser();
+  const totalPages = memberPage ? Math.ceil(memberPage.total / PAGE_SIZE) : 0;
+
+  // A page can become empty when the list shrinks (e.g. the last member of a 2nd page of 21 removed, leaving
+  // total=20, totalPages=1): bring the page back within range instead of a dead end showing "No member yet."
+  // with the Pagination control hidden (it only shows when there is more than one page)
+  useEffect(() => {
+    if (totalPages > 0 && page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [totalPages, page]);
+
+  function changeSearch(value: string) {
+    setPage(1);
+    setSearch(value);
+  }
 
   function closeRemoveConfirm() {
     removeMember.reset();
@@ -76,6 +94,8 @@ export default function OrgMembersPage() {
     );
   }
 
+  const members = memberPage.items;
+
   return (
     <Stack maw={1100}>
       <Group justify="space-between">
@@ -83,8 +103,17 @@ export default function OrgMembersPage() {
         <Button onClick={openAdd}>{t('members.add')}</Button>
       </Group>
 
+      <TextInput
+        placeholder={t('members.searchPlaceholder')}
+        aria-label={t('members.searchLabel')}
+        value={search}
+        onChange={(event) => changeSearch(event.currentTarget.value)}
+        w={320}
+        maw="100%"
+      />
+
       {members.length === 0 ? (
-        <Text c="dimmed">{t('members.empty')}</Text>
+        <Text c="dimmed">{debouncedSearch ? t('members.noMatch') : t('members.empty')}</Text>
       ) : (
         <Table.ScrollContainer minWidth={640}>
           <Table highlightOnHover withTableBorder>
@@ -140,6 +169,12 @@ export default function OrgMembersPage() {
             </Table.Tbody>
           </Table>
         </Table.ScrollContainer>
+      )}
+
+      {totalPages > 1 && (
+        <Group justify="center">
+          <Pagination value={page} onChange={setPage} total={totalPages} />
+        </Group>
       )}
 
       <AddMemberModal org={org} opened={addOpened} onClose={closeAdd} />

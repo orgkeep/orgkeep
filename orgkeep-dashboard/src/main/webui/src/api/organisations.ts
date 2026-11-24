@@ -28,6 +28,16 @@ export interface OrgSummary {
   products: string[];
 }
 
+// The envelope of every paged list of the core (Page<T>): the items of the page, and the total number of elements
+// matching the request (search and filters applied), whatever the page.
+export interface Page<T> {
+  items: T[];
+  total: number;
+}
+
+// Lists are paged at 20: a page of the organisation list or of a member list.
+export const PAGE_SIZE = 20;
+
 export interface CreateOrgRequest {
   name: string;
   emailDomains: string[];
@@ -45,7 +55,8 @@ export interface CreateOrgResponse {
 }
 
 // Every query of this file starts with this key: invalidating it refreshes all of them at once.
-const ORGANISATIONS_KEY = 'organisations';
+// Exported for teams.ts: adding or removing a member of a team must also refresh the member list of the org.
+export const ORGANISATIONS_KEY = 'organisations';
 
 // The organisations as the realm owner manages them
 const ORGANISATIONS_URL = '/api/admin/organisations';
@@ -58,7 +69,7 @@ export interface OrganisationFilters {
   product: string;
 }
 
-function fetchOrganisations({ search, catalog, product }: OrganisationFilters): Promise<OrgSummary[]> {
+function fetchOrganisations({ search, catalog, product }: OrganisationFilters, page: number): Promise<Page<OrgSummary>> {
   // URLSearchParams escapes the values, like @QueryParam on the Java side. Empty filters are left out.
   const params = new URLSearchParams();
   if (search) {
@@ -70,18 +81,38 @@ function fetchOrganisations({ search, catalog, product }: OrganisationFilters): 
   if (product) {
     params.set('product', product);
   }
-  const query = params.size > 0 ? `?${params}` : '';
-  // no paging yet: the core answers its first page, 100 organisations at most
-  return getJson(`${ORGANISATIONS_URL}${query}`);
+  params.set('first', String((page - 1) * PAGE_SIZE));
+  params.set('max', String(PAGE_SIZE));
+  return getJson(`${ORGANISATIONS_URL}?${params}`);
 }
 
-export function useOrganisations(filters: OrganisationFilters) {
+export function useOrganisations(filters: OrganisationFilters, page: number) {
   return useQuery({
-    // one cache entry per combination of filters: going back to a previous one shows its result at once
+    // one cache entry per combination of filters and page: going back to a previous one shows its result at once
     // 'list' keeps these keys apart from those of one organisation below (['organisations', 'detail', org])
-    queryKey: [ORGANISATIONS_KEY, 'list', filters.search, filters.catalog, filters.product],
-    queryFn: () => fetchOrganisations(filters),
-    // while the result of a new search loads, keep showing the previous one instead of an empty table
+    queryKey: [ORGANISATIONS_KEY, 'list', filters.search, filters.catalog, filters.product, page],
+    queryFn: () => fetchOrganisations(filters, page),
+    // while the result of a new search or page loads, keep showing the previous one instead of an empty table
+    placeholderData: keepPreviousData,
+    // a short delay between a change here (a mutation invalidates the list) and someone else's: not worth a
+    // refetch on every focus of the window in between
+    staleTime: 30_000,
+  });
+}
+
+// Names only, for a picker (e.g. CatalogRolePage): one call, no total, the core's own default page size (20)
+function fetchOrganisationNames(search: string): Promise<string[]> {
+  const params = new URLSearchParams();
+  if (search) {
+    params.set('search', search);
+  }
+  return getJson(`/api/admin/organisation-names?${params}`);
+}
+
+export function useOrganisationNames(search: string) {
+  return useQuery({
+    queryKey: [ORGANISATIONS_KEY, 'names', search],
+    queryFn: () => fetchOrganisationNames(search),
     placeholderData: keepPreviousData,
   });
 }
@@ -173,11 +204,36 @@ export function useOrganisation(org: string) {
   });
 }
 
-export function useOrgMembers(org: string) {
+// Every filter is optional: left out of the query means "no filter". page starts at 1 (like the organisation
+// list); max overrides PAGE_SIZE for a picker that only needs a handful of names (e.g. 20 by default too)
+export interface OrgMembersFilters {
+  search?: string;
+  team?: string;
+  page?: number;
+  max?: number;
+}
+
+function fetchOrgMembers(org: string, { search, team, page = 1, max = PAGE_SIZE }: OrgMembersFilters): Promise<Page<OrgMember>> {
+  const params = new URLSearchParams();
+  if (search) {
+    params.set('search', search);
+  }
+  if (team) {
+    params.set('team', team);
+  }
+  params.set('first', String((page - 1) * max));
+  params.set('max', String(max));
+  return getJson(`${membersUrl(org)}?${params}`);
+}
+
+export function useOrgMembers(org: string, filters: OrgMembersFilters = {}) {
+  const { search, team, page = 1, max = PAGE_SIZE } = filters;
   return useQuery({
-    queryKey: [ORGANISATIONS_KEY, 'detail', org, 'members'],
     // the path of the org admins (/api/organisations/{org}/members): the core opens it to the realm owner too
-    queryFn: () => getJson<OrgMember[]>(membersUrl(org)),
+    queryKey: [ORGANISATIONS_KEY, 'detail', org, 'members', search, team, page, max],
+    queryFn: () => fetchOrgMembers(org, filters),
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
   });
 }
 

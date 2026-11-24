@@ -142,6 +142,7 @@
     "members": {
       "loadError": "Could not load the members",
       "empty": "No member yet.",
+      "noMatch": "No member matches this search.",
       "columns": {
         "name": "Name",
         "email": "Email",
@@ -426,7 +427,10 @@
     "title": "Members of {{org}}",
     "loadError": "Could not load the members of {{org}}",
     "empty": "No member yet.",
+    "noMatch": "No member matches this search.",
     "add": "Add a member",
+    "searchLabel": "Search members",
+    "searchPlaceholder": "Search by first name, username or email",
     "columns": {
       "name": "Name",
       "email": "Email",

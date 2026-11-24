@@ -16,7 +16,7 @@ import {
   Text,
   Title,
 } from '@mantine/core';
-import { useDisclosure } from '@mantine/hooks';
+import { useDebouncedValue, useDisclosure } from '@mantine/hooks';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router';
 import {
@@ -28,7 +28,7 @@ import {
   useRevokeRoleFromUser,
   useRoleHolders,
 } from '../api/catalogs';
-import { useOrganisations, useOrgMembers } from '../api/organisations';
+import { useOrganisationNames, useOrgMembers } from '../api/organisations';
 import { useServiceAccounts } from '../api/serviceAccounts';
 import ConfirmModal from '../components/ConfirmModal';
 import { RoleKindBadge } from './CatalogPage';
@@ -238,18 +238,22 @@ interface GrantProps {
 function GrantToUser({ catalog, role, holderIds }: GrantProps) {
   const { t } = useTranslation();
   const [org, setOrg] = useState<string | null>(null);
-  // all the organisations (first page of the core, 100 max), without filter
-  const organisations = useOrganisations({ search: '', catalog: '', product: '' });
+  const [orgSearch, setOrgSearch] = useState('');
+  const [debouncedOrgSearch] = useDebouncedValue(orgSearch.trim(), 300);
+  // names only, searched on the server (max 20): realm owner only, see OrganisationNamesResource
+  const organisationNames = useOrganisationNames(debouncedOrgSearch);
 
   return (
     <Group align="flex-end">
       <Select
         label={t('catalogRole.users.organisation')}
         placeholder={t('catalogRole.users.organisationPlaceholder')}
-        data={(organisations.data ?? []).map((organisation) => organisation.name)}
+        data={organisationNames.data ?? []}
         value={org}
         onChange={setOrg}
         searchable
+        searchValue={orgSearch}
+        onSearchChange={setOrgSearch}
         w={240}
       />
       {/* the members are loaded once an organisation is chosen: the hook needs it */}
@@ -261,9 +265,11 @@ function GrantToUser({ catalog, role, holderIds }: GrantProps) {
 
 function MemberPicker({ catalog, role, holderIds, org }: GrantProps & { org: string }) {
   const { t } = useTranslation();
-  const members = useOrgMembers(org);
+  const [search, setSearch] = useState('');
+  const [debouncedSearch] = useDebouncedValue(search.trim(), 300);
+  const members = useOrgMembers(org, { search: debouncedSearch, max: 20 });
   const grant = useGrantRoleToUser(catalog, role);
-  const candidates = (members.data ?? []).filter((member) => !holderIds.includes(member.id));
+  const candidates = (members.data?.items ?? []).filter((member) => !holderIds.includes(member.id));
 
   return (
     <Stack gap={4}>
@@ -275,6 +281,8 @@ function MemberPicker({ catalog, role, holderIds, org }: GrantProps & { org: str
         value={null}
         onChange={(userId) => userId && grant.mutate(userId)}
         searchable
+        searchValue={search}
+        onSearchChange={setSearch}
         disabled={grant.isPending}
         w={280}
       />

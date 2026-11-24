@@ -158,7 +158,7 @@ class SessionAuthenticationTest {
                 .header(DashboardSession.CSRF_HEADER, DashboardSession.CSRF_HEADER_VALUE)
                 .when().get("/api/organisations/{org}/members", ORG)
                 .then().statusCode(200)
-                .body("email", hasItem(ORG_ADMIN));
+                .body("items.email", hasItem(ORG_ADMIN));
         // and only those: the realm owner endpoints stay closed
         given().cookies(session)
                 .header(DashboardSession.CSRF_HEADER, DashboardSession.CSRF_HEADER_VALUE)

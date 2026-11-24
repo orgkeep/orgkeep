@@ -24,6 +24,7 @@
     "organisations": "Organisations",
     "catalogs": "Catalogues",
     "loginClient": "Client de login",
+    "smtp": "Serveur d'e-mails",
     "organisation": "Organisation {{org}}",
     "members": "Membres",
     "teams": "Teams",
@@ -690,6 +691,36 @@
       "switch": "Tokens légers pour les nouveaux service accounts",
       "description": "Les service accounts créés ensuite, par un org admin ou par vous, prennent ce mode. Les existants ne changent pas : basculez chacun sur sa propre page (organisation, onglet Service accounts, puis son nom).",
       "loadError": "Impossible de charger le défaut des service accounts"
+    }
+  },
+  "smtp": {
+    "title": "Serveur d'e-mails",
+    "subtitle": "Keycloak envoie les invitations, réinitialisations de mot de passe et vérifications d'email du realm par ce serveur.",
+    "loadError": "Impossible de charger le serveur d'e-mails",
+    "managedByConfiguration": "Défini par la configuration d'Orgkeep (ORGKEEP_SMTP_HOST / ORGKEEP_SMTP_*). Ces réglages sont appliqués à chaque démarrage, les champs ci-dessous sont donc en lecture seule. Pour les gérer ici, retirez les variables ORGKEEP_SMTP_* puis redémarrez Orgkeep : les réglages actuels sont conservés.",
+    "noServer": "Aucun serveur d'e-mails : les invitations ne sont pas envoyées, les membres invités ne peuvent pas choisir de mot de passe.",
+    "saved": "Enregistré.",
+    "form": {
+      "host": "Host",
+      "port": "Port",
+      "from": "Adresse d'expédition",
+      "fromDisplayName": "Nom affiché de l'expéditeur",
+      "starttls": "STARTTLS",
+      "ssl": "SSL",
+      "username": "Username",
+      "usernameDescription": "Vide : pas d'authentification.",
+      "password": "Mot de passe",
+      "passwordPlaceholder": "Inchangé",
+      "passwordDescription": "Laisser vide pour garder le mot de passe actuel.",
+      "passwordDescriptionNone": "Aucun mot de passe enregistré."
+    },
+    "remove": {
+      "button": "Retirer le serveur d'e-mails",
+      "confirm": {
+        "title": "Retirer le serveur d'e-mails ?",
+        "message": "Keycloak n'envoie plus aucun e-mail de ce realm : les invitations ne sont plus envoyées.",
+        "button": "Retirer"
+      }
     }
   }
 }

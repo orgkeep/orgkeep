@@ -24,6 +24,7 @@
     "organisations": "Organisations",
     "catalogs": "Catalogs",
     "loginClient": "Login client",
+    "smtp": "Email server",
     "organisation": "Organisation {{org}}",
     "members": "Members",
     "teams": "Teams",
@@ -690,6 +691,36 @@
       "switch": "Lightweight tokens for new service accounts",
       "description": "The service accounts created afterwards, by an org admin or by you, take this mode. The existing ones do not change: switch each one on its own page (organisation, Service accounts tab, then its name).",
       "loadError": "Could not load the default of the service accounts"
+    }
+  },
+  "smtp": {
+    "title": "Email server",
+    "subtitle": "Keycloak sends the invitations, password resets and email verifications of the realm through this server.",
+    "loadError": "Could not load the email server",
+    "managedByConfiguration": "Set by the configuration of Orgkeep (ORGKEEP_SMTP_HOST / ORGKEEP_SMTP_*). These settings are applied at every startup, so the fields below are read-only. To manage them here, remove the ORGKEEP_SMTP_* variables and restart Orgkeep: the current settings are kept.",
+    "noServer": "No email server: invitations are not sent, invited members cannot choose a password.",
+    "saved": "Saved.",
+    "form": {
+      "host": "Host",
+      "port": "Port",
+      "from": "From address",
+      "fromDisplayName": "From display name",
+      "starttls": "STARTTLS",
+      "ssl": "SSL",
+      "username": "Username",
+      "usernameDescription": "Empty: no authentication.",
+      "password": "Password",
+      "passwordPlaceholder": "Unchanged",
+      "passwordDescription": "Leave empty to keep the current password.",
+      "passwordDescriptionNone": "No password stored yet."
+    },
+    "remove": {
+      "button": "Remove the email server",
+      "confirm": {
+        "title": "Remove the email server?",
+        "message": "Keycloak will send no email of this realm any more: invitations are not sent.",
+        "button": "Remove"
+      }
     }
   }
 }

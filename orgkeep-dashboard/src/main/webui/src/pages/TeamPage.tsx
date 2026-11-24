@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   Anchor,
@@ -8,15 +8,17 @@ import {
   Center,
   Group,
   Loader,
+  Pagination,
   Select,
   Stack,
   Table,
   Text,
   Title,
 } from '@mantine/core';
+import { useDebouncedValue } from '@mantine/hooks';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
-import { type OrgMember, useOrgMembers } from '../api/organisations';
+import { PAGE_SIZE, type OrgMember, useOrgMembers } from '../api/organisations';
 import { productKey } from '../api/products';
 import { useServiceAccounts } from '../api/serviceAccounts';
 import {
@@ -122,24 +124,28 @@ interface SectionProps {
   team: UserGroup;
 }
 
-// The members of the team, among those of the org
+// The members of the team, read with ?team= (paged by the core, 20 per page): everyone in it, service accounts
+// excluded
 function MembersSection({ org, team, realmOwner }: SectionProps & { realmOwner: boolean }) {
   const { t } = useTranslation();
-  const { data: orgMembers } = useOrgMembers(org);
+  const [page, setPage] = useState(1);
+  const { data: teamMembers } = useOrgMembers(org, { team: team.name, page });
   const addMember = useAddTeamMember(org, team.name);
   const removeMember = useRemoveTeamMember(org, team.name);
   const [removeTarget, setRemoveTarget] = useState<OrgMember | null>(null);
   // the token preview is for the realm owner only (/organisations/:org/teams/:team)
   const [previewTarget, setPreviewTarget] = useState<OrgMember | null>(null);
 
-  const members = (orgMembers ?? []).filter((member) => team.memberIds.includes(member.id));
-  const others = (orgMembers ?? []).filter((member) => !team.memberIds.includes(member.id));
+  const members = teamMembers?.items ?? [];
+  const totalPages = teamMembers ? Math.ceil(teamMembers.total / PAGE_SIZE) : 0;
 
-  function add(userId: string | null) {
-    if (userId) {
-      addMember.mutate(userId);
+  // Removing the last member of the last page (or a team changing underneath) must not leave the page stuck past
+  // the end, showing an empty table with no way back to the previous page (same dead end as OrgMembersPage)
+  useEffect(() => {
+    if (totalPages > 0 && page > totalPages) {
+      setPage(totalPages);
     }
-  }
+  }, [totalPages, page]);
 
   function closeRemoveConfirm() {
     removeMember.reset();
@@ -149,18 +155,10 @@ function MembersSection({ org, team, realmOwner }: SectionProps & { realmOwner: 
   return (
     <Stack>
       <Group justify="space-between">
-        <Title order={3}>{t('team.members.title', { count: members.length })}</Title>
+        <Title order={3}>{t('team.members.title', { count: teamMembers?.total ?? members.length })}</Title>
         {/* every member stays in users: nobody to add there */}
-        {others.length > 0 && (
-          <Select
-            placeholder={t('team.members.add')}
-            data={others.map((member) => ({ value: member.id, label: personName(member) }))}
-            // a Select used as an action: it never keeps a value
-            value={null}
-            onChange={add}
-            searchable
-            w={280}
-          />
+        {team.name !== 'users' && (
+          <AddMemberPicker org={org} excludeIds={team.memberIds} onAdd={(userId) => addMember.mutate(userId)} />
         )}
       </Group>
       {addMember.error && (
@@ -199,6 +197,12 @@ function MembersSection({ org, team, realmOwner }: SectionProps & { realmOwner: 
         </Table>
       )}
 
+      {totalPages > 1 && (
+        <Group justify="center">
+          <Pagination value={page} onChange={setPage} total={totalPages} />
+        </Group>
+      )}
+
       <ConfirmModal
         opened={removeTarget !== null}
         title={t('team.members.removeTitle', { member: removeTarget ? personName(removeTarget) : '', team: team.name })}
@@ -219,6 +223,29 @@ function MembersSection({ org, team, realmOwner }: SectionProps & { realmOwner: 
         />
       )}
     </Stack>
+  );
+}
+
+// A searchable picker of a member of the org to add to the team: ?search= (max 20), excludeIds (team.memberIds)
+// left out on the client. A Select used as an action: it never keeps a value
+function AddMemberPicker({ org, excludeIds, onAdd }: { org: string; excludeIds: string[]; onAdd: (userId: string) => void }) {
+  const { t } = useTranslation();
+  const [search, setSearch] = useState('');
+  const [debouncedSearch] = useDebouncedValue(search.trim(), 300);
+  const { data: candidates } = useOrgMembers(org, { search: debouncedSearch, max: 20 });
+  const options = (candidates?.items ?? []).filter((member) => !excludeIds.includes(member.id));
+
+  return (
+    <Select
+      placeholder={t('team.members.add')}
+      data={options.map((member) => ({ value: member.id, label: personName(member) }))}
+      value={null}
+      onChange={(userId) => userId && onAdd(userId)}
+      searchable
+      searchValue={search}
+      onSearchChange={setSearch}
+      w={280}
+    />
   );
 }
 

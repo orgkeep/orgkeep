@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deleteRequest, getJson, postJson, putJson, putRequest } from './http';
 import { SERVICE_ACCOUNTS_KEY, TEAMS_KEY } from './queryKeys';
-import type { FeatureQuota, QuotaCycle } from './organisations';
+import { ORGANISATIONS_KEY, type FeatureQuota, type QuotaCycle } from './organisations';
 
 // The teams of an organisation, managed by its org admins (UserGroupsResource, TeamProductsResource,
 // TeamCatalogRolesResource, AvailableProductsResource and AvailableCatalogsResource in orgkeep-core).
@@ -131,11 +131,14 @@ export function useGrantableRoles(org: string) {
 }
 
 // After any change of a team: the list of the groups is read again (products, roles, members)
-// (the service accounts list their teams too: their list is read again as well)
+// (the service accounts list their teams too: their list is read again as well). A member added to or removed
+// from a team also changes what ?team= of the org members endpoint returns (TeamPage.MembersSection): refresh it
+// too, and a team deletion with it (useDeleteUserGroup calls this same function).
 function useInvalidateTeams(org: string) {
   const queryClient = useQueryClient();
   return () => {
     queryClient.invalidateQueries({ queryKey: [SERVICE_ACCOUNTS_KEY, org] });
+    queryClient.invalidateQueries({ queryKey: [ORGANISATIONS_KEY, 'detail', org, 'members'] });
     return queryClient.invalidateQueries({ queryKey: [TEAMS_KEY, org] });
   };
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   Anchor,
@@ -9,19 +9,22 @@ import {
   Code,
   Group,
   Loader,
+  Pagination,
   Stack,
   Table,
   Tabs,
   Text,
+  TextInput,
   Title,
 } from '@mantine/core';
-import { useDisclosure } from '@mantine/hooks';
+import { useDebouncedValue, useDisclosure } from '@mantine/hooks';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import {
   type OrgDetails,
   type OrgMember,
   type OrgProduct,
+  PAGE_SIZE,
   useDeleteOrganisation,
   useOrganisation,
   useOrgMembers,
@@ -60,8 +63,9 @@ export default function OrganisationPage() {
   const tab = toTab(searchParams.get('tab'));
 
   const { data: details, isPending, error } = useOrganisation(org);
-  // the lists are loaded at once: the tabs show their counts
-  const members = useOrgMembers(org);
+  // the lists are loaded at once: the tabs show their counts. Members: just the total, unfiltered (the members
+  // tab has its own search and page), max 1 so this call reads almost nothing
+  const members = useOrgMembers(org, { max: 1 });
   const products = useOrgProducts(org);
   // the API of the org admins, opened to the realm owner by the core
   const teams = useUserGroups(org);
@@ -102,7 +106,7 @@ export default function OrganisationPage() {
 
       <Tabs value={tab} onChange={changeTab}>
         <Tabs.List>
-          <Tabs.Tab value="members" rightSection={<Count value={members.data?.length} />}>
+          <Tabs.Tab value="members" rightSection={<Count value={members.data?.total} />}>
             {t('orgDetail.tabs.members')}
           </Tabs.Tab>
           <Tabs.Tab value="products" rightSection={<Count value={products.data?.length} />}>
@@ -117,7 +121,7 @@ export default function OrganisationPage() {
         </Tabs.List>
 
         <Tabs.Panel value="members" pt="md">
-          <MembersTab org={org} members={members.data} isPending={members.isPending} error={members.error} />
+          <MembersTab org={org} />
         </Tabs.Panel>
         <Tabs.Panel value="products" pt="md">
           <ProductsTab org={org} products={products.data} isPending={products.isPending} error={products.error} />
@@ -308,18 +312,31 @@ function TeamsTab({ org, teams, isPending, error }: TeamsTabProps) {
 
 interface MembersTabProps {
   org: string;
-  // undefined while loading
-  members: OrgMember[] | undefined;
-  isPending: boolean;
-  error: Error | null;
 }
 
-// Read only: the org admins add and remove members on their own page (OrgMembersPage).
-// The realm owner can preview the token of a member: what its APIs receive
-function MembersTab({ org, members, isPending, error }: MembersTabProps) {
+// The org admins add and remove members on their own page (OrgMembersPage): here, search, paging, and for the
+// realm owner, a preview of the token of a member (what its APIs receive)
+function MembersTab({ org }: MembersTabProps) {
   const { t } = useTranslation();
+  const [search, setSearch] = useState('');
+  const [debouncedSearch] = useDebouncedValue(search.trim(), 300);
+  const [page, setPage] = useState(1);
+  const { data: memberPage, isPending, error } = useOrgMembers(org, { search: debouncedSearch, page });
   // null = the preview modal is closed
   const [previewTarget, setPreviewTarget] = useState<OrgMember | null>(null);
+  const totalPages = memberPage ? Math.ceil(memberPage.total / PAGE_SIZE) : 0;
+
+  // A page can become empty when the list shrinks (same dead end as OrgMembersPage): bring it back within range
+  useEffect(() => {
+    if (totalPages > 0 && page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [totalPages, page]);
+
+  function changeSearch(value: string) {
+    setPage(1);
+    setSearch(value);
+  }
 
   if (isPending) {
     return <Loader size="sm" />;
@@ -331,45 +348,65 @@ function MembersTab({ org, members, isPending, error }: MembersTabProps) {
       </Alert>
     );
   }
-  if (!members || members.length === 0) {
-    return <Text c="dimmed">{t('orgDetail.members.empty')}</Text>;
-  }
+
+  const members = memberPage.items;
 
   return (
-    <Table.ScrollContainer minWidth={640}>
-      <Table highlightOnHover withTableBorder>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>{t('orgDetail.members.columns.name')}</Table.Th>
-            <Table.Th>{t('orgDetail.members.columns.email')}</Table.Th>
-            <Table.Th>{t('orgDetail.members.columns.role')}</Table.Th>
-            <Table.Th />
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {members.map((member) => (
-            <Table.Tr key={member.id} opacity={member.enabled === false ? 0.6 : undefined}>
-              <Table.Td fw={500}>
-                <MemberName member={member}/>
-              </Table.Td>
-              <Table.Td c="dimmed">{member.email}</Table.Td>
-              <Table.Td>
-                <Badge color={ROLE_COLORS[member.role]} variant="light">
-                  {t(`orgDetail.roles.${member.role}`)}
-                </Badge>
-              </Table.Td>
-              <Table.Td>
-                <Group justify="flex-end" align="flex-start" wrap="nowrap">
-                  <ResendInvitationButton org={org} member={member} />
-                  <Button variant="subtle" size="xs" onClick={() => setPreviewTarget(member)}>
-                    {t('tokenPreview.button')}
-                  </Button>
-                </Group>
-              </Table.Td>
-            </Table.Tr>
-          ))}
-        </Table.Tbody>
-      </Table>
+    <Stack>
+      <TextInput
+        placeholder={t('members.searchPlaceholder')}
+        aria-label={t('members.searchLabel')}
+        value={search}
+        onChange={(event) => changeSearch(event.currentTarget.value)}
+        w={320}
+        maw="100%"
+      />
+
+      {members.length === 0 ? (
+        <Text c="dimmed">{debouncedSearch ? t('orgDetail.members.noMatch') : t('orgDetail.members.empty')}</Text>
+      ) : (
+        <Table.ScrollContainer minWidth={640}>
+          <Table highlightOnHover withTableBorder>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>{t('orgDetail.members.columns.name')}</Table.Th>
+                <Table.Th>{t('orgDetail.members.columns.email')}</Table.Th>
+                <Table.Th>{t('orgDetail.members.columns.role')}</Table.Th>
+                <Table.Th />
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {members.map((member) => (
+                <Table.Tr key={member.id} opacity={member.enabled === false ? 0.6 : undefined}>
+                  <Table.Td fw={500}>
+                    <MemberName member={member}/>
+                  </Table.Td>
+                  <Table.Td c="dimmed">{member.email}</Table.Td>
+                  <Table.Td>
+                    <Badge color={ROLE_COLORS[member.role]} variant="light">
+                      {t(`orgDetail.roles.${member.role}`)}
+                    </Badge>
+                  </Table.Td>
+                  <Table.Td>
+                    <Group justify="flex-end" align="flex-start" wrap="nowrap">
+                      <ResendInvitationButton org={org} member={member} />
+                      <Button variant="subtle" size="xs" onClick={() => setPreviewTarget(member)}>
+                        {t('tokenPreview.button')}
+                      </Button>
+                    </Group>
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
+      )}
+
+      {totalPages > 1 && (
+        <Group justify="center">
+          <Pagination value={page} onChange={setPage} total={totalPages} />
+        </Group>
+      )}
 
       {/* key: a new modal per member, so the catalog selection starts again from every catalog of the org */}
       <TokenPreviewModal
@@ -378,7 +415,7 @@ function MembersTab({ org, members, isPending, error }: MembersTabProps) {
         member={previewTarget}
         onClose={() => setPreviewTarget(null)}
       />
-    </Table.ScrollContainer>
+    </Stack>
   );
 }
 

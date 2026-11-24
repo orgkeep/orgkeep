@@ -1,9 +1,24 @@
 import { useState } from 'react';
-import { Alert, Anchor, Badge, Button, Center, Group, Loader, Select, Stack, Table, Text, TextInput, Title } from '@mantine/core';
+import {
+  Alert,
+  Anchor,
+  Badge,
+  Button,
+  Center,
+  Group,
+  Loader,
+  Pagination,
+  Select,
+  Stack,
+  Table,
+  Text,
+  TextInput,
+  Title,
+} from '@mantine/core';
 import { useDebouncedValue, useDisclosure } from '@mantine/hooks';
 import { useTranslation } from 'react-i18next';
 import { Link, useSearchParams } from 'react-router';
-import { useOrganisations } from '../api/organisations';
+import { PAGE_SIZE, useOrganisations } from '../api/organisations';
 import { productKey, productOptions, splitProductKey, useProducts } from '../api/products';
 import CreateOrganisationModal from './CreateOrganisationModal';
 import { personName } from './personName';
@@ -23,10 +38,13 @@ export default function OrganisationsPage() {
   const catalog = searchParams.get('catalog') ?? '';
   const product = searchParams.get('product') ?? '';
   const { data: products } = useProducts();
-  const { data: orgs, isPending, isFetching, error } = useOrganisations({ search: debouncedSearch, catalog, product });
+  const [page, setPage] = useState(1);
+  const { data: orgs, isPending, isFetching, error } = useOrganisations({ search: debouncedSearch, catalog, product }, page);
   const [createOpened, { open: openCreate, close: closeCreate }] = useDisclosure();
+  const totalPages = orgs ? Math.ceil(orgs.total / PAGE_SIZE) : 0;
 
   function changeProduct(key: string | null) {
+    setPage(1);
     // an empty filter is removed from the URL rather than kept as "?catalog=&product="
     if (!key) {
       setSearchParams({});
@@ -34,6 +52,11 @@ export default function OrganisationsPage() {
     }
     const { catalog, name } = splitProductKey(key);
     setSearchParams({ catalog, product: name });
+  }
+
+  function changeSearch(value: string) {
+    setPage(1);
+    setSearch(value);
   }
 
   return (
@@ -51,7 +74,7 @@ export default function OrganisationsPage() {
           placeholder={t('organisations.searchPlaceholder')}
           aria-label={t('organisations.searchLabel')}
           value={search}
-          onChange={(event) => setSearch(event.currentTarget.value)}
+          onChange={(event) => changeSearch(event.currentTarget.value)}
           // a small spinner while a new search is loading, the table keeps the previous result meanwhile
           rightSection={isFetching && !isPending ? <Loader size="xs" /> : null}
           w={360}
@@ -68,7 +91,7 @@ export default function OrganisationsPage() {
           clearable
           w={220}
         />
-        {orgs && <Text c="dimmed">{t('organisations.count', { count: orgs.length })}</Text>}
+        {orgs && <Text c="dimmed">{t('organisations.count', { count: orgs.total })}</Text>}
       </Group>
 
       {isPending && (
@@ -83,11 +106,11 @@ export default function OrganisationsPage() {
         </Alert>
       )}
 
-      {orgs && orgs.length === 0 && (
+      {orgs && orgs.items.length === 0 && (
         <Text c="dimmed">{debouncedSearch || catalog || product ? t('organisations.noMatch') : t('organisations.empty')}</Text>
       )}
 
-      {orgs && orgs.length > 0 && (
+      {orgs && orgs.items.length > 0 && (
         // scrolls horizontally on small screens instead of squeezing the columns
         <Table.ScrollContainer minWidth={800}>
           <Table highlightOnHover withTableBorder>
@@ -102,7 +125,7 @@ export default function OrganisationsPage() {
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {orgs.map((org) => (
+              {orgs.items.map((org) => (
                 // key: lets React match the rows between two renders, like an id in a JPA collection
                 <Table.Tr key={org.id}>
                   <Table.Td>
@@ -145,6 +168,12 @@ export default function OrganisationsPage() {
             </Table.Tbody>
           </Table>
         </Table.ScrollContainer>
+      )}
+
+      {totalPages > 1 && (
+        <Group justify="center">
+          <Pagination value={page} onChange={setPage} total={totalPages} />
+        </Group>
       )}
 
       <CreateOrganisationModal opened={createOpened} onClose={closeCreate} />

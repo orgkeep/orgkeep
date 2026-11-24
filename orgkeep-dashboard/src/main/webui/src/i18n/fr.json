@@ -142,6 +142,7 @@
     "members": {
       "loadError": "Impossible de charger les membres",
       "empty": "Aucun membre pour l'instant.",
+      "noMatch": "Aucun membre ne correspond à cette recherche.",
       "columns": {
         "name": "Nom",
         "email": "Email",
@@ -426,7 +427,10 @@
     "title": "Membres de {{org}}",
     "loadError": "Impossible de charger les membres de {{org}}",
     "empty": "Aucun membre pour l'instant.",
+    "noMatch": "Aucun membre ne correspond à cette recherche.",
     "add": "Ajouter un membre",
+    "searchLabel": "Rechercher des membres",
+    "searchPlaceholder": "Rechercher par prénom, nom d'utilisateur ou email",
     "columns": {
       "name": "Nom",
       "email": "Email",

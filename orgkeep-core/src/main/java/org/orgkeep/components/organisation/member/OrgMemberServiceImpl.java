@@ -250,7 +250,7 @@ public class OrgMemberServiceImpl implements OrgMemberService {
         if (!isPerson(realm, org, userId)) {
             throw new MemberNotFoundException(orgName, userId);
         }
-        invitations.resend(realm, userId);
+        invitations.resend(realm, orgName, userId);
     }
 
     /**
@@ -463,7 +463,7 @@ public class OrgMemberServiceImpl implements OrgMemberService {
     private String createUser(String realm, String orgName, AddMemberRequest request) {
         String userId = users.create(realm, memberMapper.toUserRepresentation(request));
         // no password: the invitation email lets the member choose one
-        eventBus.publish(UserCreated.ADDRESS, new UserCreated(realm, orgName, userId, false));
+        eventBus.publish(UserCreated.ADDRESS, new UserCreated(realm, orgName, userId, false, false));
         return userId;
     }
 }

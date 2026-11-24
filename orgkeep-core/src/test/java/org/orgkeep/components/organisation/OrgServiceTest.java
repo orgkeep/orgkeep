@@ -4,6 +4,7 @@ import org.orgkeep.api.CatalogService;
 import org.orgkeep.api.OrgMemberService;
 import org.orgkeep.api.OrgService;
 import org.orgkeep.api.ProductService;
+import org.orgkeep.api.events.UserCreated;
 import org.orgkeep.api.exceptions.CatalogNotFoundException;
 import org.orgkeep.api.exceptions.MemberAlreadyExistsException;
 import org.orgkeep.api.exceptions.MemberOfAnotherOrgException;
@@ -31,6 +32,8 @@ import io.quarkus.cache.Cache;
 import io.quarkus.cache.CacheName;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
+import io.vertx.core.eventbus.EventBus;
+import io.vertx.core.eventbus.MessageConsumer;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.WebApplicationException;
 import org.junit.jupiter.api.AfterAll;
@@ -49,9 +52,13 @@ import org.mockito.Mockito;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -70,6 +77,7 @@ public class OrgServiceTest {
     @Inject OrgMemberService memberService;
     @Inject ProductService productService;
     @Inject CatalogService catalogService;
+    @Inject EventBus eventBus;
     @InjectSpy KeycloakOrgs orgsRepo;
     @InjectSpy KeycloakClients clientsRepo;
     @InjectSpy KeycloakGroups groupsRepo;
@@ -168,6 +176,24 @@ public class OrgServiceTest {
         assertEquals(1, users.size());
         assertEquals(users.get(0).getId(), response.ownerId());
         assertOwner(users.get(0).getId());
+    }
+
+    // the owner flag drives the choice of client for the invitation (InvitationMailer): true for a new owner,
+    // read before the org-owner role is granted (the event is published right after users.create)
+    @Test
+    public void createOwnerPublishesUserCreatedWithOwnerTrue() throws InterruptedException {
+        BlockingQueue<UserCreated> events = new ArrayBlockingQueue<>(1);
+        MessageConsumer<UserCreated> consumer = eventBus.consumer(UserCreated.ADDRESS, message -> events.offer(message.body()));
+        try {
+            orgService.create(testRealm.name(), request(null));
+
+            UserCreated event = events.poll(5, TimeUnit.SECONDS);
+            assertNotNull(event, "UserCreated not published");
+            assertTrue(event.owner());
+            assertEquals(ORG, event.orgName());
+        } finally {
+            consumer.unregister();
+        }
     }
 
     @Test

@@ -1,5 +1,6 @@
 package org.orgkeep.components.organisation.member.invitation;
 
+import org.orgkeep.api.LoginClientService;
 import org.orgkeep.api.OrgMemberService;
 import org.orgkeep.api.OrgService;
 import org.orgkeep.api.RealmProvisioner;
@@ -11,9 +12,12 @@ import org.orgkeep.api.model.AddMemberRequest;
 import org.orgkeep.api.model.CreateOrgRequest;
 import org.orgkeep.api.model.OrgMember;
 import org.orgkeep.api.model.SmtpSettings;
+import org.orgkeep.api.model.UpdateLoginClientRequest;
 import org.orgkeep.fixtures.TestRealm;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.response.Response;
+import io.vertx.core.eventbus.EventBus;
+import io.vertx.core.eventbus.MessageConsumer;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -25,9 +29,13 @@ import org.keycloak.representations.idm.RealmRepresentation;
 
 import java.time.Duration;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -35,6 +43,8 @@ import static io.restassured.RestAssured.given;
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -55,7 +65,9 @@ class InvitationMailerTest {
     @Inject OrgService orgService;
     @Inject OrgMemberService memberService;
     @Inject RealmProvisioner realmProvisioner;
+    @Inject LoginClientService loginClientService;
     @Inject InvitationMailer mailer;
+    @Inject EventBus eventBus;
 
     private TestRealm testRealm;
     // Mailpit is shared by all tests (and the dev mode): a unique address per test isolates its emails
@@ -64,6 +76,9 @@ class InvitationMailerTest {
     @BeforeAll
     void createRealm() {
         testRealm = TestRealm.create();
+        // creates the login client (named after the realm): InvitationMailer always passes a client id, this one
+        // when the user is not sent to the dashboard
+        realmProvisioner.ensureDefaults(testRealm.name());
     }
 
     @BeforeEach
@@ -78,6 +93,9 @@ class InvitationMailerTest {
         } catch (OrgNotFoundException ignored) {
             // not created by this test
         }
+        // a test that sets the home URL leaves the next one a clean client (a test that disables the client
+        // re-enables it itself, once its own assertions are done)
+        loginClientService.update(testRealm.name(), new UpdateLoginClientRequest(List.of(), List.of(), List.of(), null, null, ""));
         // some tests rely on the realm having no SMTP server configured: undo configureSmtp() directly, the
         // service has no "remove" operation. An empty map, not null: Keycloak only changes the fields that are
         // present in the representation it receives, and a null field is left out by Jackson
@@ -102,13 +120,61 @@ class InvitationMailerTest {
         await().atMost(Duration.ofSeconds(10)).until(() -> emailsTo(email) == 1);
     }
 
+    // a member's invitation always uses the login client (orgkeep.dashboard.url is not set in this test profile):
+    // Keycloak's last page links to its home URL, once one is set (decision: client_id is passed even without one,
+    // see InvitationMailer.targetClientId)
+    @Test
+    void memberInvitationLinksToTheLoginClientHomeUrl() {
+        configureSmtp();
+        loginClientService.update(testRealm.name(),
+                new UpdateLoginClientRequest(List.of(), List.of(), List.of(), null, null, "https://app.example.com/home"));
+        orgService.create(testRealm.name(), new CreateOrgRequest(ORG, Set.of("acme.test"), null, null));
+        memberService.add(testRealm.name(), ORG, new AddMemberRequest(email, "Jane", "Doe"));
+        await().atMost(Duration.ofSeconds(10)).until(() -> emailsTo(email) == 1);
+
+        String lastPage = followInvitationLink(invitationLinkFor(email), "chosen-password");
+
+        assertEquals("https://app.example.com/home", backToApplicationLink(lastPage));
+    }
+
+    // without a home URL on the login client, Keycloak's last page is as it is today: no link
+    @Test
+    void memberInvitationHasNoLinkWithoutAHomeUrl() {
+        configureSmtp();
+        orgService.create(testRealm.name(), new CreateOrgRequest(ORG, Set.of("acme.test"), null, null));
+        memberService.add(testRealm.name(), ORG, new AddMemberRequest(email, "Jane", "Doe"));
+        await().atMost(Duration.ofSeconds(10)).until(() -> emailsTo(email) == 1);
+
+        String lastPage = followInvitationLink(invitationLinkFor(email), "chosen-password");
+
+        assertNull(backToApplicationLink(lastPage));
+    }
+
+    // Keycloak rejects a disabled client (400): the invitation still goes out, sent again without a client
+    @Test
+    void fallbackSendsWithoutClientWhenTheLoginClientIsDisabled() {
+        configureSmtp();
+        orgService.create(testRealm.name(), new CreateOrgRequest(ORG, Set.of("acme.test"), null, null));
+        setLoginClientEnabled(false);
+        try {
+            memberService.add(testRealm.name(), ORG, new AddMemberRequest(email, "Jane", "Doe"));
+            // the invitation is not lost: it still arrives, sent again without the (disabled) client
+            await().atMost(Duration.ofSeconds(10)).until(() -> emailsTo(email) == 1);
+        } finally {
+            setLoginClientEnabled(true);
+        }
+
+        String lastPage = followInvitationLink(invitationLinkFor(email), "chosen-password");
+        assertNull(backToApplicationLink(lastPage));
+    }
+
     @Test
     void noInvitationWhenThePasswordIsSet() {
         configureSmtp();
         String userId = testRealm.createUser(email, email);
 
         // called directly, not through the event bus: synchronous, so "no email" can be checked right away
-        mailer.onUserCreated(new UserCreated(testRealm.name(), ORG, userId, true));
+        mailer.onUserCreated(new UserCreated(testRealm.name(), ORG, userId, false, true));
 
         assertEquals(0, emailsTo(email));
     }
@@ -118,9 +184,43 @@ class InvitationMailerTest {
         String userId = testRealm.createUser(email, email);
 
         // only logs a warning: creating the user must not fail because the realm cannot send emails
-        mailer.invite(testRealm.name(), userId);
+        mailer.invite(testRealm.name(), userId, false);
 
         assertEquals(0, emailsTo(email));
+    }
+
+    // core alone (orgkeep.dashboard.url not set in this test profile): an owner's invitation uses the login client
+    // too, like a member's
+    @Test
+    void ownerInvitationLinksToTheLoginClientWithoutADashboard() {
+        configureSmtp();
+        loginClientService.update(testRealm.name(),
+                new UpdateLoginClientRequest(List.of(), List.of(), List.of(), null, null, "https://app.example.com/home"));
+        orgService.create(testRealm.name(), new CreateOrgRequest(ORG, Set.of("acme.test"), email, null, "Olivia", "Owner"));
+        await().atMost(Duration.ofSeconds(10)).until(() -> emailsTo(email) == 1);
+
+        String lastPage = followInvitationLink(invitationLinkFor(email), "chosen-password");
+
+        assertEquals("https://app.example.com/home", backToApplicationLink(lastPage));
+    }
+
+    // the owner flag drives the choice of client for the invitation (InvitationMailer): false for a member added by
+    // an org admin
+    @Test
+    void addPublishesUserCreatedWithOwnerFalse() throws InterruptedException {
+        orgService.create(testRealm.name(), new CreateOrgRequest(ORG, Set.of("acme.test"), null, null));
+        BlockingQueue<UserCreated> events = new ArrayBlockingQueue<>(1);
+        MessageConsumer<UserCreated> consumer = eventBus.consumer(UserCreated.ADDRESS, message -> events.offer(message.body()));
+        try {
+            memberService.add(testRealm.name(), ORG, new AddMemberRequest(email, "Jane", "Doe"));
+
+            UserCreated event = events.poll(5, TimeUnit.SECONDS);
+            assertNotNull(event, "UserCreated not published");
+            assertFalse(event.owner());
+            assertEquals(ORG, event.orgName());
+        } finally {
+            consumer.unregister();
+        }
     }
 
     @Test
@@ -216,8 +316,12 @@ class InvitationMailerTest {
      * Secure}, which a strict HTTP client drops again on the next plain {@code http://localhost} call (unlike a
      * real browser, which treats localhost as a secure context). Carrying the name/value pairs ourselves, ignoring
      * the cookie attributes, works the same as a browser would.
+     *
+     * @return the HTML of the page Keycloak answers with once the password is set (its last page: no client, the
+     *         "account updated" info page; with a client, the same page with a "Back to Application" link, or a
+     *         redirect it never sends in this flow, since no redirect_uri is ever given, see KeycloakUsers)
      */
-    private void followInvitationLink(String link, String newPassword) {
+    private String followInvitationLink(String link, String newPassword) {
         Response response = given().get(link);
         response.then().statusCode(200);
         Map<String, String> cookies = new HashMap<>(response.getCookies());
@@ -248,6 +352,18 @@ class InvitationMailerTest {
         if (result.contains("kc-passwd-update-form")) {
             throw new IllegalStateException("The password was rejected: " + result);
         }
+        return result;
+    }
+
+    /**
+     * The href of the "Back to Application" link on Keycloak's last page, if any (Keycloak's base theme puts it
+     * there when the client has a baseUrl, see info.ftl). Null when the page has no such link (no client, or a
+     * client without a home URL).
+     */
+    private String backToApplicationLink(String html) {
+        // the base theme prefixes the text with an arrow ("« Back to Application"): matched loosely, up to "<"
+        Matcher link = Pattern.compile("<a href=\"([^\"]*)\"[^>]*>[^<]*Back to Application").matcher(html);
+        return link.find() ? link.group(1).replace("&amp;", "&") : null;
     }
 
     /** The action URL of the named form, whatever the order of its attributes (the realm's theme may differ). */
@@ -289,6 +405,13 @@ class InvitationMailerTest {
     private void configureSmtp() {
         realmProvisioner.configureSmtp(testRealm.name(),
                 new SmtpSettings("mailpit", 1025, "no-reply@orgkeep.test", null, null, null, false, false));
+    }
+
+    /** Disables (or re-enables) the login client, to measure the fallback of InvitationMailer on Keycloak's 400. */
+    private void setLoginClientEnabled(boolean enabled) {
+        var client = testRealm.resource().clients().findByClientId(testRealm.name()).get(0);
+        client.setEnabled(enabled);
+        testRealm.resource().clients().get(client.getId()).update(client);
     }
 
     private int emailsTo(String address) {

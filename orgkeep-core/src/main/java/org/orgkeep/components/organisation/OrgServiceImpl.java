@@ -462,7 +462,7 @@ public class OrgServiceImpl implements OrgService {
         // published right away: if the provisioning fails after this, the user is kept and a retry reuses it,
         // without creating it again
         eventBus.publish(UserCreated.ADDRESS,
-                new UserCreated(realm, request.name(), ownerId, request.ownerPassword() != null));
+                new UserCreated(realm, request.name(), ownerId, true, request.ownerPassword() != null));
         return ownerId;
     }
 

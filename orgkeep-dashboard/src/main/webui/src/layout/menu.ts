@@ -26,6 +26,7 @@ export function buildMenu(user: CurrentUser, t: TFunction): MenuSection[] {
         { label: t('menu.organisations'), path: '/organisations' },
         { label: t('menu.catalogs'), path: '/catalogs' },
         { label: t('menu.loginClient'), path: '/login-client' },
+        { label: t('menu.smtp'), path: '/smtp' },
       ],
     });
   }

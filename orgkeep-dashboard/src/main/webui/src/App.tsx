@@ -18,6 +18,7 @@ import OrgServiceAccountsPage from './pages/OrgServiceAccountsPage';
 import OrgTeamsPage from './pages/OrgTeamsPage';
 import ProductPage from './pages/ProductPage';
 import ServiceAccountPage from './pages/ServiceAccountPage';
+import SmtpPage from './pages/SmtpPage';
 import TeamPage from './pages/TeamPage';
 
 // Nobody is logged in: straight to the Keycloak login page (its theme looks like the dashboard), no page of our own.
@@ -81,6 +82,7 @@ export default function App() {
         {isRealmOwner(user) && <Route path="/catalogs/:catalog/products/:product" element={<ProductPage />} />}
         {isRealmOwner(user) && <Route path="/catalogs/:catalog/roles/:role" element={<CatalogRolePage />} />}
         {isRealmOwner(user) && <Route path="/login-client" element={<LoginClientPage />} />}
+        {isRealmOwner(user) && <Route path="/smtp" element={<SmtpPage />} />}
         {administeredOrgs(user).length > 0 && <Route path="/orgs/:org/members" element={<OrgMembersPage />} />}
         {administeredOrgs(user).length > 0 && <Route path="/orgs/:org/teams" element={<OrgTeamsPage />} />}
         {administeredOrgs(user).length > 0 && <Route path="/orgs/:org/teams/:team" element={<TeamPage />} />}

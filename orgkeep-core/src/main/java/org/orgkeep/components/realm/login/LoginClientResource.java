@@ -37,12 +37,15 @@ public class LoginClientResource {
     }
 
     @PUT
-    @Operation(summary = "Update the redirect URIs and web origins",
+    @Operation(summary = "Update the redirect URIs, web origins and home URL",
             description = "Replaces the three lists. Only https URLs are accepted (http on localhost only), "
                     + "and a wildcard only as the last path segment (https://app.example.com/*). "
-                    + "defaultCatalogs and lightweightTokens are optional, absent they do not change. "
+                    + "defaultCatalogs, lightweightTokens and homeUrl are optional, absent they do not change "
+                    + "(homeUrl: empty string removes it). "
                     + "With lightweightTokens, every API of the realm owner receives lightweight tokens at once "
-                    + "(marked \"lightweight\": true): each must introspect them first, with the credentials of its catalog.")
+                    + "(marked \"lightweight\": true): each must introspect them first, with the credentials of its catalog. "
+                    + "homeUrl becomes the client's baseUrl: the \"Back to Application\" link on Keycloak's last page "
+                    + "after an invitation.")
     @APIResponseSchema(value = LoginClient.class, responseCode = "200", responseDescription = "Login client updated")
     @APIResponse(responseCode = "400", description = "Invalid or unsafe URI, or a default catalog that is not a catalog")
     @APIResponse(responseCode = "404", description = "The realm has no login client")

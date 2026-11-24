@@ -2,6 +2,7 @@ package org.orgkeep.components.realm;
 
 import org.orgkeep.api.CatalogService;
 import org.orgkeep.api.RealmProvisioner;
+import org.orgkeep.api.events.UserCreated;
 import org.orgkeep.api.model.Catalog;
 import org.orgkeep.api.model.Catalogs;
 import org.orgkeep.api.exceptions.RealmAlreadyExistsException;
@@ -19,6 +20,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.RestAssured;
+import io.vertx.core.eventbus.EventBus;
+import io.vertx.core.eventbus.MessageConsumer;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
@@ -42,6 +45,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -60,6 +66,9 @@ class RealmProvisionerTest {
 
     @Inject
     Keycloak keycloak;
+
+    @Inject
+    EventBus eventBus;
 
     @ConfigProperty(name = "quarkus.keycloak.admin-client.server-url")
     String keycloakUrl;
@@ -109,6 +118,25 @@ class RealmProvisionerTest {
                 .map(RealmRole::getRoleName)
                 .collect(Collectors.toSet());
         assertTrue(assigned.containsAll(expected));
+    }
+
+    // the owner flag drives the choice of client for the invitation (InvitationMailer): true for the realm owner,
+    // with a null orgName
+    @Test
+    void createPublishesUserCreatedWithOwnerTrue() throws InterruptedException {
+        BlockingQueue<UserCreated> events = new ArrayBlockingQueue<>(1);
+        MessageConsumer<UserCreated> consumer = eventBus.consumer(UserCreated.ADDRESS, message -> events.offer(message.body()));
+        try {
+            service.create(new CreateRealmRequest(realmName, "owner@acme.test", null));
+
+            UserCreated event = events.poll(5, TimeUnit.SECONDS);
+            assertNotNull(event, "UserCreated not published");
+            assertTrue(event.owner());
+            assertNull(event.orgName());
+            assertFalse(event.passwordSet());
+        } finally {
+            consumer.unregister();
+        }
     }
 
     // like any user of the realm: the Account console of Keycloak needs the roles of the account client they hold
@@ -351,6 +379,8 @@ class RealmProvisionerTest {
         assertFalse(client.isServiceAccountsEnabled());
         assertEquals(List.of("https://dashboard.acme.test/*"), client.getRedirectUris());
         assertTrue(client.getWebOrigins() == null || client.getWebOrigins().isEmpty(), String.valueOf(client.getWebOrigins()));
+        // home URL: where Keycloak's "Back to Application" link points to after an invitation
+        assertEquals("https://dashboard.acme.test/", client.getBaseUrl());
         assertEquals("+", client.getAttributes().get("post.logout.redirect.uris"));
         assertEquals("S256", client.getAttributes().get("pkce.code.challenge.method"));
         assertEquals("orgkeep", client.getAttributes().get("login_theme"));
@@ -378,6 +408,7 @@ class RealmProvisionerTest {
         String secret = dashboardSecret();
         ClientRepresentation client = dashboardClient();
         client.setRedirectUris(List.of("https://evil.test/*"));
+        client.setBaseUrl("https://evil.test/");
         client.setDirectAccessGrantsEnabled(true);
         java.util.Map<String, String> attributes = new java.util.HashMap<>(client.getAttributes());
         attributes.remove("pkce.code.challenge.method");
@@ -390,6 +421,7 @@ class RealmProvisionerTest {
 
         ClientRepresentation repaired = dashboardClient();
         assertEquals(List.of("https://dashboard.acme.test/*"), repaired.getRedirectUris());
+        assertEquals("https://dashboard.acme.test/", repaired.getBaseUrl());
         assertFalse(repaired.isDirectAccessGrantsEnabled());
         assertEquals("S256", repaired.getAttributes().get("pkce.code.challenge.method"));
         assertEquals("orgkeep", repaired.getAttributes().get("login_theme"));

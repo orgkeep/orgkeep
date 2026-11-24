@@ -2,16 +2,27 @@ package org.orgkeep.api;
 
 import org.orgkeep.api.model.AddMemberRequest;
 import org.orgkeep.api.model.OrgMember;
-
-import java.util.List;
+import org.orgkeep.api.model.Page;
 
 /**
  * Members of an organisation, as managed by its org admins.
  */
 public interface OrgMemberService {
 
-    /** @throws org.orgkeep.api.exceptions.OrgNotFoundException if no organisation has this name */
-    List<OrgMember> list(String realm, String orgName);
+    /**
+     * Paginated. Without search or team: the owners, then the members of the default group users, in that order
+     * (a page always starts with the owners it has not shown yet). With search: every member whose username,
+     * email or first name matches, in the order Keycloak searches them. With team: the members of this user
+     * group (admin and users accepted). Never a service account. The total counts every person matching search
+     * or team (without either, the organisation's member count minus its service accounts), whatever first and max.
+     *
+     * @param search optional, cannot be combined with team
+     * @param team   optional, a user group name, cannot be combined with search
+     * @throws org.orgkeep.api.exceptions.OrgNotFoundException if no organisation has this name
+     * @throws org.orgkeep.api.exceptions.InvalidRequestException if search and team are both given
+     * @throws org.orgkeep.api.exceptions.UserGroupNotFoundException if team is given and no user group has this name
+     */
+    Page<OrgMember> list(String realm, String orgName, String search, String team, int first, int max);
 
     /**
      * Adds the user with this email to the organisation (creating the user if needed)

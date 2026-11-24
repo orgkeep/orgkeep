@@ -13,6 +13,7 @@ import org.orgkeep.api.model.OrgMember;
 import org.orgkeep.api.model.SmtpSettings;
 import org.orgkeep.fixtures.TestRealm;
 import io.quarkus.test.junit.QuarkusTest;
+import io.restassured.response.Response;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -20,13 +21,15 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.keycloak.representations.idm.CredentialRepresentation;
 import org.keycloak.representations.idm.RealmRepresentation;
 
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static io.restassured.RestAssured.given;
 import static org.awaitility.Awaitility.await;
@@ -165,27 +168,116 @@ class InvitationMailerTest {
                 () -> memberService.resendInvitation(testRealm.name(), ORG, userId));
     }
 
+    // Pending = emailVerified not true AND requiredActions contains UPDATE_PASSWORD (members.md): a member added by
+    // add() carries both, a temporary-password owner carries the required action too but is created with
+    // emailVerified=true (OrgMapper.toOwnerRepresentation), so it is never pending. Keycloak removes the required
+    // action once it is completed through the invitation link (spike of #55): followed here for real (Mailpit, then
+    // the "choose a password" page Keycloak serves), rather than simulated, so the test proves Keycloak's own
+    // behavior and not an assumption about it.
     @Test
-    void invitationIsPendingUntilThePasswordIsChosen() {
+    void invitationIsPendingUntilTheRequiredActionIsDone() {
+        configureSmtp();
         orgService.create(testRealm.name(), new CreateOrgRequest(ORG, Set.of("acme.test"), "owner@acme.test", "changeme", "Olivia", "Owner"));
         String userId = memberService.add(testRealm.name(), ORG, new AddMemberRequest(email, "Jane", "Doe")).id();
+        await().atMost(Duration.ofSeconds(10)).until(() -> emailsTo(email) == 1);
 
         assertTrue(memberOf(userId).invitationPending());
-        // the owner has a password but has not verified their email: not pending either
         assertFalse(memberOf(userIdOf("owner@acme.test")).invitationPending());
 
-        // what the invitation link does: a password, and the email verified
-        CredentialRepresentation password = new CredentialRepresentation();
-        password.setType(CredentialRepresentation.PASSWORD);
-        password.setValue("chosen-password");
-        password.setTemporary(false);
-        testRealm.resource().users().get(userId).resetPassword(password);
+        followInvitationLink(invitationLinkFor(email), "chosen-password");
+
+        assertFalse(memberOf(userId).invitationPending());
+    }
+
+    /** Reads the invitation link Keycloak put in the latest email sent to that address, through the Mailpit API. */
+    private String invitationLinkFor(String address) {
+        String messageId = given()
+                .queryParam("query", "to:" + address)
+                .get(MAILPIT_API + "/search")
+                .then().statusCode(200)
+                .extract().path("messages[0].ID");
+        String html = given()
+                .get(MAILPIT_API + "/message/" + messageId)
+                .then().statusCode(200)
+                .extract().path("HTML");
+        Matcher link = Pattern.compile("href=\"([^\"]*login-actions/action-token[^\"]*)\"").matcher(html);
+        if (!link.find()) {
+            throw new IllegalStateException("No invitation link found in the email to " + address);
+        }
+        return link.group(1).replace("&amp;", "&");
+    }
+
+    /**
+     * Follows the invitation link like a browser would: the action token already identifies the user, so Keycloak
+     * serves its "choose a password" page directly, with no login step. The page is read with RestAssured instead
+     * of a real browser, and the form it shows is submitted the same way.
+     * <p>
+     * Cookies are carried by hand (not RestAssured's CookieFilter): Keycloak's session cookies here are {@code
+     * Secure}, which a strict HTTP client drops again on the next plain {@code http://localhost} call (unlike a
+     * real browser, which treats localhost as a secure context). Carrying the name/value pairs ourselves, ignoring
+     * the cookie attributes, works the same as a browser would.
+     */
+    private void followInvitationLink(String link, String newPassword) {
+        Response response = given().get(link);
+        response.then().statusCode(200);
+        Map<String, String> cookies = new HashMap<>(response.getCookies());
+        String page = response.asString();
+
+        // Keycloak shows a "click here to proceed" confirmation first (against email scanners prefetching the
+        // link): the session cookie set by that GET makes the very same link start the required action for real
+        Matcher proceed = Pattern.compile("href=\"([^\"]*login-actions/action-token[^\"]*)\"").matcher(page);
+        if (proceed.find()) {
+            response = given().cookies(cookies).get(proceed.group(1).replace("&amp;", "&"));
+            response.then().statusCode(200);
+            cookies.putAll(response.getCookies());
+            page = response.asString();
+        }
+
+        String formAction = formAction(page, "kc-passwd-update-form");
+
+        // The invitation link carries no redirect_uri, so Keycloak has nowhere to send the browser once the
+        // required action is done: it answers 200 with its own "account updated" info page instead of a redirect.
+        // A rejected password (e.g. the two fields do not match) would answer 200 too, with the same form again:
+        // the real proof is the assertion on invitationPending() once this method returns.
+        String result = given().cookies(cookies)
+                .formParam("password-new", newPassword)
+                .formParam("password-confirm", newPassword)
+                .post(formAction)
+                .then().statusCode(200)
+                .extract().asString();
+        if (result.contains("kc-passwd-update-form")) {
+            throw new IllegalStateException("The password was rejected: " + result);
+        }
+    }
+
+    /** The action URL of the named form, whatever the order of its attributes (the realm's theme may differ). */
+    private String formAction(String html, String formId) {
+        Matcher tags = Pattern.compile("<form\\b[^>]*>").matcher(html);
+        while (tags.find()) {
+            String tag = tags.group();
+            if (tag.contains("id=\"" + formId + "\"")) {
+                Matcher action = Pattern.compile("action=\"([^\"]*)\"").matcher(tag);
+                if (action.find()) {
+                    return action.group(1).replace("&amp;", "&");
+                }
+            }
+        }
+        throw new IllegalStateException("No form '" + formId + "' found in the page: " + html);
+    }
+
+    // An existing user, not created by add(): it keeps its own required actions, none here, so it is never pending
+    @Test
+    void reusedMemberIsNotPending() {
+        orgService.create(testRealm.name(), new CreateOrgRequest(ORG, Set.of("acme.test"), null, null));
+        testRealm.createUser(email, email);
+
+        String userId = memberService.add(testRealm.name(), ORG, new AddMemberRequest(email, "Jane", "Doe")).id();
 
         assertFalse(memberOf(userId).invitationPending());
     }
 
     private OrgMember memberOf(String userId) {
-        return memberService.list(testRealm.name(), ORG).stream()
+        return memberService.list(testRealm.name(), ORG, null, null, 0, 100).items().stream()
                 .filter(member -> member.id().equals(userId))
                 .findFirst().orElseThrow();
     }

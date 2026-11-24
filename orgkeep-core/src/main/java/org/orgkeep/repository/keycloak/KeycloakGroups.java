@@ -240,6 +240,30 @@ public class KeycloakGroups {
     }
 
     /**
+     * One page of the direct members of the group, not of its sub groups, full representation (requiredActions
+     * and emailVerified included, spike Q4): the page a list screen shows, no more.
+     */
+    public List<UserRepresentation> membersPage(String realm, String groupId, int first, int max) {
+        return keycloak.realm(realm).groups().group(groupId).members(first, max, false);
+    }
+
+    /**
+     * Like {@link #members(String, String)}, but full representation (requiredActions and emailVerified
+     * included): every page, for a group small enough to read whole and slice afterwards (a team).
+     */
+    public List<UserRepresentation> membersFull(String realm, String groupId) {
+        List<UserRepresentation> members = new ArrayList<>();
+        List<UserRepresentation> page;
+        int first = 0;
+        do {
+            page = keycloak.realm(realm).groups().group(groupId).members(first, PAGE_SIZE, false);
+            members.addAll(page);
+            first += PAGE_SIZE;
+        } while (page.size() == PAGE_SIZE);
+        return members;
+    }
+
+    /**
      * The client roles granted directly to the group, for every client in one call: clientId → role names.
      */
     public Map<String, Set<String>> clientRoles(String realm, String groupId) {

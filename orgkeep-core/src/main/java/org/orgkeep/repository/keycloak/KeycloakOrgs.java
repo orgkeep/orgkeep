@@ -37,8 +37,18 @@ public class KeycloakOrgs {
         }
     }
 
-    public List<OrganizationRepresentation> search(String realm, String search, int first, int max) {
-        return keycloak.realm(realm).organizations().search(search, false, first, max);
+    /**
+     * @param briefRepresentation false reads the attributes of each organisation (e.g. assigned-products) in the
+     *                            same call, instead of a second GET per organisation
+     */
+    public List<OrganizationRepresentation> search(String realm, String search, int first, int max,
+                                                    boolean briefRepresentation) {
+        return keycloak.realm(realm).organizations().search(search, false, first, max, briefRepresentation);
+    }
+
+    /** The number of organisations matching the search, whatever the page: one call, no organisation read. */
+    public long count(String realm, String search) {
+        return keycloak.realm(realm).organizations().count(search);
     }
 
     /** Names of all the organisations of the realm, read page by page. */
@@ -101,6 +111,23 @@ public class KeycloakOrgs {
     /** Counted by Keycloak: the members are not loaded. */
     public long memberCount(String realm, String orgId) {
         return organisation(realm, orgId).members().count();
+    }
+
+    /**
+     * Every member matching the search, full representation (requiredActions and emailVerified included), read
+     * page by page until a short one: Keycloak searches the username, the email and the first name (spike Q1, Q2).
+     * Keyed by id like {@link #members}: a member added while the pages are read can shift one onto the next page.
+     */
+    public List<MemberRepresentation> searchMembers(String realm, String orgId, String search) {
+        Map<String, MemberRepresentation> members = new LinkedHashMap<>();
+        List<MemberRepresentation> page;
+        int first = 0;
+        do {
+            page = organisation(realm, orgId).members().search(search, false, first, PAGE_SIZE, false);
+            page.forEach(member -> members.putIfAbsent(member.getId(), member));
+            first += PAGE_SIZE;
+        } while (page.size() == PAGE_SIZE);
+        return new ArrayList<>(members.values());
     }
 
     public boolean isMember(String realm, String orgId, String userId) {

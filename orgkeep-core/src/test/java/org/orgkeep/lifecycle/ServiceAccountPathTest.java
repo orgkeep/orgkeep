@@ -119,7 +119,7 @@ class ServiceAccountPathTest {
 
         // a member, invited
         memberService.add(REALM, ORG, new AddMemberRequest("claire@acme.test", "Claire", "Petit"));
-        assertFalse(memberService.list(REALM, ORG).isEmpty());
+        assertFalse(memberService.list(REALM, ORG, null, null, 0, 100).items().isEmpty());
 
         // a team and what it gives
         userGroupService.create(REALM, ORG, new CreateUserGroupRequest("sales"));

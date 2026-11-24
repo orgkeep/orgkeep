@@ -13,8 +13,10 @@ import org.orgkeep.api.model.OrgGroups;
 import org.orgkeep.api.model.OrgMember;
 import org.orgkeep.api.model.OrgRole;
 import org.orgkeep.api.model.OrgSummary;
+import org.orgkeep.api.model.Page;
 import org.orgkeep.api.model.CatalogRoles;
 import org.orgkeep.components.catalog.CatalogSetup;
+import org.orgkeep.components.catalog.product.AssignedProducts;
 import org.orgkeep.components.lock.HeldLocks;
 import org.orgkeep.components.lock.LockMode;
 import org.orgkeep.components.lock.LockRequest;
@@ -115,27 +117,42 @@ public class OrgServiceImpl implements OrgService {
     }
 
     /**
-     * One search call, then four calls per organisation (org client, owners, member count, product groups):
-     * the admin API has no way to fetch them for several orgs at once. Acceptable for a page of at most 100 orgs.
+     * One search call (briefRepresentation=false: the assigned-products attribute of each organisation comes with
+     * it), one count call for the total, then about five calls per organisation in toSummary (owners, member
+     * count and service accounts): the admin API has no way to fetch them for several orgs at once. Acceptable
+     * for a page of at most 100 orgs.
      */
     @Override
-    public List<OrgSummary> list(String realm, String search, String catalog, String product, int first, int max) {
+    public Page<OrgSummary> list(String realm, String search, String catalog, String product, int first, int max) {
         if (isBlank(catalog) && isBlank(product)) {
-            return orgs.search(realm, search, first, max).stream()
+            List<OrgSummary> items = orgs.search(realm, search, first, max, false).stream()
                     .map(org -> toSummary(realm, org))
                     .toList();
+            return new Page<>(items, orgs.count(realm, search));
         }
-        // Keycloak cannot search organisations by group: the names come from the assignment groups,
-        // then the search and the page are applied here, on the names sorted like the Keycloak search does
-        return orgNamesWithAssignment(realm, catalog, product).stream()
+        // Keycloak cannot search organisations by group: the names come from the assignment groups, the source of
+        // truth for this filter, then the search and the page are applied here, on the names sorted like the
+        // Keycloak search does. The total is the size of this filtered set, before the page
+        List<String> matching = orgNamesWithAssignment(realm, catalog, product).stream()
                 .filter(name -> search == null || name.contains(search.toLowerCase()))
                 .sorted()
+                .toList();
+        List<OrgSummary> items = matching.stream()
                 .skip(first)
                 .limit(max)
                 .map(name -> orgs.findByName(realm, name))
                 // a product group left behind by an org deleted outside of Orgkeep
                 .flatMap(Optional::stream)
                 .map(org -> toSummary(realm, org))
+                .toList();
+        return new Page<>(items, matching.size());
+    }
+
+    /** Names of the organisations matching the search, one call, no total: for a picker. */
+    @Override
+    public List<String> names(String realm, String search, int max) {
+        return orgs.search(realm, search, 0, max, true).stream()
+                .map(OrganizationRepresentation::getName)
                 .toList();
     }
 
@@ -166,24 +183,20 @@ public class OrgServiceImpl implements OrgService {
         return names;
     }
 
+    /**
+     * About five calls: owners (the org client id, then the users holding org-owner directly, 2 calls), member
+     * count and service accounts (the Keycloak count, then the service-account group id and its members, 3
+     * calls, the price of a count that agrees with the member list, which leaves out the members of that group).
+     * The products come from the assigned-products attribute already on the representation (the search reads it
+     * with briefRepresentation=false): no call.
+     */
     private OrgSummary toSummary(String realm, OrganizationRepresentation org) {
-        // client and groups are looked up rather than assumed: an org created outside Orgkeep has neither
+        // the client is looked up rather than assumed: an org created outside Orgkeep has none
         List<OrgMember> owners = clients.findUuid(realm, OrgClients.clientId(org.getName()))
                 .map(clientUuid -> owners(realm, clientUuid))
                 .orElse(List.of());
-        // one call for the catalogs of the org, then one per catalog for its products
-        List<String> products = groups.findId(realm, OrgGroups.catalogs(org.getName()))
-                .map(catalogsGroupId -> groups.children(realm, catalogsGroupId))
-                .orElse(List.of())
-                .stream()
-                .flatMap(catalogGroup -> groups.children(realm, catalogGroup.getId()).stream()
-                        .map(group -> catalogGroup.getName() + "/" + group.getName()))
-                .sorted()
-                .toList();
-        // the service accounts are members of the Keycloak organisation too: they are not counted. Two more calls per
-        // org (the group, its members), the price of a count that agrees with the member list, which leaves out the
-        // members of that group. The admin API has no count of the members of a group
-        long memberCount = Math.max(0, orgs.memberCount(realm, org.getId()) - serviceAccounts.users(realm, org.getName()).size());
+        List<String> products = AssignedProducts.of(org).stream().sorted().toList();
+        long memberCount = serviceAccounts.peopleCount(realm, org.getName(), orgs.memberCount(realm, org.getId()));
         return orgMapper.toOrgSummary(org, owners, memberCount, products);
     }
 

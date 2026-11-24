@@ -163,7 +163,7 @@ class UserGroupsResourceTest {
 
         given().when().get("/api/organisations/{org}/members", ORG)
                 .then().statusCode(200)
-                .body("find { it.id == '%s' }.role".formatted(memberId), equalTo("ORG_ADMIN"));
+                .body("items.find { it.id == '%s' }.role".formatted(memberId), equalTo("ORG_ADMIN"));
     }
 
     @Test

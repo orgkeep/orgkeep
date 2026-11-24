@@ -21,9 +21,16 @@ import org.orgkeep.api.model.OrgDetails;
 import org.orgkeep.api.model.OrgMember;
 import org.orgkeep.api.model.OrgRole;
 import org.orgkeep.api.model.OrgSummary;
+import org.orgkeep.api.model.Page;
 import org.orgkeep.api.model.QuotaCycle;
 import org.orgkeep.fixtures.TestRealm;
+import org.orgkeep.repository.keycloak.KeycloakClients;
+import org.orgkeep.repository.keycloak.KeycloakGroups;
+import org.orgkeep.repository.keycloak.KeycloakOrgs;
+import io.quarkus.cache.Cache;
+import io.quarkus.cache.CacheName;
 import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.junit.mockito.InjectSpy;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.WebApplicationException;
 import org.junit.jupiter.api.AfterAll;
@@ -37,6 +44,7 @@ import org.keycloak.representations.idm.MemberRepresentation;
 import org.keycloak.representations.idm.OrganizationRepresentation;
 import org.keycloak.representations.idm.RoleRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
+import org.mockito.Mockito;
 
 import java.util.Arrays;
 import java.util.List;
@@ -62,6 +70,13 @@ public class OrgServiceTest {
     @Inject OrgMemberService memberService;
     @Inject ProductService productService;
     @Inject CatalogService catalogService;
+    @InjectSpy KeycloakOrgs orgsRepo;
+    @InjectSpy KeycloakClients clientsRepo;
+    @InjectSpy KeycloakGroups groupsRepo;
+    // the id-cache beans (id-cache.md): invalidated before each measurement below, so a cache warmed by an earlier
+    // test (the beans live for the whole test class) cannot change how many calls a page costs
+    @CacheName("client-uuid") Cache clientUuidCache;
+    @CacheName("group-id") Cache groupIdCache;
 
     private TestRealm testRealm;
 
@@ -76,7 +91,8 @@ public class OrgServiceTest {
     public void cleanUp(){
         for (String org : ALL_ORGS) {
             try {
-                List<String> memberIds = memberService.list(testRealm.name(), org).stream().map(OrgMember::id).toList();
+                List<String> memberIds = memberService.list(testRealm.name(), org, null, null, 0, 100).items().stream()
+                        .map(OrgMember::id).toList();
                 orgService.delete(testRealm.name(), org);
                 memberIds.forEach(id -> testRealm.resource().users().get(id).remove());
             } catch (OrgNotFoundException ignored) {
@@ -220,8 +236,9 @@ public class OrgServiceTest {
         CreateOrgResponse acme = orgService.create(testRealm.name(), request(null));
         orgService.create(testRealm.name(), new CreateOrgRequest("other-org", Set.of("other-org.test"), null, null));
 
-        List<OrgSummary> all = orgService.list(testRealm.name(), null, null, null, 0, 100);
+        List<OrgSummary> all = orgService.list(testRealm.name(), null, null, null, 0, 100).items();
         assertEquals(Set.of(ORG, "other-org"), all.stream().map(OrgSummary::name).collect(Collectors.toSet()));
+        assertEquals(2, orgService.list(testRealm.name(), null, null, null, 0, 100).total());
 
         OrgSummary summary = all.stream().filter(org -> org.id().equals(acme.id())).findFirst().orElseThrow();
         assertEquals(Set.of("it-demo-org.test"), summary.emailDomains());
@@ -245,7 +262,7 @@ public class OrgServiceTest {
         // without owner: empty lists and a count of zero, not nulls
         orgService.create(testRealm.name(), new CreateOrgRequest("other-org", Set.of(), null, null));
 
-        List<OrgSummary> all = orgService.list(testRealm.name(), null, null, null, 0, 100);
+        List<OrgSummary> all = orgService.list(testRealm.name(), null, null, null, 0, 100).items();
         OrgSummary acme = all.stream().filter(org -> org.name().equals(ORG)).findFirst().orElseThrow();
         OrgSummary other = all.stream().filter(org -> org.name().equals("other-org")).findFirst().orElseThrow();
 
@@ -265,8 +282,9 @@ public class OrgServiceTest {
         orgService.create(testRealm.name(), request(null));
         orgService.create(testRealm.name(), new CreateOrgRequest("other-org", Set.of("other-org.test"), null, null));
 
-        List<OrgSummary> found = orgService.list(testRealm.name(), "other", null, null, 0, 100);
-        assertEquals(List.of("other-org"), found.stream().map(OrgSummary::name).toList());
+        Page<OrgSummary> found = orgService.list(testRealm.name(), "other", null, null, 0, 100);
+        assertEquals(List.of("other-org"), found.items().stream().map(OrgSummary::name).toList());
+        assertEquals(1, found.total());
     }
 
     // Three orgs: billing assigned to two of them in prod, to the third in sandbox. The filter on a catalog and a
@@ -298,8 +316,60 @@ public class OrgServiceTest {
         assertEquals(List.of(), names(orgService.list(testRealm.name(), null, "unknown", null, 0, 100)));
     }
 
-    private static List<String> names(List<OrgSummary> orgs) {
-        return orgs.stream().map(OrgSummary::name).toList();
+    private static List<String> names(Page<OrgSummary> orgs) {
+        return orgs.items().stream().map(OrgSummary::name).toList();
+    }
+
+    // The products of an org now come from its assigned-products attribute (read with the search), not from the
+    // catalog/product groups: toSummary must cost the same whatever the org has. Isolate one org per call (search
+    // matches its exact name): the page-level calls (search, count) stay the same, so any difference in the total
+    // comes from toSummary alone.
+    @Test
+    public void listCostPerOrganisationDoesNotDependOnItsProducts(){
+        orgService.create(testRealm.name(), request(null));
+        catalogService.create(testRealm.name(), new CreateCatalogRequest("prod", "Production", null));
+        catalogService.create(testRealm.name(), new CreateCatalogRequest("sandbox", "Sandbox", null));
+        productService.create(testRealm.name(), "prod", new CreateProductRequest("storage", "Storage", null));
+        productService.create(testRealm.name(), "prod", new CreateProductRequest("billing", "Billing", null));
+        productService.create(testRealm.name(), "sandbox", new CreateProductRequest("billing", "Billing", null));
+        productService.assign(testRealm.name(), ORG, "prod", "storage", new AssignProductRequest(10L, QuotaCycle.DAILY));
+        productService.assign(testRealm.name(), ORG, "sandbox", "billing", new AssignProductRequest(5L, QuotaCycle.DAILY));
+        productService.assign(testRealm.name(), ORG, "prod", "billing", new AssignProductRequest(500L, QuotaCycle.MONTHLY));
+        orgService.create(testRealm.name(), new CreateOrgRequest("other-org", Set.of(), null, null));
+
+        OrgCost withProducts = listOneOrg(ORG);
+        OrgCost withoutProducts = listOneOrg("other-org");
+
+        assertEquals(List.of("prod/billing", "prod/storage", "sandbox/billing"), withProducts.summary().products());
+        assertEquals(List.of(), withoutProducts.summary().products());
+        // the figure that matters: whatever this org has, toSummary costs the organisation list the same
+        assertEquals(withoutProducts.calls(), withProducts.calls());
+        // one search, one count, then about five Keycloak calls for the one organisation of the page (owners: 2,
+        // member count and service accounts: 3); the id-caches of KeycloakClients/KeycloakGroups (id-cache.md),
+        // invalidated below so each measurement starts cold, each add their own search on top of this count.
+        // An upper bound, not the exact figure: a harmless refactor (e.g. splitting a helper method) must not
+        // break this test, only a real growth in the number of calls per organisation should
+        assertTrue(withProducts.calls() <= 9, "toSummary should cost about five admin calls per organisation, not " + withProducts.calls());
+        // no admin call ever reaches /{org}/catalogs/{catalog}/{product}: the products come from the attribute
+        Mockito.verify(groupsRepo, Mockito.never()).children(Mockito.anyString(), Mockito.anyString());
+    }
+
+    private record OrgCost(OrgSummary summary, int calls) { }
+
+    /** List filtered to this one org (by its exact name), after invalidating both id-caches so the count is reproducible. */
+    private OrgCost listOneOrg(String orgName) {
+        clientUuidCache.invalidateAll().await().indefinitely();
+        groupIdCache.invalidateAll().await().indefinitely();
+        Mockito.clearInvocations(orgsRepo, clientsRepo, groupsRepo);
+
+        Page<OrgSummary> page = orgService.list(testRealm.name(), orgName, null, null, 0, 100);
+        assertEquals(1, page.items().size());
+        assertEquals(orgName, page.items().get(0).name());
+
+        int calls = Mockito.mockingDetails(orgsRepo).getInvocations().size()
+                + Mockito.mockingDetails(clientsRepo).getInvocations().size()
+                + Mockito.mockingDetails(groupsRepo).getInvocations().size();
+        return new OrgCost(page.items().get(0), calls);
     }
 
     @Test
@@ -325,7 +395,7 @@ public class OrgServiceTest {
         orgService.create(testRealm.name(), new CreateOrgRequest(ORG, Set.of(), null, null));
 
         assertEquals(Set.of(), orgService.get(testRealm.name(), ORG).emailDomains());
-        assertEquals(Set.of(), orgService.list(testRealm.name(), null, null, null, 0, 100).get(0).emailDomains());
+        assertEquals(Set.of(), orgService.list(testRealm.name(), null, null, null, 0, 100).items().get(0).emailDomains());
     }
 
     @Test

@@ -122,10 +122,11 @@ class OrgAdminResourceTest {
     void listReturnsMembers() {
         given().when().get(BASE, ORG)
                 .then().statusCode(200)
-                .body("email", hasItem(OWNER_EMAIL));
+                .body("items.email", hasItem(OWNER_EMAIL))
+                .body("total", equalTo(1));
     }
 
-    // Keycloak pages the members of an org (10 by default): the list has them all
+    // the default page (max=100) covers them all
     @Test
     @TestSecurity(user = "alice", roles = "org-it-members-org:org-admin")
     void listReturnsEveryMemberBeyondTheFirstPage() {
@@ -136,7 +137,8 @@ class OrgAdminResourceTest {
         // the owner and the 11 members
         given().when().get(BASE, ORG)
                 .then().statusCode(200)
-                .body("size()", equalTo(12));
+                .body("items.size()", equalTo(12))
+                .body("total", equalTo(12));
     }
 
     // the emails themselves are tested in InvitationMailerTest: here the security, the status codes and the JSON
@@ -150,9 +152,50 @@ class OrgAdminResourceTest {
 
         given().when().get(BASE, ORG)
                 .then().statusCode(200)
-                .body("find { it.email == 'ines@it-members-org.test' }.invitationPending", equalTo(true))
+                .body("items.find { it.email == 'ines@it-members-org.test' }.invitationPending", equalTo(true))
                 // created with a password
-                .body("find { it.email == '%s' }.invitationPending".formatted(OWNER_EMAIL), equalTo(false));
+                .body("items.find { it.email == '%s' }.invitationPending".formatted(OWNER_EMAIL), equalTo(false));
+    }
+
+    @Test
+    @TestSecurity(user = "alice", roles = "org-it-members-org:org-admin")
+    void listBySearchFindsAMemberByEmail() {
+        memberService.add(testRealm.name(), ORG, new AddMemberRequest("ines@it-members-org.test", "Ines", "Martin"));
+
+        given().when().get(BASE + "?search=ines", ORG)
+                .then().statusCode(200)
+                .body("items.email", hasItem("ines@it-members-org.test"))
+                .body("total", equalTo(1));
+    }
+
+    @Test
+    @TestSecurity(user = "alice", roles = "org-it-members-org:org-admin")
+    void listByTeamReturnsOnlyItsMembers() {
+        String ownerId = ownerId();
+        String userId = given().contentType(ContentType.JSON).body(new AddMemberRequest("bob@it-members-org.test", "Bob", "Smith"))
+                .when().post(BASE, ORG)
+                .then().statusCode(201)
+                .extract().path("id");
+
+        given().when().get(BASE + "?team=users", ORG)
+                .then().statusCode(200)
+                .body("items.id", hasItem(userId))
+                .body("items.id", org.hamcrest.Matchers.not(hasItem(ownerId)))
+                .body("total", equalTo(1));
+    }
+
+    @Test
+    @TestSecurity(user = "alice", roles = "org-it-members-org:org-admin")
+    void listWithUnknownTeamReturns404() {
+        given().when().get(BASE + "?team=unknown", ORG)
+                .then().statusCode(404);
+    }
+
+    @Test
+    @TestSecurity(user = "alice", roles = "org-it-members-org:org-admin")
+    void listWithSearchAndTeamReturns400() {
+        given().when().get(BASE + "?search=a&team=users", ORG)
+                .then().statusCode(400);
     }
 
     @Test
@@ -200,9 +243,9 @@ class OrgAdminResourceTest {
         // JSON path on a list: find the member by email, then read its role
         given().when().get(BASE, ORG)
                 .then().statusCode(200)
-                .body("find { it.email == '%s' }.role".formatted(OWNER_EMAIL), equalTo("ORG_OWNER"))
-                .body("find { it.email == 'emma@it-members-org.test' }.role", equalTo("ORG_ADMIN"))
-                .body("find { it.email == 'hugo@it-members-org.test' }.role", equalTo("ORG_USER"));
+                .body("items.find { it.email == '%s' }.role".formatted(OWNER_EMAIL), equalTo("ORG_OWNER"))
+                .body("items.find { it.email == 'emma@it-members-org.test' }.role", equalTo("ORG_ADMIN"))
+                .body("items.find { it.email == 'hugo@it-members-org.test' }.role", equalTo("ORG_USER"));
     }
 
     @Test

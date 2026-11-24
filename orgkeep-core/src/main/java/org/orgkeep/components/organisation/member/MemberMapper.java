@@ -3,16 +3,25 @@ package org.orgkeep.components.organisation.member;
 import org.orgkeep.api.model.AddMemberRequest;
 import org.orgkeep.api.model.OrgMember;
 import org.orgkeep.api.model.OrgRole;
+import org.orgkeep.components.organisation.member.invitation.InvitationMailer;
 import org.keycloak.representations.idm.UserRepresentation;
+import org.mapstruct.AfterMapping;
 import org.mapstruct.BeanMapping;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
+import org.mapstruct.MappingTarget;
 import org.mapstruct.ReportingPolicy;
+
+import java.util.List;
 
 @Mapper(componentModel = "cdi", unmappedTargetPolicy = ReportingPolicy.WARN)
 public interface MemberMapper {
 
-    /** A member added by an org admin: no credentials yet, the email is not verified. */
+    /**
+     * A member added by an org admin: no credentials yet, the email is not verified, and the required action
+     * UPDATE_PASSWORD (added below) lets the invitation emailed by Keycloak show as pending until a password is
+     * set.
+     */
     // UserRepresentation has dozens of properties: only map the listed ones instead of warning on each
     @BeanMapping(ignoreByDefault = true)
     @Mapping(target = "username", source = "email")
@@ -23,10 +32,15 @@ public interface MemberMapper {
     @Mapping(target = "enabled", constant = "true")
     UserRepresentation toUserRepresentation(AddMemberRequest request);
 
+    @AfterMapping
+    default void addRequiredAction(@MappingTarget UserRepresentation user) {
+        user.setRequiredActions(List.of(InvitationMailer.UPDATE_PASSWORD));
+    }
+
     // several sources: the user properties come from user, the other parameters fill the properties of the same name
     OrgMember toOrgMember(UserRepresentation user, OrgRole role, Boolean invitationPending);
 
-    /** Without the invitation status, which costs a Keycloak call per member (owners in the organisation lists). */
+    /** Without the invitation status: for the owners of the organisation lists and details, where it is not shown. */
     @Mapping(target = "invitationPending", ignore = true)
     OrgMember toOrgMember(UserRepresentation user, OrgRole role);
 }

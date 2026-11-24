@@ -29,13 +29,17 @@ import org.orgkeep.components.organisation.serviceaccount.ServiceAccounts;
 import org.orgkeep.components.organisation.usergroup.team.TeamAlignment;
 import org.orgkeep.fixtures.TestRealm;
 import org.orgkeep.repository.keycloak.KeycloakGroups;
+import org.orgkeep.repository.keycloak.KeycloakOrgs;
 
+import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertThrowsExactly;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -61,6 +65,7 @@ class ProductAssignTest {
     @Inject ServiceAccountService serviceAccountService;
     @InjectSpy TeamAlignment teamAlignment;
     @InjectSpy KeycloakGroups groups;
+    @InjectSpy KeycloakOrgs orgsSpy;
     @InjectSpy ServiceAccounts serviceAccountsSpy;
 
     private TestRealm testRealm;
@@ -212,6 +217,73 @@ class ProductAssignTest {
         productService.assign(realm(), ORG, "late", "l", request());
 
         assertEquals(Set.of("late"), optionalOf(uuid, "late"));
+    }
+
+    // see AssignedProducts: a display copy of the assignment on the organisation, for the organisation list
+    @Test
+    void assignRecordsTheProductOnTheOrganisation() {
+        productService.assign(realm(), ORG, CATALOG, "a", request());
+
+        assertEquals(Set.of(CATALOG + "/a"), productsOf());
+    }
+
+    @Test
+    void unassignRemovesTheProductFromTheOrganisation() {
+        productService.assign(realm(), ORG, CATALOG, "a", request());
+
+        productService.unassign(realm(), ORG, CATALOG, "a");
+
+        assertEquals(Set.of(), productsOf());
+    }
+
+    @Test
+    void assigningTwiceKeepsOneValue() {
+        productService.assign(realm(), ORG, CATALOG, "a", request());
+        productService.assign(realm(), ORG, CATALOG, "a", request());
+
+        assertEquals(Set.of(CATALOG + "/a"), productsOf());
+    }
+
+    // the group is written first: a failure writing the organisation attribute leaves the group alone, without the
+    // value. The same assign repeated takes the renegotiation branch and adds the value it is missing
+    @Test
+    void aFailureAfterTheGroupIsWrittenIsFixedByTheSameAssignAgain() {
+        Mockito.doThrow(new IllegalStateException("Keycloak unavailable"))
+                .doCallRealMethod()
+                .when(orgsSpy).update(anyString(), any());
+
+        assertThrows(IllegalStateException.class, () -> productService.assign(realm(), ORG, CATALOG, "a", request()));
+        assertTrue(groups.find(realm(), OrgGroups.assignment(ORG, CATALOG, "a")).isPresent());
+        assertEquals(Set.of(), productsOf());
+
+        productService.assign(realm(), ORG, CATALOG, "a", request());
+
+        assertEquals(Set.of(CATALOG + "/a"), productsOf());
+    }
+
+    // the value is removed before the group: a failure deleting the group leaves it behind, without the value.
+    // The same unassign repeated finds the group and finishes the job
+    @Test
+    void aFailureDeletingTheGroupIsFixedByTheSameUnassignAgain() {
+        productService.assign(realm(), ORG, CATALOG, "a", request());
+        String assignmentPath = OrgGroups.assignment(ORG, CATALOG, "a");
+        Mockito.doThrow(new IllegalStateException("Keycloak unavailable"))
+                .doCallRealMethod()
+                .when(groups).delete(anyString(), anyString(), anyString());
+
+        assertThrows(IllegalStateException.class, () -> productService.unassign(realm(), ORG, CATALOG, "a"));
+        assertEquals(Set.of(), productsOf());
+        assertTrue(groups.find(realm(), assignmentPath).isPresent());
+
+        productService.unassign(realm(), ORG, CATALOG, "a");
+
+        assertEquals(Set.of(), productsOf());
+        assertTrue(groups.find(realm(), assignmentPath).isEmpty());
+    }
+
+    private Set<String> productsOf() {
+        return new HashSet<>(AssignedProducts.of(
+                testRealm.resource().organizations().search(ORG, true, 0, 1, false).getFirst()));
     }
 
     private Set<String> optionalOf(String clientUuid, String... names) {

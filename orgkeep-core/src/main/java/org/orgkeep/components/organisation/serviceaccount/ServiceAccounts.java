@@ -152,6 +152,15 @@ public class ServiceAccounts {
     }
 
     /**
+     * People of the org: Keycloak's count of its members minus its service accounts, which are members of the
+     * Keycloak organisation too. Used by the organisation list and the unfiltered member list, so the two counts
+     * agree (the member list leaves out the members of this very group).
+     */
+    public long peopleCount(String realm, String orgName, long memberCount) {
+        return Math.max(0, memberCount - users(realm, orgName).size());
+    }
+
+    /**
      * Whether the user is a service account of this org: a member of its group /{org}/service-accounts, the proof
      * that a service account belongs to the org. Service accounts are members of the Keycloak organisation too, so
      * everything that walks its members must leave them out: they are not people. Not told by the username: a person's

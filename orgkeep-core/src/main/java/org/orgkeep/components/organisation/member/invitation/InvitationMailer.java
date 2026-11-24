@@ -21,7 +21,8 @@ import java.util.List;
 @ApplicationScoped
 @RequiredArgsConstructor
 public class InvitationMailer {
-    static final String UPDATE_PASSWORD = "UPDATE_PASSWORD";
+    /** Also read by MemberMapper (another package), which sets it on a member created by add. */
+    public static final String UPDATE_PASSWORD = "UPDATE_PASSWORD";
 
     private final KeycloakRealms realms;
     private final KeycloakUsers users;
@@ -68,12 +69,20 @@ public class InvitationMailer {
     }
 
     /**
-     * Whether the user has not followed the invitation link yet: no password and the email not verified (following
-     * the link verifies it). Both are needed: an owner created with a password has not verified their email either.
+     * Whether the member has not followed the invitation link yet, read from the full representation the caller
+     * already holds: no realm, no Keycloak call. True when the email is not verified and the required action
+     * UPDATE_PASSWORD is still pending (a member created by add, see MemberMapper.toUserRepresentation). Keycloak
+     * removes the action once a password is set, through the invitation link or "forgot password".
+     * <p>
+     * Both conditions are needed, for a different reason each: requiredActions alone would show an owner created
+     * with a temporary password as pending too (it also carries UPDATE_PASSWORD, see
+     * OrgMapper.toOwnerRepresentation, but is created with emailVerified=true, so it never matches here);
+     * emailVerified alone would never clear, since it stays false whatever the member does (neither the invitation
+     * link nor "forgot password" ever sets it to true): a member who chose a password would stay pending forever.
      */
-    public boolean isPending(String realm, UserRepresentation user) {
-        // the email first: it comes with the user, the password costs a Keycloak call
-        return !Boolean.TRUE.equals(user.isEmailVerified()) && !users.hasPassword(realm, user.getId());
+    public boolean isPending(UserRepresentation user) {
+        return !Boolean.TRUE.equals(user.isEmailVerified())
+                && user.getRequiredActions() != null && user.getRequiredActions().contains(UPDATE_PASSWORD);
     }
 
     private void send(String realm, String userId) {

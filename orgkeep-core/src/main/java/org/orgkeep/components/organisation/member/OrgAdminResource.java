@@ -4,19 +4,24 @@ import org.orgkeep.api.OrgMemberService;
 import org.orgkeep.api.model.Slug;
 import org.orgkeep.api.model.AddMemberRequest;
 import org.orgkeep.api.model.OrgMember;
+import org.orgkeep.api.model.Page;
 import org.orgkeep.api.model.UpdateMemberStatusRequest;
 import org.orgkeep.web.CurrentRealm;
 import org.orgkeep.web.security.OrgPermissions;
 import io.quarkus.security.PermissionsAllowed;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import io.quarkus.security.UnauthorizedException;
 import jakarta.ws.rs.DELETE;
+import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
+import jakarta.ws.rs.QueryParam;
 import lombok.RequiredArgsConstructor;
 import org.eclipse.microprofile.jwt.JsonWebToken;
 import org.eclipse.microprofile.openapi.annotations.Operation;
@@ -25,8 +30,6 @@ import org.eclipse.microprofile.openapi.annotations.responses.APIResponseSchema;
 import org.eclipse.microprofile.openapi.annotations.security.SecurityRequirement;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import org.jboss.resteasy.reactive.ResponseStatus;
-
-import java.util.List;
 
 /**
  * Management of an organisation by its own org admins.
@@ -47,10 +50,19 @@ public class OrgAdminResource {
     private final JsonWebToken jwt;
 
     @GET
-    @Operation(summary = "List the members of the organisation")
-    @APIResponse(responseCode = "404", description = "Unknown organisation")
-    public List<OrgMember> list(@PathParam("org") @Slug String org){
-        return memberService.list(currentRealm.name(), org);
+    @Operation(summary = "List the members of the organisation",
+            description = "Paginated. Without search or team: the owners, then the members of the default group "
+                    + "users. With search: every member whose username, email or first name matches. With team: "
+                    + "the members of this user group (admin and users accepted). search and team cannot be "
+                    + "combined. Never a service account.")
+    @APIResponse(responseCode = "400", description = "search and team are both given")
+    @APIResponse(responseCode = "404", description = "Unknown organisation, or unknown team")
+    public Page<OrgMember> list(@PathParam("org") @Slug String org,
+                                @QueryParam("search") String search,
+                                @QueryParam("team") @Slug String team,
+                                @QueryParam("first") @DefaultValue("0") @Min(0) int first,
+                                @QueryParam("max") @DefaultValue("100") @Min(1) @Max(100) int max){
+        return memberService.list(currentRealm.name(), org, search, team, first, max);
     }
 
     @POST

@@ -17,6 +17,8 @@ import java.util.List;
  *                               a token when the application asks for them (scope=&lt;catalog&gt;)
  * @param lightweightTokens      the client issues lightweight access tokens (see {@link LightweightTokens}): the APIs of
  *                               the realm owner read the roles and the catalogs by introspection
+ * @param homeUrl                the client's baseUrl: the page Keycloak's "Back to Application" link points to, on
+ *                               its last page after an invitation. Null when not set
  */
 public record LoginClient(
     String clientId,
@@ -26,4 +28,5 @@ public record LoginClient(
     List<String> postLogoutRedirectUris,
     List<String> webOrigins,
     List<String> defaultCatalogs,
-    boolean lightweightTokens){ }
+    boolean lightweightTokens,
+    String homeUrl){ }

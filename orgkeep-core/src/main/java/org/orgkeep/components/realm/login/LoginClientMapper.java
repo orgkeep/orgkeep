@@ -33,6 +33,7 @@ public interface LoginClientMapper {
     @Mapping(target = "webOrigins", source = "client.webOrigins")
     @Mapping(target = "postLogoutRedirectUris", source = "client.attributes", qualifiedByName = "postLogoutRedirectUris")
     @Mapping(target = "lightweightTokens", source = "client.attributes", qualifiedByName = "lightweightTokens")
+    @Mapping(target = "homeUrl", source = "client.baseUrl", qualifiedByName = "homeUrl")
     LoginClient toLoginClient(ClientRepresentation client, String issuer, String consoleUrl, List<String> defaultCatalogs);
 
     /**
@@ -69,6 +70,16 @@ public interface LoginClientMapper {
         client.setAttributes(withPostLogoutRedirectUris(client, request.postLogoutRedirectUris()));
     }
 
+    @AfterMapping
+    default void updateHomeUrl(UpdateLoginClientRequest request, @MappingTarget ClientRepresentation client) {
+        // null: unchanged. "": removes the baseUrl, a value: replaces it (see UpdateLoginClientRequest). The
+        // Keycloak admin API drops a null field from a client update instead of clearing it (like the realm's
+        // SMTP server, see members.md / realm-bootstrap.md): "" is sent instead, read back as null by toLoginClient
+        if (request.homeUrl() != null) {
+            client.setBaseUrl(request.homeUrl());
+        }
+    }
+
     /** A copy of the attributes of the client, with these post logout redirect URIs (Keycloak has no dedicated field). */
     private static Map<String, String> withPostLogoutRedirectUris(ClientRepresentation client, List<String> uris) {
         Map<String, String> attributes = client.getAttributes() == null ? new HashMap<>() : new HashMap<>(client.getAttributes());
@@ -79,6 +90,12 @@ public interface LoginClientMapper {
     @Named("lightweightTokens")
     default boolean lightweightTokens(Map<String, String> attributes) {
         return attributes != null && Boolean.parseBoolean(attributes.get(LightweightTokens.CLIENT_ATTRIBUTE));
+    }
+
+    /** Null and empty both mean "not set" (see updateHomeUrl): normalized to null, as LoginClient.homeUrl documents. */
+    @Named("homeUrl")
+    default String homeUrl(String baseUrl) {
+        return baseUrl == null || baseUrl.isEmpty() ? null : baseUrl;
     }
 
     // @Named keeps MapStruct from using this method for every other Map -> List conversion

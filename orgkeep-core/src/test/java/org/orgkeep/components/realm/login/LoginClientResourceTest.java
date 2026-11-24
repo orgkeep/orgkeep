@@ -39,6 +39,7 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
@@ -81,7 +82,7 @@ class LoginClientResourceTest {
         // recreates the login client if realmWithoutLoginClientReturns404 deleted it
         realmProvisioner.ensureDefaults(testRealm.name());
         loginClientService.update(testRealm.name(),
-                new UpdateLoginClientRequest(List.of(), List.of(), List.of(), List.of(), false));
+                new UpdateLoginClientRequest(List.of(), List.of(), List.of(), List.of(), false, ""));
         for (String catalog : List.of("prod", "sandbox")) {
             try {
                 catalogService.delete(testRealm.name(), catalog);
@@ -101,6 +102,19 @@ class LoginClientResourceTest {
     void orgAdminGets403() {
         given().when().get(BASE)
                 .then().statusCode(403);
+    }
+
+    @Test
+    @TestSecurity(user = "alice", roles = "org-acme:org-user")
+    void orgUserGets403() {
+        given().when().get(BASE)
+                .then().statusCode(403);
+    }
+
+    @Test
+    void anonymousGets401() {
+        given().when().get(BASE)
+                .then().statusCode(401);
     }
 
     @Test
@@ -293,6 +307,62 @@ class LoginClientResourceTest {
         assertEquals(List.of(), testRealm.resource().clientScopes().findAll().stream()
                 .filter(scope -> scope.getName().equals(LightweightTokens.MARKER_CLAIM))
                 .toList());
+    }
+
+    // homeUrl becomes the client's baseUrl, read back as is; absent on GET when never set
+    @ParameterizedTest
+    @ValueSource(strings = {"https://app.example.com/", "https://app.example.com/home", "http://localhost:9999/home"})
+    @TestSecurity(user = "owner", roles = "realm-owner")
+    void validHomeUrlIsSetAndRead(String url) {
+        put(new UpdateLoginClientRequest(List.of(), List.of(), List.of(), null, null, url))
+                .then().statusCode(200)
+                .body("homeUrl", equalTo(url));
+
+        given().when().get(BASE)
+                .then().statusCode(200)
+                .body("homeUrl", equalTo(url));
+        assertEquals(url, loginClient().getBaseUrl());
+    }
+
+    // each of these would make the "Back to Application" link useless or dangerous
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "https://app.example.com/*",
+            "https://app.example.com*",
+            "http://app.example.com/",         // http, not local
+            "https://user@app.example.com/",
+            "https://app.example.com/?x=1",
+            "https://app.example.com/#x",
+            "javascript:alert(1)"})
+    @TestSecurity(user = "owner", roles = "realm-owner")
+    void unsafeHomeUrlReturns400(String url) {
+        put(new UpdateLoginClientRequest(List.of(), List.of(), List.of(), null, null, url))
+                .then().statusCode(400);
+    }
+
+    @Test
+    @TestSecurity(user = "owner", roles = "realm-owner")
+    void absentHomeUrlIsUnchanged() {
+        put(new UpdateLoginClientRequest(List.of(), List.of(), List.of(), null, null, "https://app.example.com/home"))
+                .then().statusCode(200);
+
+        put(new UpdateLoginClientRequest(List.of("https://app.example.com/*"), List.of(), List.of()))
+                .then().statusCode(200)
+                .body("homeUrl", equalTo("https://app.example.com/home"));
+    }
+
+    @Test
+    @TestSecurity(user = "owner", roles = "realm-owner")
+    void emptyHomeUrlRemovesIt() {
+        put(new UpdateLoginClientRequest(List.of(), List.of(), List.of(), null, null, "https://app.example.com/home"))
+                .then().statusCode(200);
+
+        put(new UpdateLoginClientRequest(List.of(), List.of(), List.of(), null, null, ""))
+                .then().statusCode(200)
+                .body("homeUrl", nullValue());
+        // Keycloak stores "" (a null field is dropped from a client update instead of being cleared); the API
+        // of Orgkeep reads it back as null, see LoginClientMapper.homeUrl
+        assertEquals("", loginClient().getBaseUrl());
     }
 
     /** The marker scope among the default (or optional) scopes of the login client. */

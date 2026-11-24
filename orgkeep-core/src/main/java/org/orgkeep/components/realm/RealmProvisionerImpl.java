@@ -98,7 +98,7 @@ public class RealmProvisionerImpl implements RealmProvisioner {
         // the realm that a user created afterwards gets: without the roles of the account client they hold, the
         // Account console of Keycloak answers 401 to the owner
         users.addRealmRole(realmName, ownerId, realms.defaultRoleName(realmName));
-        eventBus.publish(UserCreated.ADDRESS, new UserCreated(realmName, null, ownerId, passwordSet));
+        eventBus.publish(UserCreated.ADDRESS, new UserCreated(realmName, null, ownerId, true, passwordSet));
         return new CreateRealmResponse(realms.id(realmName), realmName, ownerId);
     }
 
@@ -168,6 +168,8 @@ public class RealmProvisionerImpl implements RealmProvisioner {
         changed |= set(client.isServiceAccountsEnabled(), false, client::setServiceAccountsEnabled);
         changed |= set(orEmpty(client.getRedirectUris()), List.of(settings.url() + "/*"), client::setRedirectUris);
         changed |= set(orEmpty(client.getWebOrigins()), List.<String>of(), client::setWebOrigins);
+        // the home URL: where Keycloak's "Back to Application" link points to, on its last page after an invitation
+        changed |= set(client.getBaseUrl(), settings.url() + "/", client::setBaseUrl);
 
         Map<String, String> attributes = client.getAttributes() == null ? new HashMap<>() : new HashMap<>(client.getAttributes());
         boolean attributesChanged = !"+".equals(attributes.put("post.logout.redirect.uris", "+"));

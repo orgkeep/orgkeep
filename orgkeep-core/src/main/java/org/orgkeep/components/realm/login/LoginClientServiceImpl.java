@@ -67,8 +67,8 @@ public class LoginClientServiceImpl implements LoginClientService {
             lightweightClients.apply(realm, clientUuid, request.lightweightTokens());
         }
 
-        log.info("Login client of realm '{}' updated: redirect URIs {}, web origins {}, default catalogs {}, lightweight tokens {}",
-                realm, request.redirectUris(), request.webOrigins(), request.defaultCatalogs(), request.lightweightTokens());
+        log.info("Login client of realm '{}' updated: redirect URIs {}, web origins {}, default catalogs {}, lightweight tokens {}, home URL {}",
+                realm, request.redirectUris(), request.webOrigins(), request.defaultCatalogs(), request.lightweightTokens(), request.homeUrl());
         return get(realm);
     }
 

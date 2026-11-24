@@ -35,10 +35,12 @@ import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.ClientScopeRepresentation;
 import org.keycloak.representations.idm.CredentialRepresentation;
 import org.keycloak.representations.idm.GroupRepresentation;
+import org.keycloak.representations.idm.RealmRepresentation;
 import org.keycloak.representations.idm.RoleRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -333,6 +335,27 @@ class RealmProvisionerTest {
         assertNotEquals("s3cret", smtp.get("password"));
         // the partial update left the rest of the realm alone
         assertTrue(keycloak.realm(realmName).toRepresentation().isOrganizationsEnabled());
+    }
+
+    // console-only keys (not owned by Orgkeep) must survive a restart: configureSmtp merges instead of overwriting
+    @Test
+    void configureSmtpKeepsAReplyToSetBeforehand() {
+        service.create(new CreateRealmRequest(realmName, "owner@acme.test", "s3cret"));
+        service.configureSmtp(realmName, new SmtpSettings("smtp.acme.test", 587, "no-reply@acme.test", "Acme",
+                "mailer", "s3cret", true, false));
+        // set in the Keycloak console, outside of Orgkeep
+        Map<String, String> withReplyTo = new HashMap<>(keycloak.realm(realmName).toRepresentation().getSmtpServer());
+        withReplyTo.put("replyTo", "support@acme.test");
+        RealmRepresentation update = new RealmRepresentation();
+        update.setSmtpServer(withReplyTo);
+        keycloak.realm(realmName).update(update);
+
+        service.configureSmtp(realmName, new SmtpSettings("smtp.acme.test", 465, "no-reply@acme.test", "Acme",
+                "mailer", "s3cret", true, true));
+
+        Map<String, String> smtp = keycloak.realm(realmName).toRepresentation().getSmtpServer();
+        assertEquals("support@acme.test", smtp.get("replyTo"));
+        assertEquals("465", smtp.get("port"));
     }
 
     @Test

@@ -10,6 +10,7 @@ import org.orgkeep.api.model.OrgClients;
 import org.orgkeep.api.model.OrgkeepApiClient;
 import org.orgkeep.api.model.RealmRole;
 import org.orgkeep.api.model.SmtpSettings;
+import org.orgkeep.components.realm.smtp.SmtpMapper;
 import org.orgkeep.repository.keycloak.KeycloakClients;
 import org.orgkeep.repository.keycloak.KeycloakOrgs;
 import org.orgkeep.repository.keycloak.KeycloakRealms;
@@ -50,6 +51,7 @@ public class RealmProvisionerImpl implements RealmProvisioner {
     private final KeycloakOrgs orgs;
     private final CatalogSetup catalogSetup;
     private final RealmMapper realmMapper;
+    private final SmtpMapper smtpMapper;
     private final PasswordGenerator passwordGenerator;
     private final EventBus eventBus;
 
@@ -104,7 +106,7 @@ public class RealmProvisionerImpl implements RealmProvisioner {
 
     @Override
     public void configureSmtp(String name, SmtpSettings smtp) {
-        realms.setSmtpServer(name, realmMapper.toSmtpServer(smtp));
+        realms.setSmtpServer(name, smtpMapper.merge(realms.smtpServer(name), smtp));
         log.info("SMTP server {}:{} set on realm '{}'", smtp.host(), smtp.port(), name);
     }
 

@@ -68,8 +68,20 @@ public class KeycloakRealms {
         realmResource.roles().get(realmRole).addComposites(List.of(role));
     }
 
+    /**
+     * The realm's "smtpServer" map, as Keycloak returns it (password masked), a mutable copy; an empty map when
+     * Keycloak returns null.
+     */
+    public Map<String, String> smtpServer(String realm) {
+        Map<String, String> smtpServer = keycloak.realm(realm).toRepresentation().getSmtpServer();
+        return smtpServer == null ? new HashMap<>() : new HashMap<>(smtpServer);
+    }
+
+    /**
+     * Replaces the realm's "smtpServer" map with the one given (partial realm update, the rest of the realm is
+     * untouched): Keycloak replaces the whole map with the one it receives, an empty map clears it, null is ignored.
+     */
     public void setSmtpServer(String realm, Map<String, String> smtpServer) {
-        // partial update: Keycloak only changes the fields that are set in the representation
         RealmRepresentation update = new RealmRepresentation();
         update.setSmtpServer(smtpServer);
         keycloak.realm(realm).update(update);
@@ -98,8 +110,8 @@ public class KeycloakRealms {
 
     /** Without an SMTP host, Keycloak cannot send any email of the realm. */
     public boolean hasSmtpServer(String realm) {
-        Map<String, String> smtpServer = keycloak.realm(realm).toRepresentation().getSmtpServer();
-        return smtpServer != null && smtpServer.get("host") != null && !smtpServer.get("host").isBlank();
+        String host = smtpServer(realm).get("host");
+        return host != null && !host.isBlank();
     }
 
     public void delete(String realm) {

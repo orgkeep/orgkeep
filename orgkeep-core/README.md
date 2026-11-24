@@ -84,8 +84,10 @@ Orgkeep is configured with environment variables (or the matching properties in 
 `ORGKEEP_KEYCLOAK_CLIENT_SECRET` and `ORGKEEP_OWNER_EMAIL`. `ORGKEEP_OWNER_PASSWORD` (like the first and last name of
 the owner) is only required when the realm is created. The owner of the configuration is the realm owner, and the
 only one, at every startup: to take over a realm, point `ORGKEEP_OWNER_USERNAME` / `ORGKEEP_OWNER_EMAIL` at an existing,
-enabled user who is not a member of an organisation, then restart. The Keycloak admin account, the SMTP server, the
-dashboard client, Swagger UI and the demo data have their own settings.
+enabled user who is not a member of an organisation, then restart. The Keycloak admin account, the SMTP server
+(`ORGKEEP_SMTP_HOST` also locks `PUT`/`DELETE /api/admin/smtp` with a `409` while it is set; without it, or in SAAS,
+the realm owner manages the SMTP server through the API), the dashboard client, Swagger UI and the demo data have
+their own settings.
 
 The complete reference, with every variable and its default, is in the documentation:
 https://orgkeep.org/docs/latest/reference/configuration/ (its source is [`documentation/`](../documentation)).
@@ -95,7 +97,7 @@ https://orgkeep.org/docs/latest/reference/configuration/ (its source is [`docume
 Everything lives under `/api`, for two audiences:
 
 - `/api/admin/...`: the realm owner (realm role `realm-owner`): organisations, catalogs, products, assignments of
-  products to organisations, catalog roles, login client;
+  products to organisations, catalog roles, login client, SMTP server;
 - `/api/organisations/{org}/...`: the org admins of `{org}` (and the realm owner): members, teams, what the teams give,
   service accounts.
 

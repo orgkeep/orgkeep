@@ -128,11 +128,13 @@ public class KeycloakUsers {
 
     /**
      * Keycloak emails the user a link to perform the required actions (e.g. UPDATE_PASSWORD), through the SMTP server
-     * of the realm. No client given: Keycloak uses its "account" client and ends on its own "account updated" page.
+     * of the realm. No redirect URI is ever sent. With a client (clientId nullable), Keycloak's last page shows a
+     * "Back to Application" link to that client's baseUrl, if it has one, and the pages use its login theme; without
+     * a client, Keycloak uses its "account" client and ends on its own "account updated" page, with no link.
      * Following the link also marks the email as verified.
      */
-    public void sendActionsEmail(String realm, String userId, List<String> actions, Duration lifespan) {
+    public void sendActionsEmail(String realm, String userId, String clientId, List<String> actions, Duration lifespan) {
         keycloak.realm(realm).users().get(userId)
-                .executeActionsEmail(null, null, (int) lifespan.toSeconds(), actions);
+                .executeActionsEmail(clientId, null, (int) lifespan.toSeconds(), actions);
     }
 }

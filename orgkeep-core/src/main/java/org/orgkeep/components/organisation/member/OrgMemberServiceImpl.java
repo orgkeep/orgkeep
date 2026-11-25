@@ -349,8 +349,7 @@ public class OrgMemberServiceImpl implements OrgMemberService {
      * every member endpoint answers as if they were not (404).
      */
     private boolean isPerson(String realm, OrganizationRepresentation org, String userId) {
-        return orgs.isMember(realm, org.getId(), userId)
-                && !serviceAccounts.isServiceAccountUser(realm, org.getName(), userId);
+        return Members.isPerson(orgs, serviceAccounts, realm, org, userId);
     }
 
     /** One member, as {@link #list} renders it. Never an owner here: setEnabled refuses owners before. */

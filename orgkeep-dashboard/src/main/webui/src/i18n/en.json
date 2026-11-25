@@ -144,10 +144,33 @@
       "loadError": "Could not load the members",
       "empty": "No member yet.",
       "noMatch": "No member matches this search.",
+      "actions": "Actions",
       "columns": {
         "name": "Name",
         "email": "Email",
         "role": "Role"
+      },
+      "makeOwner": {
+        "button": "Make owner",
+        "title": "Make {{member}} owner?",
+        "message": "{{member}} gets the org-owner role directly and leaves the users team.",
+        "confirm": "Make owner"
+      },
+      "removeOwnership": {
+        "button": "Remove ownership",
+        "title": "Remove the ownership of {{member}}?",
+        "message": "{{member}} stays a member of the organisation, in the users team. They can then be removed or disabled like any other member.",
+        "confirm": "Remove ownership"
+      },
+      "transferOwnership": {
+        "button": "Transfer ownership",
+        "title": "Transfer ownership from {{member}}?",
+        "message": "Choose another member to make owner. {{member}} loses ownership once the new owner is confirmed, but stays a member of the organisation.",
+        "pickLabel": "New owner",
+        "pickPlaceholder": "Search members",
+        "submit": "Transfer",
+        "removeFailedTitle": "Ownership not fully transferred",
+        "removeFailedMessage": "The new owner is confirmed, but the previous owner could not be removed: both are owners for now. Try again to finish the transfer."
       }
     },
     "products": {

@@ -144,10 +144,33 @@
       "loadError": "Impossible de charger les membres",
       "empty": "Aucun membre pour l'instant.",
       "noMatch": "Aucun membre ne correspond à cette recherche.",
+      "actions": "Actions",
       "columns": {
         "name": "Nom",
         "email": "Email",
         "role": "Rôle"
+      },
+      "makeOwner": {
+        "button": "Nommer owner",
+        "title": "Nommer {{member}} owner ?",
+        "message": "{{member}} reçoit le rôle org-owner en direct et quitte la team users.",
+        "confirm": "Nommer owner"
+      },
+      "removeOwnership": {
+        "button": "Retirer l'ownership",
+        "title": "Retirer l'ownership de {{member}} ?",
+        "message": "{{member}} reste membre de l'organisation, dans la team users. Il peut ensuite être retiré ou désactivé comme n'importe quel autre membre.",
+        "confirm": "Retirer l'ownership"
+      },
+      "transferOwnership": {
+        "button": "Transférer l'ownership",
+        "title": "Transférer l'ownership de {{member}} ?",
+        "message": "Choisissez un autre membre à nommer owner. {{member}} perd l'ownership une fois le nouvel owner confirmé, mais reste membre de l'organisation.",
+        "pickLabel": "Nouvel owner",
+        "pickPlaceholder": "Rechercher des membres",
+        "submit": "Transférer",
+        "removeFailedTitle": "Ownership pas entièrement transféré",
+        "removeFailedMessage": "Le nouvel owner est confirmé, mais l'ancien owner n'a pas pu être retiré : les deux sont owners pour l'instant. Réessayez pour terminer le transfert."
       }
     },
     "products": {

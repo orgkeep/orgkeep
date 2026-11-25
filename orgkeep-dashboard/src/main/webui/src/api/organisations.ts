@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { deleteRequest, getJson, postJson, postRequest, putJson } from './http';
+import { deleteRequest, getJson, postJson, postRequest, putJson, putRequest } from './http';
 import { SERVICE_ACCOUNTS_KEY } from './queryKeys';
 
 // The organisations endpoints of the API of the core (OrganisationsResource, OrgProductsResource,
@@ -205,12 +205,14 @@ export function useOrganisation(org: string) {
 }
 
 // Every filter is optional: left out of the query means "no filter". page starts at 1 (like the organisation
-// list); max overrides PAGE_SIZE for a picker that only needs a handful of names (e.g. 20 by default too)
+// list); max overrides PAGE_SIZE for a picker that only needs a handful of names (e.g. 20 by default too);
+// enabled lets a caller that mounts the hook ahead of time (e.g. a modal) skip the request until it is shown
 export interface OrgMembersFilters {
   search?: string;
   team?: string;
   page?: number;
   max?: number;
+  enabled?: boolean;
 }
 
 function fetchOrgMembers(org: string, { search, team, page = 1, max = PAGE_SIZE }: OrgMembersFilters): Promise<Page<OrgMember>> {
@@ -227,13 +229,14 @@ function fetchOrgMembers(org: string, { search, team, page = 1, max = PAGE_SIZE 
 }
 
 export function useOrgMembers(org: string, filters: OrgMembersFilters = {}) {
-  const { search, team, page = 1, max = PAGE_SIZE } = filters;
+  const { search, team, page = 1, max = PAGE_SIZE, enabled = true } = filters;
   return useQuery({
     // the path of the org admins (/api/organisations/{org}/members): the core opens it to the realm owner too
     queryKey: [ORGANISATIONS_KEY, 'detail', org, 'members', search, team, page, max],
     queryFn: () => fetchOrgMembers(org, filters),
     placeholderData: keepPreviousData,
     staleTime: 30_000,
+    enabled,
   });
 }
 
@@ -290,6 +293,37 @@ export function useSetMemberEnabled(org: string) {
   return useMutation({
     mutationFn: ({ userId, enabled }: { userId: string; enabled: boolean }) =>
       putJson<OrgMember>(`${membersUrl(org)}/${encodeURIComponent(userId)}/enabled`, { enabled }),
+    onSuccess: invalidate,
+  });
+}
+
+function ownerUrl(org: string, userId: string): string {
+  return `${orgUrl(org)}/owners/${encodeURIComponent(userId)}`;
+}
+
+// Ownership changes the owners shown on the organisation detail (header) and on the organisation list, and the
+// role column of the members: all three are under ORGANISATIONS_KEY
+function useInvalidateOwnership() {
+  const queryClient = useQueryClient();
+  return () => queryClient.invalidateQueries({ queryKey: [ORGANISATIONS_KEY] });
+}
+
+// Realm owner only. Grants ownership directly (not through a group) and takes the member out of "users" if they
+// were in it. Idempotent: calling it again on an already-owner is a no-op, still answered 200. No request body.
+export function useGrantOwnership(org: string) {
+  const invalidate = useInvalidateOwnership();
+  return useMutation({
+    mutationFn: (userId: string) => putRequest(ownerUrl(org, userId)),
+    onSuccess: invalidate,
+  });
+}
+
+// Realm owner only. Revokes ownership: the former owner becomes a plain member again, joining "users" and
+// keeping their teams. Idempotent: calling it on a member who is not an owner just makes sure they are in "users".
+export function useRevokeOwnership(org: string) {
+  const invalidate = useInvalidateOwnership();
+  return useMutation({
+    mutationFn: (userId: string) => deleteRequest(ownerUrl(org, userId)),
     onSuccess: invalidate,
   });
 }

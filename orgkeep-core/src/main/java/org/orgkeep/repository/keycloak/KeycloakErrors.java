@@ -25,6 +25,22 @@ final class KeycloakErrors {
         return response.getStatus() == Response.Status.CONFLICT.getStatusCode();
     }
 
+    /**
+     * Whether a 400 is Keycloak's refusal of a required action it does not recognize on the realm (not registered,
+     * e.g. an unknown alias): {"errorMessage":"Provided invalid required actions"}, matched loosely on "invalid
+     * required actions", case-insensitive. On 26.8.1 a disabled VERIFY_EMAIL is accepted (measured), not refused
+     * this way. False, never throws, if the body cannot be read (e.g. already consumed): the caller then sees a
+     * generic 400.
+     */
+    static boolean isInvalidRequiredActions(WebApplicationException e) {
+        try {
+            String body = e.getResponse().readEntity(String.class);
+            return body != null && body.toLowerCase().contains("invalid required actions");
+        } catch (RuntimeException readFailure) {
+            return false;
+        }
+    }
+
     static void requireSuccess(Response response, String action) {
         if (response.getStatusInfo().getFamily() != Response.Status.Family.SUCCESSFUL) {
             throw new IllegalStateException("%s failed with status %d: %s"

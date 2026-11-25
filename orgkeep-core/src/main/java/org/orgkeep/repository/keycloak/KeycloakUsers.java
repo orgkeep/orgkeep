@@ -131,10 +131,25 @@ public class KeycloakUsers {
      * of the realm. No redirect URI is ever sent. With a client (clientId nullable), Keycloak's last page shows a
      * "Back to Application" link to that client's baseUrl, if it has one, and the pages use its login theme; without
      * a client, Keycloak uses its "account" client and ends on its own "account updated" page, with no link.
-     * Following the link also marks the email as verified.
+     * Since Keycloak 26.8, following the link marks the email verified only if VERIFY_EMAIL is among the actions
+     * (up to 26.7, every action link did).
+     *
+     * @throws InvalidRequiredActionsException if Keycloak refuses one of the actions because it does not recognize
+     *         it on the realm (not registered; a 400 with "Provided invalid required actions") — on 26.8.1 a
+     *         disabled VERIFY_EMAIL is accepted (measured), the retry guards against a Keycloak that refuses an
+     *         unknown action; any other error is rethrown unchanged
      */
     public void sendActionsEmail(String realm, String userId, String clientId, List<String> actions, Duration lifespan) {
-        keycloak.realm(realm).users().get(userId)
-                .executeActionsEmail(clientId, null, (int) lifespan.toSeconds(), actions);
+        try {
+            keycloak.realm(realm).users().get(userId)
+                    .executeActionsEmail(clientId, null, (int) lifespan.toSeconds(), actions);
+        } catch (WebApplicationException e) {
+            if (e.getResponse().getStatus() == Response.Status.BAD_REQUEST.getStatusCode()
+                    && KeycloakErrors.isInvalidRequiredActions(e)) {
+                throw new InvalidRequiredActionsException(
+                        "Keycloak refused required actions %s for user %s in realm '%s'".formatted(actions, userId, realm), e);
+            }
+            throw e;
+        }
     }
 }

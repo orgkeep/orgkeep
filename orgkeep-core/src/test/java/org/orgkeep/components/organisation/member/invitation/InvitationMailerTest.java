@@ -14,6 +14,8 @@ import org.orgkeep.api.model.OrgMember;
 import org.orgkeep.api.model.SmtpSettings;
 import org.orgkeep.api.model.UpdateLoginClientRequest;
 import org.orgkeep.fixtures.TestRealm;
+import org.orgkeep.repository.keycloak.InvalidRequiredActionsException;
+import org.orgkeep.repository.keycloak.KeycloakUsers;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.response.Response;
 import io.vertx.core.eventbus.EventBus;
@@ -26,6 +28,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.keycloak.representations.idm.RealmRepresentation;
+import org.keycloak.representations.idm.RequiredActionProviderRepresentation;
 
 import java.time.Duration;
 import java.util.HashMap;
@@ -68,6 +71,7 @@ class InvitationMailerTest {
     @Inject LoginClientService loginClientService;
     @Inject InvitationMailer mailer;
     @Inject EventBus eventBus;
+    @Inject KeycloakUsers users;
 
     private TestRealm testRealm;
     // Mailpit is shared by all tests (and the dev mode): a unique address per test isolates its emails
@@ -268,12 +272,107 @@ class InvitationMailerTest {
                 () -> memberService.resendInvitation(testRealm.name(), ORG, userId));
     }
 
-    // Pending = emailVerified not true AND requiredActions contains UPDATE_PASSWORD (members.md): a member added by
-    // add() carries both, a temporary-password owner carries the required action too but is created with
-    // emailVerified=true (OrgMapper.toOwnerRepresentation), so it is never pending. Keycloak removes the required
-    // action once it is completed through the invitation link (spike of #55): followed here for real (Mailpit, then
-    // the "choose a password" page Keycloak serves), rather than simulated, so the test proves Keycloak's own
-    // behavior and not an assumption about it.
+    // Proves decision 1 of #66: the link carries VERIFY_EMAIL, so following it marks the email verified with no
+    // second email. If the final count ever becomes 2, the whole decision needs revisiting (members.md): it would
+    // mean VERIFY_EMAIL, once satisfied by the link, still triggers Keycloak's own challenge email.
+    @Test
+    void invitationVerifiesTheEmail() {
+        configureSmtp();
+        orgService.create(testRealm.name(), new CreateOrgRequest(ORG, Set.of("acme.test"), null, null));
+        String userId = memberService.add(testRealm.name(), ORG, new AddMemberRequest(email, "Jane", "Doe")).id();
+        await().atMost(Duration.ofSeconds(10)).until(() -> emailsTo(email) == 1);
+        assertFalse(emailVerified(userId));
+        assertTrue(memberOf(userId).invitationPending());
+
+        followInvitationLink(invitationLinkFor(email), "chosen-password");
+
+        assertTrue(emailVerified(userId));
+        assertTrue(testRealm.resource().users().get(userId).toRepresentation().getRequiredActions().isEmpty());
+        assertFalse(memberOf(userId).invitationPending());
+        // a short, fixed wait for a possible second, asynchronous email (Keycloak's own VERIFY_EMAIL challenge),
+        // before counting for good
+        await().pollDelay(Duration.ofSeconds(3)).atMost(Duration.ofSeconds(4)).until(() -> true);
+        assertEquals(1, emailsTo(email));
+    }
+
+    @Test
+    void resendVerifiesTheEmailToo() {
+        orgService.create(testRealm.name(), new CreateOrgRequest(ORG, Set.of("acme.test"), null, null));
+        // added without SMTP configured: no invitation goes out at creation
+        String userId = memberService.add(testRealm.name(), ORG, new AddMemberRequest(email, "Jane", "Doe")).id();
+        assertEquals(0, emailsTo(email));
+        configureSmtp();
+
+        memberService.resendInvitation(testRealm.name(), ORG, userId);
+        assertEquals(1, emailsTo(email));
+
+        followInvitationLink(invitationLinkFor(email), "chosen-password");
+
+        assertTrue(emailVerified(userId));
+        assertFalse(memberOf(userId).invitationPending());
+    }
+
+    // "Forgot password" is simulated with the exact Keycloak call it triggers (execute-actions-email with
+    // UPDATE_PASSWORD only, no VERIFY_EMAIL): driving the real form would start a second login flow for no extra
+    // value, the call Keycloak makes is the same either way.
+    @Test
+    void forgotPasswordDoesNotVerifyTheEmail() {
+        configureSmtp();
+        orgService.create(testRealm.name(), new CreateOrgRequest(ORG, Set.of("acme.test"), null, null));
+        String userId = memberService.add(testRealm.name(), ORG, new AddMemberRequest(email, "Jane", "Doe")).id();
+        await().atMost(Duration.ofSeconds(10)).until(() -> emailsTo(email) == 1);
+
+        users.sendActionsEmail(testRealm.name(), userId, null, List.of(InvitationMailer.UPDATE_PASSWORD), Duration.ofHours(1));
+        await().atMost(Duration.ofSeconds(10)).until(() -> emailsTo(email) == 2);
+
+        followInvitationLink(invitationLinkFor(email), "new-password");
+
+        assertTrue(testRealm.resource().users().get(userId).toRepresentation().getRequiredActions().isEmpty());
+        assertFalse(memberOf(userId).invitationPending());
+        assertFalse(emailVerified(userId));
+    }
+
+    // Disabling VERIFY_EMAIL on the realm exercises the retry of decision 4, in case Keycloak refuses the call.
+    // Measured on Keycloak 26.8.1 (recorded in members.md too): it does not refuse it (no 400, no retry, no WARN
+    // log): executeActionsEmail accepts an action regardless of whether it is enabled on the realm, and the link
+    // still verifies the email once followed, same as invitationVerifiesTheEmail. The retry stays in the code
+    // either way (decision 4): a future Keycloak version could start refusing it, as the "Provided invalid
+    // required actions" error message (matched by KeycloakErrors.isInvalidRequiredActions) suggests it is meant to.
+    @Test
+    void verifyEmailDisabledOnTheRealmStillInvites() {
+        configureSmtp();
+        setVerifyEmailRequiredActionEnabled(false);
+        try {
+            orgService.create(testRealm.name(), new CreateOrgRequest(ORG, Set.of("acme.test"), null, null));
+            String userId = memberService.add(testRealm.name(), ORG, new AddMemberRequest(email, "Jane", "Doe")).id();
+            await().atMost(Duration.ofSeconds(10)).until(() -> emailsTo(email) == 1);
+
+            followInvitationLink(invitationLinkFor(email), "chosen-password");
+
+            assertTrue(testRealm.resource().users().get(userId).toRepresentation().getRequiredActions().isEmpty());
+            assertFalse(memberOf(userId).invitationPending());
+            assertTrue(emailVerified(userId));
+        } finally {
+            setVerifyEmailRequiredActionEnabled(true);
+        }
+    }
+
+    private void setVerifyEmailRequiredActionEnabled(boolean enabled) {
+        RequiredActionProviderRepresentation action = testRealm.resource().flows().getRequiredAction("VERIFY_EMAIL");
+        action.setEnabled(enabled);
+        testRealm.resource().flows().updateRequiredAction("VERIFY_EMAIL", action);
+    }
+
+    private boolean emailVerified(String userId) {
+        return Boolean.TRUE.equals(testRealm.resource().users().get(userId).toRepresentation().isEmailVerified());
+    }
+
+    // Pending = the member is not an org owner AND requiredActions contains UPDATE_PASSWORD (members.md, #66): a
+    // member added by add() carries the required action and is not an owner, so it is pending; the owner (created
+    // with a temporary password) carries the required action too but is excluded by its role, so it is never
+    // pending. Keycloak removes the required action once it is completed through the invitation link: followed
+    // here for real (Mailpit, then the "choose a password" page Keycloak serves), rather than simulated, so the
+    // test proves Keycloak's own behavior and not an assumption about it.
     @Test
     void invitationIsPendingUntilTheRequiredActionIsDone() {
         configureSmtp();
@@ -287,6 +386,18 @@ class InvitationMailerTest {
         followInvitationLink(invitationLinkFor(email), "chosen-password");
 
         assertFalse(memberOf(userId).invitationPending());
+    }
+
+    // Proves KeycloakErrors.isInvalidRequiredActions and InvalidRequiredActionsException against the real
+    // WebApplicationException Keycloak throws, not just the synthetic Response objects of KeycloakErrorsTest: an
+    // action alias Keycloak does not know about at all on the realm is refused with the same 400 a future Keycloak
+    // version might also return for a disabled action.
+    @Test
+    void sendActionsEmailWithAnUnknownActionRaisesInvalidRequiredActionsException() {
+        String userId = testRealm.createUser(email, email);
+
+        assertThrows(InvalidRequiredActionsException.class,
+                () -> users.sendActionsEmail(testRealm.name(), userId, null, List.of("NOT_AN_ACTION"), Duration.ofHours(1)));
     }
 
     /** Reads the invitation link Keycloak put in the latest email sent to that address, through the Mailpit API. */

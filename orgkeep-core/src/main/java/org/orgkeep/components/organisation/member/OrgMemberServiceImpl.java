@@ -140,7 +140,7 @@ public class OrgMemberServiceImpl implements OrgMemberService {
                 // a member of the group who is also an owner (added through the console) is already in the
                 // page: shown once, as an owner
                 .filter(user -> !ownerIds.contains(user.getId()))
-                .map(user -> memberMapper.toOrgMember(user, roleOf(user.getId(), ownerIds, adminIds), invitations.isPending(user)))
+                .map(user -> toOrgMember(user, roleOf(user.getId(), ownerIds, adminIds)))
                 .toList();
     }
 
@@ -159,8 +159,7 @@ public class OrgMemberServiceImpl implements OrgMemberService {
         List<OrgMember> items = people.stream()
                 .skip(first)
                 .limit(max)
-                .map(member -> memberMapper.toOrgMember(member, roleOf(member.getId(), ownerIds, adminIds),
-                        invitations.isPending(member)))
+                .map(member -> toOrgMember(member, roleOf(member.getId(), ownerIds, adminIds)))
                 .toList();
         return new Page<>(items, people.size());
     }
@@ -177,8 +176,7 @@ public class OrgMemberServiceImpl implements OrgMemberService {
         List<OrgMember> items = people.stream()
                 .skip(first)
                 .limit(max)
-                .map(member -> memberMapper.toOrgMember(member, roleOf(member.getId(), ownerIds, adminIds),
-                        invitations.isPending(member)))
+                .map(member -> toOrgMember(member, roleOf(member.getId(), ownerIds, adminIds)))
                 .toList();
         return new Page<>(items, people.size());
     }
@@ -198,6 +196,16 @@ public class OrgMemberServiceImpl implements OrgMemberService {
             return OrgRole.ORG_OWNER;
         }
         return adminIds.contains(userId) ? OrgRole.ORG_ADMIN : OrgRole.ORG_USER;
+    }
+
+    /**
+     * Maps a member with its invitation status, the role computed once and passed to both (see
+     * InvitationMailer.isPending): an owner found by listBySearch or listByTeam goes through here too (never
+     * pending, excluded by its role), listNoFilter is the only one to map its owners separately, with
+     * Boolean.FALSE.
+     */
+    private OrgMember toOrgMember(UserRepresentation user, OrgRole role) {
+        return memberMapper.toOrgMember(user, role, invitations.isPending(user, role));
     }
 
     /**
@@ -241,7 +249,7 @@ public class OrgMemberServiceImpl implements OrgMemberService {
         log.info("User {} added to organisation '{}' in realm '{}'", request.email(), orgName, realm);
         // a new member only joined the users group
         UserRepresentation user = users.get(realm, userId);
-        return memberMapper.toOrgMember(user, OrgRole.ORG_USER, invitations.isPending(user));
+        return toOrgMember(user, OrgRole.ORG_USER);
     }
 
     @Override
@@ -351,7 +359,7 @@ public class OrgMemberServiceImpl implements OrgMemberService {
                 .map(adminGroupId -> groups.memberIds(realm, adminGroupId))
                 .orElse(Set.of());
         UserRepresentation user = users.get(realm, userId);
-        return memberMapper.toOrgMember(user, roleOf(userId, Set.of(), adminIds), invitations.isPending(user));
+        return toOrgMember(user, roleOf(userId, Set.of(), adminIds));
     }
 
     /**

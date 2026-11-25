@@ -157,6 +157,24 @@ class OrgAdminResourceTest {
                 .body("items.find { it.email == '%s' }.invitationPending".formatted(OWNER_EMAIL), equalTo(false));
     }
 
+    // the owner carries UPDATE_PASSWORD too (a temporary password), so pending is role-based, not just
+    // requiredActions: checked through search and team, the two branches that pass the role to isPending besides
+    // the default list already covered above
+    @Test
+    @TestSecurity(user = "alice", roles = "org-it-members-org:org-admin")
+    void ownerIsNeverPendingInSearchOrTeamResults() {
+        String ownerId = ownerId();
+        testRealm.joinGroup(ownerId, "/" + ORG + "/user-groups/admin");
+
+        given().when().get(BASE + "?search=owner", ORG)
+                .then().statusCode(200)
+                .body("items.find { it.email == '%s' }.invitationPending".formatted(OWNER_EMAIL), equalTo(false));
+
+        given().when().get(BASE + "?team=admin", ORG)
+                .then().statusCode(200)
+                .body("items.find { it.email == '%s' }.invitationPending".formatted(OWNER_EMAIL), equalTo(false));
+    }
+
     @Test
     @TestSecurity(user = "alice", roles = "org-it-members-org:org-admin")
     void listBySearchFindsAMemberByEmail() {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
+  ActionIcon,
   Alert,
   Anchor,
   Badge,
@@ -9,7 +10,10 @@ import {
   Code,
   Group,
   Loader,
+  Menu,
+  Modal,
   Pagination,
+  Select,
   Stack,
   Table,
   Tabs,
@@ -26,9 +30,11 @@ import {
   type OrgProduct,
   PAGE_SIZE,
   useDeleteOrganisation,
+  useGrantOwnership,
   useOrganisation,
   useOrgMembers,
   useOrgProducts,
+  useRevokeOwnership,
   useSetOrgEnabled,
   useUnassignProduct,
 } from '../api/organisations';
@@ -36,6 +42,7 @@ import { type Product, productKey, useProducts } from '../api/products';
 import { useServiceAccounts } from '../api/serviceAccounts';
 import { type UserGroup, useUserGroups } from '../api/teams';
 import ConfirmModal from '../components/ConfirmModal';
+import GearIcon from '../components/GearIcon';
 import TokenPreviewModal from '../components/TokenPreviewModal';
 import AssignProductModal from './AssignProductModal';
 import { ROLE_COLORS } from './orgRoles';
@@ -314,8 +321,11 @@ interface MembersTabProps {
   org: string;
 }
 
-// The org admins add and remove members on their own page (OrgMembersPage): here, search, paging, and for the
-// realm owner, a preview of the token of a member (what its APIs receive)
+// What the confirmation modal below is about: making a member owner, or taking ownership away from one
+type OwnershipAction = { kind: 'makeOwner' | 'removeOwnership'; member: OrgMember };
+
+// The org admins add and remove members on their own page (OrgMembersPage): here, search, paging, ownership
+// (realm owner only: make owner, remove ownership, transfer ownership) and a preview of the token of a member
 function MembersTab({ org }: MembersTabProps) {
   const { t } = useTranslation();
   const [search, setSearch] = useState('');
@@ -324,7 +334,34 @@ function MembersTab({ org }: MembersTabProps) {
   const { data: memberPage, isPending, error } = useOrgMembers(org, { search: debouncedSearch, page });
   // null = the preview modal is closed
   const [previewTarget, setPreviewTarget] = useState<OrgMember | null>(null);
+  // null = no confirmation open
+  const [ownershipAction, setOwnershipAction] = useState<OwnershipAction | null>(null);
+  // the owner being transferred from, null = the transfer modal is closed
+  const [transferTarget, setTransferTarget] = useState<OrgMember | null>(null);
+  const grantOwnership = useGrantOwnership(org);
+  const revokeOwnership = useRevokeOwnership(org);
   const totalPages = memberPage ? Math.ceil(memberPage.total / PAGE_SIZE) : 0;
+
+  function closeOwnershipAction() {
+    grantOwnership.reset();
+    revokeOwnership.reset();
+    setOwnershipAction(null);
+  }
+
+  function confirmOwnershipAction() {
+    if (!ownershipAction) {
+      return;
+    }
+    const userId = ownershipAction.member.id;
+    if (ownershipAction.kind === 'makeOwner') {
+      grantOwnership.mutate(userId, { onSuccess: closeOwnershipAction });
+    } else {
+      revokeOwnership.mutate(userId, { onSuccess: closeOwnershipAction });
+    }
+  }
+
+  // the mutation of the current confirmation, to show its pending state and its error in the modal
+  const ownershipRunning = ownershipAction?.kind === 'removeOwnership' ? revokeOwnership : grantOwnership;
 
   // A page can become empty when the list shrinks (same dead end as OrgMembersPage): bring it back within range
   useEffect(() => {
@@ -393,6 +430,30 @@ function MembersTab({ org }: MembersTabProps) {
                       <Button variant="subtle" size="xs" onClick={() => setPreviewTarget(member)}>
                         {t('tokenPreview.button')}
                       </Button>
+                      <Menu position="bottom-end">
+                        <Menu.Target>
+                          {/* an icon alone: aria-label gives screen readers the word the icon replaces */}
+                          <ActionIcon variant="subtle" aria-label={t('orgDetail.members.actions')}>
+                            <GearIcon />
+                          </ActionIcon>
+                        </Menu.Target>
+                        <Menu.Dropdown>
+                          {member.role === 'ORG_OWNER' ? (
+                            <>
+                              <Menu.Item onClick={() => setOwnershipAction({ kind: 'removeOwnership', member })}>
+                                {t('orgDetail.members.removeOwnership.button')}
+                              </Menu.Item>
+                              <Menu.Item onClick={() => setTransferTarget(member)}>
+                                {t('orgDetail.members.transferOwnership.button')}
+                              </Menu.Item>
+                            </>
+                          ) : (
+                            <Menu.Item onClick={() => setOwnershipAction({ kind: 'makeOwner', member })}>
+                              {t('orgDetail.members.makeOwner.button')}
+                            </Menu.Item>
+                          )}
+                        </Menu.Dropdown>
+                      </Menu>
                     </Group>
                   </Table.Td>
                 </Table.Tr>
@@ -415,7 +476,109 @@ function MembersTab({ org }: MembersTabProps) {
         member={previewTarget}
         onClose={() => setPreviewTarget(null)}
       />
+
+      <ConfirmModal
+        opened={ownershipAction !== null}
+        title={t(`orgDetail.members.${ownershipAction?.kind ?? 'makeOwner'}.title`, {
+          member: ownershipAction ? personName(ownershipAction.member) : '',
+        })}
+        message={t(`orgDetail.members.${ownershipAction?.kind ?? 'makeOwner'}.message`, {
+          member: ownershipAction ? personName(ownershipAction.member) : '',
+        })}
+        confirmLabel={t(`orgDetail.members.${ownershipAction?.kind ?? 'makeOwner'}.confirm`)}
+        // not destructive: green to grant, orange to take access away, like StatusButton
+        confirmColor={ownershipAction?.kind === 'removeOwnership' ? 'orange' : 'green'}
+        pending={ownershipRunning.isPending}
+        error={ownershipRunning.error}
+        onConfirm={confirmOwnershipAction}
+        onClose={closeOwnershipAction}
+      />
+
+      <TransferOwnershipModal org={org} owner={transferTarget} onClose={() => setTransferTarget(null)} />
     </Stack>
+  );
+}
+
+// Picks another member of the organisation to make owner, then takes ownership away from the current owner.
+// Only once the PUT succeeded: a failure there is shown and nothing else happens. A failure of the DELETE after
+// a successful PUT leaves both as owners; the message says so, and trying again (idempotent PUT, then DELETE)
+// finishes the job.
+function TransferOwnershipModal({ org, owner, onClose }: { org: string; owner: OrgMember | null; onClose: () => void }) {
+  const { t } = useTranslation();
+  const [search, setSearch] = useState('');
+  const [debouncedSearch] = useDebouncedValue(search.trim(), 300);
+  const { data: candidates } = useOrgMembers(org, { search: debouncedSearch, max: 20, enabled: owner !== null });
+  const [chosen, setChosen] = useState<string | null>(null);
+  const grant = useGrantOwnership(org);
+  const revoke = useRevokeOwnership(org);
+  // true once the new owner is confirmed: a later DELETE error then means both are owners, not just the new one
+  const [granted, setGranted] = useState(false);
+
+  // never offer the current owner as their own successor
+  const options = (candidates?.items ?? []).filter((member) => member.id !== owner?.id);
+
+  function close() {
+    grant.reset();
+    revoke.reset();
+    setChosen(null);
+    setGranted(false);
+    setSearch('');
+    onClose();
+  }
+
+  function confirmTransfer() {
+    if (!chosen || !owner) {
+      return;
+    }
+    // reset a previous failed attempt, so a new failure doesn't show stale state (e.g. both errors at once)
+    revoke.reset();
+    setGranted(false);
+    grant.mutate(chosen, {
+      onSuccess: () => {
+        setGranted(true);
+        revoke.mutate(owner.id, { onSuccess: close });
+      },
+    });
+  }
+
+  return (
+    <Modal
+      opened={owner !== null}
+      onClose={close}
+      title={t('orgDetail.members.transferOwnership.title', { member: owner ? personName(owner) : '' })}
+    >
+      <Stack>
+        <Text>{t('orgDetail.members.transferOwnership.message', { member: owner ? personName(owner) : '' })}</Text>
+        <Select
+          label={t('orgDetail.members.transferOwnership.pickLabel')}
+          placeholder={t('orgDetail.members.transferOwnership.pickPlaceholder')}
+          data={options.map((member) => ({ value: member.id, label: personName(member) }))}
+          value={chosen}
+          onChange={setChosen}
+          searchable
+          searchValue={search}
+          onSearchChange={setSearch}
+        />
+        {grant.error && (
+          <Alert color="red" title={t('common.failed')}>
+            {grant.error.message}
+          </Alert>
+        )}
+        {granted && revoke.error && (
+          <Alert color="red" title={t('orgDetail.members.transferOwnership.removeFailedTitle')}>
+            {t('orgDetail.members.transferOwnership.removeFailedMessage')}
+          </Alert>
+        )}
+        <Group justify="flex-end">
+          <Button variant="default" onClick={close}>
+            {t('common.cancel')}
+          </Button>
+          <Button loading={grant.isPending || revoke.isPending} disabled={!chosen} onClick={confirmTransfer}>
+            {t('orgDetail.members.transferOwnership.submit')}
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
   );
 }
 

@@ -5,6 +5,7 @@ import org.orgkeep.api.exceptions.OperationNotAllowedException;
 import org.orgkeep.api.model.OrgClients;
 import org.orgkeep.api.model.OrgRole;
 import org.orgkeep.config.OrgkeepConfig;
+import org.orgkeep.repository.keycloak.InvalidRequiredActionsException;
 import org.orgkeep.repository.keycloak.KeycloakClients;
 import org.orgkeep.repository.keycloak.KeycloakRealms;
 import org.orgkeep.repository.keycloak.KeycloakUsers;
@@ -28,6 +29,10 @@ import java.util.List;
 public class InvitationMailer {
     /** Also read by MemberMapper (another package), which sets it on a member created by add. */
     public static final String UPDATE_PASSWORD = "UPDATE_PASSWORD";
+    /** Only ever put in the invitation link, never in a user's own requiredActions (see {@link #send}). */
+    private static final String VERIFY_EMAIL = "VERIFY_EMAIL";
+    private static final List<String> ACTIONS_WITH_VERIFY_EMAIL = List.of(UPDATE_PASSWORD, VERIFY_EMAIL);
+    private static final List<String> ACTIONS_WITHOUT_VERIFY_EMAIL = List.of(UPDATE_PASSWORD);
 
     private final KeycloakRealms realms;
     private final KeycloakUsers users;
@@ -93,39 +98,71 @@ public class InvitationMailer {
     }
 
     /**
-     * Whether the member has not followed the invitation link yet, read from the full representation the caller
-     * already holds: no realm, no Keycloak call. True when the email is not verified and the required action
-     * UPDATE_PASSWORD is still pending (a member created by add, see MemberMapper.toUserRepresentation). Keycloak
-     * removes the action once a password is set, through the invitation link or "forgot password".
+     * Whether the member has not followed the invitation link yet, read from the full representation and the role
+     * the caller already computed: no extra Keycloak call. True when the required action UPDATE_PASSWORD is still
+     * pending (a member created by add, see MemberMapper.toUserRepresentation) and the member does not hold
+     * ORG_OWNER. Keycloak removes the required action once a password is set, through the invitation link or
+     * "forgot password".
      * <p>
-     * Both conditions are needed, for a different reason each: requiredActions alone would show an owner created
-     * with a temporary password as pending too (it also carries UPDATE_PASSWORD, see
-     * OrgMapper.toOwnerRepresentation, but is created with emailVerified=true, so it never matches here);
-     * emailVerified alone would never clear, since it stays false whatever the member does (neither the invitation
-     * link nor "forgot password" ever sets it to true): a member who chose a password would stay pending forever.
+     * The role excludes the owner rather than emailVerified: an owner created with a temporary password also
+     * carries UPDATE_PASSWORD (see OrgMapper.toOwnerRepresentation), so requiredActions alone would show it as
+     * pending too; the role says directly what is meant, instead of relying on owners being created with
+     * emailVerified=true. emailVerified is deliberately not read here any more: since the invitation link now
+     * carries VERIFY_EMAIL (see {@link #send}), it does become true once the link is followed, but that is its own
+     * signal (the email was proven), not a stand-in for "has not chosen a password yet".
      */
-    public boolean isPending(UserRepresentation user) {
-        return !Boolean.TRUE.equals(user.isEmailVerified())
+    public boolean isPending(UserRepresentation user, OrgRole role) {
+        return role != OrgRole.ORG_OWNER
                 && user.getRequiredActions() != null && user.getRequiredActions().contains(UPDATE_PASSWORD);
     }
 
     /**
-     * Sends with the chosen client, falling back to no client on a 400 (the client was disabled or deleted by hand):
-     * the invitation is never lost because of it, logged at INFO at most. Any other failure is left to the caller
-     * (invite logs an error and never fails, resend propagates).
+     * Sends with [UPDATE_PASSWORD, VERIFY_EMAIL], through the existing client fallback (a 400 with the chosen
+     * client retries without client, as today): following the link proves the member received the email, so
+     * Keycloak (26.8+) marks the email verified when the link is followed, with no second email sent. VERIFY_EMAIL
+     * is only ever in the link: it never ends up in the user's own requiredActions, which would make Keycloak send
+     * its own verification email at the first login.
+     * <p>
+     * If Keycloak refuses the actions themselves (an action it does not recognize on the realm, not registered —
+     * on 26.8.1 a disabled VERIFY_EMAIL is accepted, measured — raising InvalidRequiredActionsException), retries
+     * once with [UPDATE_PASSWORD] only, with whichever client was just
+     * accepted. Keycloak checks the client before the actions, so a client refusal and an actions refusal never
+     * compete for the same call: at most three calls in total (client refused, then no client refused on actions,
+     * then no client with fewer actions), never a fourth. Not retried a second time: any other failure is left to
+     * the caller as today (invite logs an error and never fails, resend propagates).
      */
     private void send(String realm, String userId, String clientId) {
-        // no VERIFY_EMAIL action needed: following the link proves the user received the email
         try {
-            users.sendActionsEmail(realm, userId, clientId, List.of(UPDATE_PASSWORD), config.invitation().linkLifespan());
+            sendActions(realm, userId, clientId, ACTIONS_WITH_VERIFY_EMAIL);
+        } catch (InvalidRequiredActionsException e) {
+            // the client was already accepted at this point: only the actions are retried, with the same client
+            retryWithoutVerifyEmail(realm, userId, clientId);
+            return;
         } catch (WebApplicationException e) {
             if (clientId == null || e.getResponse().getStatus() != Response.Status.BAD_REQUEST.getStatusCode()) {
                 throw e;
             }
             log.info("Invitation of user {} in realm '{}' sent without client: Keycloak refused client '{}' ({})",
                     userId, realm, clientId, e.getResponse().getStatus());
-            users.sendActionsEmail(realm, userId, null, List.of(UPDATE_PASSWORD), config.invitation().linkLifespan());
+            try {
+                sendActions(realm, userId, null, ACTIONS_WITH_VERIFY_EMAIL);
+            } catch (InvalidRequiredActionsException e2) {
+                // no client was already resolved here: the retry stays without a client too
+                retryWithoutVerifyEmail(realm, userId, null);
+                return;
+            }
         }
         log.info("Invitation email sent to user {} in realm '{}'", userId, realm);
+    }
+
+    private void retryWithoutVerifyEmail(String realm, String userId, String clientId) {
+        log.warn("VERIFY_EMAIL refused on realm '{}': invitation of user {} sent without email verification",
+                realm, userId);
+        sendActions(realm, userId, clientId, ACTIONS_WITHOUT_VERIFY_EMAIL);
+        log.info("Invitation email sent to user {} in realm '{}'", userId, realm);
+    }
+
+    private void sendActions(String realm, String userId, String clientId, List<String> actions) {
+        users.sendActionsEmail(realm, userId, clientId, actions, config.invitation().linkLifespan());
     }
 }

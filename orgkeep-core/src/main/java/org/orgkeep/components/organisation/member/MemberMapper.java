@@ -18,9 +18,10 @@ import java.util.List;
 public interface MemberMapper {
 
     /**
-     * A member added by an org admin: no credentials yet, the email is not verified, and the required action
-     * UPDATE_PASSWORD (added below) lets the invitation emailed by Keycloak show as pending until a password is
-     * set.
+     * A member added by an org admin: no credentials yet, created with emailVerified=false and the required
+     * action UPDATE_PASSWORD (added below), which lets the invitation emailed by Keycloak show as pending until a
+     * password is set. The email becomes verified when the invitation link is followed, since the link itself
+     * carries VERIFY_EMAIL (see InvitationMailer.send): the user's own required actions never carry it.
      */
     // UserRepresentation has dozens of properties: only map the listed ones instead of warning on each
     @BeanMapping(ignoreByDefault = true)

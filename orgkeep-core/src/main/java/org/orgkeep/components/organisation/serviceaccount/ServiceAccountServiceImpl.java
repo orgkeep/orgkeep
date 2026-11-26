@@ -18,6 +18,7 @@ import org.orgkeep.api.model.ServiceAccount;
 import org.orgkeep.api.model.ServiceAccountCreated;
 import org.orgkeep.api.model.ServiceAccountCredentials;
 import org.orgkeep.api.model.LightweightTokens;
+import org.orgkeep.api.model.Suspensions;
 import org.orgkeep.api.model.UpdateServiceAccountRequest;
 import org.orgkeep.components.catalog.CatalogSetup;
 import org.orgkeep.components.lock.HeldLocks;
@@ -26,6 +27,7 @@ import org.orgkeep.components.lock.LockRequest;
 import org.orgkeep.components.lock.ResourceLocks;
 import org.orgkeep.components.organisation.member.DisabledMembers;
 import org.orgkeep.components.organisation.member.MemberEligibility;
+import org.orgkeep.components.organisation.suspension.SuspensionAttributes;
 import org.orgkeep.components.organisation.usergroup.team.TeamAlignment;
 import org.orgkeep.components.realm.lightweight.LightweightClients;
 import org.orgkeep.config.KeycloakUrls;
@@ -174,7 +176,8 @@ public class ServiceAccountServiceImpl implements ServiceAccountService {
     @Override
     public List<ServiceAccount> list(String realm, String orgName) {
         orgs.getByName(realm, orgName);
-        List<UserRepresentation> members = serviceAccounts.users(realm, orgName);
+        // full representation: the list shows the suspension of each service account, no extra call per row
+        List<UserRepresentation> members = serviceAccounts.usersFull(realm, orgName);
         if (members.isEmpty()) {
             return List.of();
         }
@@ -246,18 +249,39 @@ public class ServiceAccountServiceImpl implements ServiceAccountService {
             ServiceAccounts.Resolved resolved = resolve(realm, orgName, name);
 
             String userId = resolved.user().getId();
-            users.setEnabled(realm, userId, enabled);
-            if (!enabled) {
-                // harmless: a client credentials grant has no refresh token by default. An access token already
-                // issued lives until it expires
-                users.logout(realm, userId);
-            }
-            log.info("Service account '{}' of organisation '{}' in realm '{}' {}", name, orgName, realm,
-                    enabled ? "enabled" : "disabled");
+            setEnabledOrRecordChoice(realm, orgName, name, userId, enabled);
             // built under the lock from what was resolved and written, like update
             return toServiceAccount(realm, orgName, resolved.client(), users.get(realm, userId),
                     catalogSetup.catalogScopeIds(realm));
         }
+    }
+
+    /**
+     * A service account suspended by the realm owner (see AccountSuspensionService): disabling only records the
+     * org's choice (the account is already off); enabling is refused, 409, the realm owner suspended it. Without a
+     * record, unchanged.
+     */
+    private void setEnabledOrRecordChoice(String realm, String orgName, String name, String userId, boolean enabled) {
+        UserRepresentation user = users.get(realm, userId);
+        if (SuspensionAttributes.of(user).isPresent()) {
+            if (enabled) {
+                throw new OperationNotAllowedException(
+                        "This account is suspended by the provider: only the provider can enable it again");
+            }
+            users.setAttributes(realm, userId,
+                    Map.of(Suspensions.ORG_CHOICE, SuspensionAttributes.OrgChoice.DISABLED.value()));
+            log.info("Service account '{}' of organisation '{}' in realm '{}' disabled (suspended by the "
+                    + "provider, recorded)", name, orgName, realm);
+            return;
+        }
+        users.setEnabled(realm, userId, enabled);
+        if (!enabled) {
+            // harmless: a client credentials grant has no refresh token by default. An access token already
+            // issued lives until it expires
+            users.logout(realm, userId);
+        }
+        log.info("Service account '{}' of organisation '{}' in realm '{}' {}", name, orgName, realm,
+                enabled ? "enabled" : "disabled");
     }
 
     /**

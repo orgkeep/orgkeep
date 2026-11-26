@@ -1,6 +1,7 @@
 package org.orgkeep.components.organisation.serviceaccount;
 
 import io.quarkus.security.PermissionsAllowed;
+import io.quarkus.security.identity.SecurityIdentity;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.DELETE;
@@ -24,6 +25,7 @@ import org.orgkeep.api.model.ServiceAccountCreated;
 import org.orgkeep.api.model.ServiceAccountCredentials;
 import org.orgkeep.api.model.UpdateServiceAccountRequest;
 import org.orgkeep.api.model.UpdateServiceAccountStatusRequest;
+import org.orgkeep.components.organisation.suspension.SuspensionViews;
 import org.orgkeep.web.CurrentRealm;
 import org.orgkeep.web.security.OrgPermissions;
 
@@ -44,6 +46,8 @@ import java.util.List;
 public class ServiceAccountsResource {
     private final ServiceAccountService serviceAccountService;
     private final CurrentRealm currentRealm;
+    // a normal-scoped bean, resolved per request: safe to inject here, never copied into a field
+    private final SecurityIdentity identity;
 
     @POST
     @ResponseStatus(201)
@@ -62,7 +66,10 @@ public class ServiceAccountsResource {
     @Operation(summary = "List the service accounts of the organisation", description = "Sorted by name. Never with a secret.")
     @APIResponse(responseCode = "404", description = "Unknown organisation")
     public List<ServiceAccount> list(@PathParam("org") @Slug String org) {
-        return serviceAccountService.list(currentRealm.name(), org);
+        boolean realmOwner = identity.hasRole("realm-owner");
+        return serviceAccountService.list(currentRealm.name(), org).stream()
+                .map(serviceAccount -> SuspensionViews.forCaller(serviceAccount, realmOwner))
+                .toList();
     }
 
     @GET
@@ -71,7 +78,8 @@ public class ServiceAccountsResource {
     @APIResponse(responseCode = "400", description = "Invalid name")
     @APIResponse(responseCode = "404", description = "Unknown organisation or service account")
     public ServiceAccount get(@PathParam("org") @Slug String org, @PathParam("sa") @Slug String sa) {
-        return serviceAccountService.get(currentRealm.name(), org, sa);
+        ServiceAccount serviceAccount = serviceAccountService.get(currentRealm.name(), org, sa);
+        return SuspensionViews.forCaller(serviceAccount, identity.hasRole("realm-owner"));
     }
 
     @PUT
@@ -83,7 +91,8 @@ public class ServiceAccountsResource {
     @APIResponse(responseCode = "409", description = "A change is in progress on the organisation or the service account")
     public ServiceAccount update(@PathParam("org") @Slug String org, @PathParam("sa") @Slug String sa,
                                  @Valid @NotNull UpdateServiceAccountRequest request) {
-        return serviceAccountService.update(currentRealm.name(), org, sa, request);
+        ServiceAccount serviceAccount = serviceAccountService.update(currentRealm.name(), org, sa, request);
+        return SuspensionViews.forCaller(serviceAccount, identity.hasRole("realm-owner"));
     }
 
     @POST
@@ -105,11 +114,13 @@ public class ServiceAccountsResource {
                     + "signature of a JWT accepts it until it expires.")
     @APIResponse(responseCode = "400", description = "Invalid name")
     @APIResponse(responseCode = "404", description = "Unknown organisation or service account")
-    @APIResponse(responseCode = "409", description = "The organisation is disabled or being enabled again, "
-            + "or a change is in progress on the organisation or the service account")
+    @APIResponse(responseCode = "409", description = "The organisation is disabled or being enabled again, the "
+            + "service account is suspended by the realm owner and enabled is true, or a change is in progress "
+            + "on the organisation or the service account")
     public ServiceAccount setEnabled(@PathParam("org") @Slug String org, @PathParam("sa") @Slug String sa,
                                      @Valid @NotNull UpdateServiceAccountStatusRequest request) {
-        return serviceAccountService.setEnabled(currentRealm.name(), org, sa, request.enabled());
+        ServiceAccount serviceAccount = serviceAccountService.setEnabled(currentRealm.name(), org, sa, request.enabled());
+        return SuspensionViews.forCaller(serviceAccount, identity.hasRole("realm-owner"));
     }
 
     @DELETE

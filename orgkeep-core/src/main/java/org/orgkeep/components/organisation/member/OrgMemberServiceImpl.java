@@ -13,12 +13,14 @@ import org.orgkeep.api.model.OrgGroups;
 import org.orgkeep.api.model.OrgMember;
 import org.orgkeep.api.model.OrgRole;
 import org.orgkeep.api.model.Page;
+import org.orgkeep.api.model.Suspensions;
 import org.orgkeep.components.lock.HeldLocks;
 import org.orgkeep.components.lock.LockMode;
 import org.orgkeep.components.lock.LockRequest;
 import org.orgkeep.components.lock.ResourceLocks;
 import org.orgkeep.components.organisation.member.invitation.InvitationMailer;
 import org.orgkeep.components.organisation.serviceaccount.ServiceAccounts;
+import org.orgkeep.components.organisation.suspension.SuspensionAttributes;
 import org.orgkeep.repository.keycloak.KeycloakClients;
 import org.orgkeep.repository.keycloak.KeycloakGroups;
 import org.orgkeep.repository.keycloak.KeycloakOrgs;
@@ -34,6 +36,7 @@ import org.keycloak.representations.idm.UserRepresentation;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -75,10 +78,10 @@ public class OrgMemberServiceImpl implements OrgMemberService {
         Set<String> adminIds = groups.findId(realm, OrgGroups.admin(orgName))
                 .map(adminGroupId -> groups.memberIds(realm, adminGroupId))
                 .orElse(Set.of());
-        // read once, by the single call that returns both the ids and the full representations, and shared by
-        // the three branches below: only listNoFilter needs the full representations
+        // read once, full representation (suspension attributes included: the owners' row shows it too), and
+        // shared by the three branches below
         List<UserRepresentation> ownerUsers = clients.findUuid(realm, OrgClients.clientId(orgName))
-                .map(clientUuid -> clients.listUsersWithRole(realm, clientUuid, OrgRole.ORG_OWNER.getRoleName()))
+                .map(clientUuid -> clients.listUsersWithRoleFull(realm, clientUuid, OrgRole.ORG_OWNER.getRoleName()))
                 .orElse(List.of());
 
         if (hasTeam) {
@@ -333,15 +336,36 @@ public class OrgMemberServiceImpl implements OrgMemberService {
             if (!isPerson(realm, current, userId)) {
                 throw new MemberNotFoundException(orgName, userId);
             }
-            users.setEnabled(realm, userId, enabled);
-            if (!enabled) {
-                // the refresh tokens stop working; an access token already issued lives until it expires
-                users.logout(realm, userId);
-            }
-            log.info("Member {} of organisation '{}' in realm '{}' {}", userId, orgName, realm,
-                    enabled ? "enabled" : "disabled");
+            setEnabledOrRecordChoice(realm, orgName, userId, enabled);
         }
         return memberOf(realm, orgName, userId);
+    }
+
+    /**
+     * A member suspended by the realm owner (see AccountSuspensionService): disabling only records the org's
+     * choice (the account is already off, no write on enabled, no logout); enabling is refused, 409, the realm
+     * owner suspended it. Without a record, unchanged.
+     */
+    private void setEnabledOrRecordChoice(String realm, String orgName, String userId, boolean enabled) {
+        UserRepresentation user = users.get(realm, userId);
+        if (SuspensionAttributes.of(user).isPresent()) {
+            if (enabled) {
+                throw new OperationNotAllowedException(
+                        "This account is suspended by the provider: only the provider can enable it again");
+            }
+            users.setAttributes(realm, userId,
+                    Map.of(Suspensions.ORG_CHOICE, SuspensionAttributes.OrgChoice.DISABLED.value()));
+            log.info("Member {} of organisation '{}' in realm '{}' disabled (suspended by the provider, recorded)",
+                    userId, orgName, realm);
+            return;
+        }
+        users.setEnabled(realm, userId, enabled);
+        if (!enabled) {
+            // the refresh tokens stop working; an access token already issued lives until it expires
+            users.logout(realm, userId);
+        }
+        log.info("Member {} of organisation '{}' in realm '{}' {}", userId, orgName, realm,
+                enabled ? "enabled" : "disabled");
     }
 
     /**
@@ -430,7 +454,16 @@ public class OrgMemberServiceImpl implements OrgMemberService {
     }
 
     private void enableAgain(String realm, String userId) {
-        if (Boolean.FALSE.equals(users.get(realm, userId).isEnabled())) {
+        UserRepresentation user = users.get(realm, userId);
+        if (SuspensionAttributes.of(user).isPresent()) {
+            // suspended by the realm owner: joining is the new org's decision, recorded, but only the realm owner
+            // lifts the suspension
+            users.setAttributes(realm, userId,
+                    Map.of(Suspensions.ORG_CHOICE, SuspensionAttributes.OrgChoice.ENABLED.value()));
+            log.info("Suspended user {} joined an organisation in realm '{}': recorded, not enabled", userId, realm);
+            return;
+        }
+        if (Boolean.FALSE.equals(user.isEnabled())) {
             users.setEnabled(realm, userId, true);
             log.info("Disabled user {} enabled again by joining an organisation in realm '{}'", userId, realm);
         }
@@ -445,7 +478,10 @@ public class OrgMemberServiceImpl implements OrgMemberService {
     private void leaveDisabledMembers(String realm, String orgName, String userId) {
         OrganizationRepresentation org = orgs.getByName(realm, orgName);
         if (DisabledMembers.of(org).contains(userId)) {
-            users.setEnabled(realm, userId, true);
+            // suspended by the realm owner: the record stays on the user, only the realm owner enables it again
+            if (SuspensionAttributes.of(users.get(realm, userId)).isEmpty()) {
+                users.setEnabled(realm, userId, true);
+            }
             DisabledMembers.remove(org, List.of(userId));
             orgs.update(realm, org);
         }

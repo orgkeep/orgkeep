@@ -481,6 +481,23 @@ public class KeycloakClients {
         return roles(realm, clientUuid).get(roleName).getUserMembers();
     }
 
+    /**
+     * Like {@link #listUsersWithRole}, but full representations (suspension attributes included), every page:
+     * for a caller that needs to show the suspension of the owners (OrgMemberServiceImpl.list, OrgServiceImpl.owners).
+     * Other callers of listUsersWithRole keep the brief, one-call read.
+     */
+    public List<UserRepresentation> listUsersWithRoleFull(String realm, String clientUuid, String roleName) {
+        List<UserRepresentation> holders = new ArrayList<>();
+        int first = 0;
+        List<UserRepresentation> page;
+        do {
+            page = roles(realm, clientUuid).get(roleName).getUserMembers(false, first, PAGE_SIZE);
+            holders.addAll(page);
+            first += PAGE_SIZE;
+        } while (page.size() == PAGE_SIZE);
+        return holders;
+    }
+
     /** Ids of the groups holding the role directly. */
     /**
      * Paths of all the groups holding the role directly. Keycloak answers 100 groups at most per call:

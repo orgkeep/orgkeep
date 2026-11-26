@@ -15,6 +15,7 @@ import org.orgkeep.api.model.OrgRole;
 import org.orgkeep.api.model.OrgSummary;
 import org.orgkeep.api.model.Page;
 import org.orgkeep.api.model.CatalogRoles;
+import org.orgkeep.api.model.Suspensions;
 import org.orgkeep.components.catalog.CatalogSetup;
 import org.orgkeep.components.catalog.product.AssignedProducts;
 import org.orgkeep.components.lock.HeldLocks;
@@ -29,6 +30,7 @@ import org.orgkeep.components.organisation.member.DisabledMembers;
 import org.orgkeep.components.organisation.member.MemberEligibility;
 import org.orgkeep.components.organisation.member.MemberMapper;
 import org.orgkeep.components.organisation.serviceaccount.ServiceAccounts;
+import org.orgkeep.components.organisation.suspension.SuspensionAttributes;
 import io.vertx.core.eventbus.EventBus;
 import jakarta.enterprise.context.ApplicationScoped;
 import lombok.RequiredArgsConstructor;
@@ -36,11 +38,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.keycloak.representations.idm.MemberRepresentation;
 import org.keycloak.representations.idm.OrganizationRepresentation;
 import org.keycloak.representations.idm.RoleRepresentation;
+import org.keycloak.representations.idm.UserRepresentation;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -218,9 +222,13 @@ public class OrgServiceImpl implements OrgService {
                 clientId, clientUuid, groupId, owners);
     }
 
-    /** Users holding org-owner directly on the org client, sorted by username. */
+    /**
+     * Users holding org-owner directly on the org client, sorted by username. Full representation: a suspended
+     * owner's suspension must show in OrgDetails.owners, consistent with the brief-read limit documented on
+     * listUsersWithRole.
+     */
     private List<OrgMember> owners(String realm, String clientUuid) {
-        return clients.listUsersWithRole(realm, clientUuid, OrgRole.ORG_OWNER.getRoleName()).stream()
+        return clients.listUsersWithRoleFull(realm, clientUuid, OrgRole.ORG_OWNER.getRoleName()).stream()
                 .map(user -> memberMapper.toOrgMember(user, OrgRole.ORG_OWNER))
                 .sorted(Comparator.comparing(OrgMember::username))
                 .toList();
@@ -268,34 +276,41 @@ public class OrgServiceImpl implements OrgService {
         // the service accounts are members of the Keycloak organisation: they come through the same loop, the same
         // list and the same recovery as the people. One disabled by its admin is not listed and stays disabled when the
         // org is enabled again
-        List<String> toDisable = membersToDisable(realm, org).stream().map(MemberRepresentation::getId).toList();
+        List<MemberRepresentation> toDisable = membersToDisable(realm, org);
+        List<String> ids = toDisable.stream().map(MemberRepresentation::getId).toList();
         // recorded before they are disabled: after a failure half way, each user already disabled is listed and is
         // enabled again with the org. A listed user not disabled yet is simply enabled again, as it was
-        addDisabledMembers(realm, orgName, toDisable);
-        for (String userId : toDisable) {
-            users.setEnabled(realm, userId, false);
+        addDisabledMembers(realm, orgName, ids);
+        for (MemberRepresentation member : toDisable) {
+            // a member suspended by the realm owner, already off: no write on enabled, the logout is harmless either way
+            if (Boolean.TRUE.equals(member.isEnabled())) {
+                users.setEnabled(realm, member.getId(), false);
+            }
             // the refresh tokens stop working; an access token already issued lives until it expires
-            users.logout(realm, userId);
+            users.logout(realm, member.getId());
         }
         log.info("Organisation '{}' disabled in realm '{}' ({} member(s) and service account(s) disabled)",
-                orgName, realm, toDisable.size());
+                orgName, realm, ids.size());
     }
 
     /**
-     * The enabled members of the org (its service accounts too), except the privileged ones (see MemberEligibility): a privileged member cannot
-     * join an org through Orgkeep, but may have been added before, in the console, or got its role afterwards, and
-     * disabling it could lock the realm owner out. A member already disabled (for another reason) is left out, and
-     * stays disabled when the org is enabled again.
+     * The members of the org to list and disable (its service accounts too): the enabled ones, plus those
+     * suspended by the realm owner whose organisation's choice is still "enabled" (see AccountSuspensionService;
+     * they are already disabled, only listed so a later lift restores them once the org is enabled again).
+     * Privileged members are left out (see MemberEligibility): a privileged member cannot join an org through
+     * Orgkeep, but may have been added before, in the console, or got its role afterwards, and disabling it could
+     * lock the realm owner out. A member already disabled for another reason is left out, and stays disabled when
+     * the org is enabled again.
      */
     private List<MemberRepresentation> membersToDisable(String realm, OrganizationRepresentation org) {
-        List<MemberRepresentation> enabledMembers = orgs.members(realm, org.getId()).stream()
-                .filter(member -> Boolean.TRUE.equals(member.isEnabled()))
+        List<MemberRepresentation> candidates = orgs.members(realm, org.getId()).stream()
+                .filter(member -> Boolean.TRUE.equals(member.isEnabled()) || suspendedWithOrgChoiceEnabled(member))
                 .toList();
         Set<String> privileged = eligibility.privilegedAmong(realm,
-                enabledMembers.stream().map(MemberRepresentation::getId).toList());
+                candidates.stream().map(MemberRepresentation::getId).toList());
 
         List<MemberRepresentation> toDisable = new ArrayList<>();
-        for (MemberRepresentation member : enabledMembers) {
+        for (MemberRepresentation member : candidates) {
             if (privileged.contains(member.getId())) {
                 log.warn("User {} is privileged: left enabled with the disabled organisation '{}' in realm '{}'",
                         member.getEmail(), org.getName(), realm);
@@ -304,6 +319,12 @@ public class OrgServiceImpl implements OrgService {
             toDisable.add(member);
         }
         return toDisable;
+    }
+
+    private static boolean suspendedWithOrgChoiceEnabled(MemberRepresentation member) {
+        return SuspensionAttributes.of(member)
+                .map(found -> found.orgChoice() == SuspensionAttributes.OrgChoice.ENABLED)
+                .orElse(false);
     }
 
     /**
@@ -329,8 +350,11 @@ public class OrgServiceImpl implements OrgService {
 
         int enabledAgain = 0;
         for (String userId : disabled) {
-            // a user deleted in the meantime is skipped
-            if (users.find(realm, userId).isPresent()) {
+            // a user deleted in the meantime is skipped; one suspended by the realm owner is not enabled (see
+            // AccountSuspensionService): the id leaves the list like every other, as today, and a later lift
+            // enables it only if the org's choice is "enabled"
+            Optional<UserRepresentation> user = users.find(realm, userId);
+            if (user.isPresent() && SuspensionAttributes.of(user.get()).isEmpty()) {
                 users.setEnabled(realm, userId, true);
                 enabledAgain++;
             }
@@ -442,15 +466,23 @@ public class OrgServiceImpl implements OrgService {
         if (afterJoin == MemberEligibility.AfterJoin.DISABLED_WITH_THE_ORG) {
             // only with a disable from another instance of the core, which the lock does not reach. It listed the
             // owner, and disabled it or is about to: the rollback deletes the org and its list, so the owner would
-            // stay disabled with no record. Enabled again first, as it was before
-            users.setEnabled(realm, ownerId, true);
+            // stay disabled with no record. Enabled again first, as it was before - unless suspended by the realm
+            // owner, which was never enabled
+            if (SuspensionAttributes.of(users.get(realm, ownerId)).isEmpty()) {
+                users.setEnabled(realm, ownerId, true);
+            }
         }
         if (afterJoin != MemberEligibility.AfterJoin.ORG_ENABLED) {
             throw MemberEligibility.disabledOrg(request.name());
         }
         // an existing owner disabled earlier (removed from its org while disabled) is enabled again, like a member
-        // added by an org admin (OrgMemberServiceImpl.add)
-        if (Boolean.FALSE.equals(users.get(realm, ownerId).isEnabled())) {
+        // added by an org admin (OrgMemberServiceImpl.add); one suspended by the realm owner is not enabled, only
+        // the org's choice is recorded (joining, here becoming owner, is the new org's decision)
+        UserRepresentation owner = users.get(realm, ownerId);
+        if (SuspensionAttributes.of(owner).isPresent()) {
+            users.setAttributes(realm, ownerId,
+                    Map.of(Suspensions.ORG_CHOICE, SuspensionAttributes.OrgChoice.ENABLED.value()));
+        } else if (Boolean.FALSE.equals(owner.isEnabled())) {
             users.setEnabled(realm, ownerId, true);
         }
         clients.grantToUser(realm, clientUuid, ownerId, OrgRole.ORG_OWNER.getRoleName());

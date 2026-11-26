@@ -6,9 +6,11 @@ import org.orgkeep.api.model.AddMemberRequest;
 import org.orgkeep.api.model.OrgMember;
 import org.orgkeep.api.model.Page;
 import org.orgkeep.api.model.UpdateMemberStatusRequest;
+import org.orgkeep.components.organisation.suspension.SuspensionViews;
 import org.orgkeep.web.CurrentRealm;
 import org.orgkeep.web.security.OrgPermissions;
 import io.quarkus.security.PermissionsAllowed;
+import io.quarkus.security.identity.SecurityIdentity;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -48,6 +50,8 @@ public class OrgAdminResource {
     private final CurrentRealm currentRealm;
     // a client proxy of a request scoped bean: each call reads the token of the current request
     private final JsonWebToken jwt;
+    // a normal-scoped bean, resolved per request: safe to inject here, never copied into a field
+    private final SecurityIdentity identity;
 
     @GET
     @Operation(summary = "List the members of the organisation",
@@ -62,7 +66,10 @@ public class OrgAdminResource {
                                 @QueryParam("team") @Slug String team,
                                 @QueryParam("first") @DefaultValue("0") @Min(0) int first,
                                 @QueryParam("max") @DefaultValue("100") @Min(1) @Max(100) int max){
-        return memberService.list(currentRealm.name(), org, search, team, first, max);
+        Page<OrgMember> page = memberService.list(currentRealm.name(), org, search, team, first, max);
+        boolean realmOwner = identity.hasRole("realm-owner");
+        return new Page<>(page.items().stream().map(member -> SuspensionViews.forCaller(member, realmOwner)).toList(),
+                page.total());
     }
 
     @POST
@@ -80,7 +87,8 @@ public class OrgAdminResource {
     @APIResponse(responseCode = "409", description = "The user is already a member, cannot be added to this "
             + "organisation, the organisation is disabled, or a change is in progress on it (try again later)")
     public OrgMember add(@PathParam("org") @Slug String org, @Valid @NotNull AddMemberRequest request){
-        return memberService.add(currentRealm.name(), org, request);
+        OrgMember added = memberService.add(currentRealm.name(), org, request);
+        return SuspensionViews.forCaller(added, identity.hasRole("realm-owner"));
     }
 
     @DELETE
@@ -115,7 +123,8 @@ public class OrgAdminResource {
     @APIResponse(responseCode = "401", description = "Not authenticated, or the token has no subject")
     @APIResponse(responseCode = "404", description = "Unknown organisation or not a member")
     @APIResponse(responseCode = "409", description = "The member is the caller, an owner, or a privileged user; the "
-            + "organisation is disabled or still being enabled; or a change is in progress (try again later)")
+            + "organisation is disabled or still being enabled; the member is suspended by the realm owner and "
+            + "enabled is true; or a change is in progress (try again later)")
     public OrgMember setEnabled(@PathParam("org") @Slug String org, @PathParam("userId") String userId,
                                 @Valid @NotNull UpdateMemberStatusRequest request){
         // The injected JsonWebToken is the token of the call (the access token of a bearer call, the ID token of a
@@ -127,7 +136,8 @@ public class OrgAdminResource {
         if (callerId == null || callerId.isBlank()) {
             throw new UnauthorizedException("The token has no subject");
         }
-        return memberService.setEnabled(currentRealm.name(), org, userId, request.enabled(), callerId);
+        OrgMember result = memberService.setEnabled(currentRealm.name(), org, userId, request.enabled(), callerId);
+        return SuspensionViews.forCaller(result, identity.hasRole("realm-owner"));
     }
 
     @POST

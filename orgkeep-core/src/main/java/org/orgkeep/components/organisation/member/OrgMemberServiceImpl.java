@@ -19,6 +19,7 @@ import org.orgkeep.components.lock.LockMode;
 import org.orgkeep.components.lock.LockRequest;
 import org.orgkeep.components.lock.ResourceLocks;
 import org.orgkeep.components.organisation.member.invitation.InvitationMailer;
+import org.orgkeep.components.organisation.seats.SeatGuard;
 import org.orgkeep.components.organisation.serviceaccount.ServiceAccounts;
 import org.orgkeep.components.organisation.suspension.SuspensionAttributes;
 import org.orgkeep.repository.keycloak.KeycloakClients;
@@ -55,6 +56,7 @@ public class OrgMemberServiceImpl implements OrgMemberService {
     private final EventBus eventBus;
     private final ResourceLocks locks;
     private final ServiceAccounts serviceAccounts;
+    private final SeatGuard seatGuard;
 
     /**
      * Paginated, without a Keycloak call per member (see InvitationMailer.isPending): the number of calls stays
@@ -216,6 +218,9 @@ public class OrgMemberServiceImpl implements OrgMemberService {
      * ResourceLocks). Compatible with other adds, but refused (409, after a short wait) while a heavy operation holds
      * the org exclusively: a disable or a deletion in progress. So no user is created for an org being deleted.
      * <p>
+     * SEATS is locked exclusively too, so two adds of the same org never both pass the seat check with the last seat:
+     * the second waits for the first (and then sees it taken) or gets a 409 after the short wait.
+     * <p>
      * The email is locked exclusively too (the user may not exist yet), then the id once the user is found: two adds of
      * the same email in two organisations cannot both pass "is the user in another org?" and then join, the second
      * waits for the first (and is then refused as a member of another org) or gets a 409 after the short wait.
@@ -223,6 +228,7 @@ public class OrgMemberServiceImpl implements OrgMemberService {
     @Override
     public OrgMember add(String realm, String orgName, AddMemberRequest request) {
         try (HeldLocks held = locks.acquire(LockRequest.org(realm, orgName, LockMode.SHARED),
+                LockRequest.seats(realm, orgName),
                 LockRequest.userByEmail(realm, request.email(), LockMode.EXCLUSIVE))) {
             return addLocked(realm, orgName, request, held);
         }
@@ -236,8 +242,17 @@ public class OrgMemberServiceImpl implements OrgMemberService {
         Optional<String> existingId = users.findIdByEmail(realm, request.email());
         // an existing user is also locked by id, the key the other writes on a user use (remove, roles, teams)
         existingId.ifPresent(id -> held.add(LockRequest.userById(realm, id, LockMode.EXCLUSIVE)));
-        // an existing user may be privileged or a member of another org; a member of this org is refused just below
-        existingId.ifPresent(userId -> eligibility.checkReusable(realm, orgName, userId, request.email()));
+        // an existing user may be privileged or a member of another org; a member of this org is refused just below,
+        // from the same list checkReusable already fetched, so this does not ask Keycloak again with isMember.
+        // Reported before the seat check, so that re-adding a member of a full org answers "already a member",
+        // not "no seat left"; join() below keeps its own check as a backstop
+        existingId.ifPresent(userId -> {
+            List<String> userOrgs = eligibility.checkReusable(realm, orgName, userId, request.email());
+            if (userOrgs.contains(orgName)) {
+                throw new MemberAlreadyExistsException(orgName, request.email());
+            }
+        });
+        seatGuard.checkMemberSeat(realm, org);
         String userId = existingId.orElseGet(() -> createUser(realm, orgName, request));
         // Under the shared lock of the org, held by add: a disable of the org on this instance runs entirely before
         // (the org is seen disabled, without the user) or entirely after (the user is disabled and listed like any

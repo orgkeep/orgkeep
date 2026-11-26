@@ -48,16 +48,20 @@ public class MemberEligibility {
      * Checks that an existing user may join the organisation orgName. Refusals, in this order:
      * <ol>
      *     <li>already a member of orgName: not refused here, the caller reports it in its own terms (the member
-     *     already exists, or the organisation already exists);</li>
+     *     already exists, or the organisation already exists), using the returned list;</li>
      *     <li>a privileged user: {@link PrivilegedUserException};</li>
      *     <li>a member of another organisation: {@link MemberOfAnotherOrgException}.</li>
      * </ol>
      * Both exceptions have the same message, the reason is logged.
+     *
+     * @return the organisations the user already belongs to (names), so that a caller which needs to know whether
+     *         orgName is already one of them (e.g. to report "already a member") does not have to ask Keycloak
+     *         again for the same information
      */
-    public void checkReusable(String realm, String orgName, String userId, String email) {
+    public List<String> checkReusable(String realm, String orgName, String userId, String email) {
         List<String> userOrgs = orgs.organisationsOf(realm, userId);
         if (userOrgs.contains(orgName)) {
-            return;
+            return userOrgs;
         }
         // || stops at the first true: the realm-management client is only looked up without a realm role
         if (hasPrivilegedRealmRole(realm, userId)
@@ -70,6 +74,7 @@ public class MemberEligibility {
                     email, orgName, realm, userOrgs.getFirst());
             throw new MemberOfAnotherOrgException(email);
         }
+        return userOrgs;
     }
 
     /**

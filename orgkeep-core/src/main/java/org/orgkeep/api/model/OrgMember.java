@@ -9,6 +9,8 @@ package org.orgkeep.api.model;
  *                          i.e. has not set a password through the invitation link or "forgot password"; the
  *                          invitation can then be sent again. Only in the members of an organisation: null in the
  *                          owners of the organisation lists and details
+ * @param suspension        set by the realm owner only, null when the account is not suspended. suspendedBy is
+ *                          null for an org admin (see SuspensionViews)
  */
 public record OrgMember(
     String id,
@@ -18,4 +20,5 @@ public record OrgMember(
     String lastName,
     Boolean enabled,
     OrgRole role,
-    Boolean invitationPending){ }
+    Boolean invitationPending,
+    Suspension suspension){ }

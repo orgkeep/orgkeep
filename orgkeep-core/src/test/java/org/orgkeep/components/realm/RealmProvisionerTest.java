@@ -613,6 +613,41 @@ class RealmProvisionerTest {
         assertTrue(directRoles(response.ownerId()).containsAll(ownerRoles()));
     }
 
+    // ---- Suspension attributes (#38) ----
+
+    @Test
+    void createDeclaresTheSuspensionAttributes() {
+        service.create(new CreateRealmRequest(realmName, OWNER, "s3cret"));
+
+        var config = keycloak.realm(realmName).users().userProfile().getConfiguration();
+        for (String name : List.of("suspension-reason", "suspended-at", "suspended-by", "suspension-org-choice")) {
+            var attribute = config.getAttribute(name);
+            assertNotNull(attribute, "no declaration for " + name);
+            assertEquals(Set.of("admin"), attribute.getPermissions().getView());
+            assertEquals(Set.of("admin"), attribute.getPermissions().getEdit());
+            assertNull(attribute.getRequired());
+        }
+        var reason = config.getAttribute("suspension-reason");
+        assertNotNull(reason.getValidations());
+        assertEquals(500, reason.getValidations().get("length").get("max"));
+    }
+
+    @Test
+    void ensureDefaultsDoesNotDeclareTheSuspensionAttributesOnAnExistingRealm() {
+        RealmRepresentation realm = new RealmRepresentation();
+        realm.setRealm(realmName);
+        realm.setEnabled(true);
+        realm.setOrganizationsEnabled(true);
+        keycloak.realms().create(realm);
+
+        service.ensureDefaults(realmName);
+
+        var config = keycloak.realm(realmName).users().userProfile().getConfiguration();
+        for (String name : List.of("suspension-reason", "suspended-at", "suspended-by", "suspension-org-choice")) {
+            assertNull(config.getAttribute(name), "declared on a realm created before #38");
+        }
+    }
+
     @Test
     void aSecondCallChangesNothingAndClosesNoSession() {
         CreateRealmResponse response = service.create(new CreateRealmRequest(realmName, OWNER, "s3cret"));

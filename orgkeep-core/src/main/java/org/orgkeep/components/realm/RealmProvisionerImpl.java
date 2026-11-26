@@ -10,6 +10,7 @@ import org.orgkeep.api.model.OrgClients;
 import org.orgkeep.api.model.OrgkeepApiClient;
 import org.orgkeep.api.model.RealmRole;
 import org.orgkeep.api.model.SmtpSettings;
+import org.orgkeep.api.model.Suspensions;
 import org.orgkeep.components.realm.smtp.SmtpMapper;
 import org.orgkeep.repository.keycloak.KeycloakClients;
 import org.orgkeep.repository.keycloak.KeycloakOrgs;
@@ -25,6 +26,8 @@ import org.keycloak.representations.idm.RealmRepresentation;
 import org.keycloak.representations.idm.RoleRepresentation;
 import org.keycloak.representations.idm.RolesRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
+import org.keycloak.representations.userprofile.config.UPAttribute;
+import org.keycloak.representations.userprofile.config.UPAttributePermissions;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -89,6 +92,9 @@ public class RealmProvisionerImpl implements RealmProvisioner {
     CreateRealmResponse completeCreation(String realmName, CreateRealmRequest request, boolean passwordSet) {
         log.info("Realm '{}' created with owner {}", realmName, request.adminEmail());
         ensureDefaults(realmName);
+        // only with a new realm, not in ensureDefaults (which runs on existing realms too): a realm created before
+        // this feature existed has no declarations and is never caught up (no migration in 0.x)
+        realms.declareUserAttributes(realmName, suspensionAttributes());
         // only with a new realm, not in ensureDefaults: the realm owner may delete it.
         // After the login client, which gets its scope as a default scope
         catalogSetup.ensureDefault(realmName);
@@ -329,6 +335,26 @@ public class RealmProvisionerImpl implements RealmProvisioner {
     @Override
     public boolean exists(String name) {
         return realms.exists(name);
+    }
+
+    /**
+     * The four suspension attributes (see Suspensions), admin-only (view and edit), never required, no group: a
+     * suspension is set by the realm owner's calls, not by anyone editing a profile form. suspension-reason has
+     * the "length" validator, 500 characters at most.
+     */
+    private static List<UPAttribute> suspensionAttributes() {
+        UPAttribute reason = new UPAttribute(Suspensions.REASON, adminOnly());
+        Map<String, Object> maxLength = new HashMap<>();
+        maxLength.put("max", Suspensions.MAX_REASON_LENGTH);
+        reason.addValidation("length", maxLength);
+        return List.of(reason,
+                new UPAttribute(Suspensions.SUSPENDED_AT, adminOnly()),
+                new UPAttribute(Suspensions.SUSPENDED_BY, adminOnly()),
+                new UPAttribute(Suspensions.ORG_CHOICE, adminOnly()));
+    }
+
+    private static UPAttributePermissions adminOnly() {
+        return new UPAttributePermissions(Set.of("admin"), Set.of("admin"));
     }
 
     private static RolesRepresentation realmRoles() {

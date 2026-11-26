@@ -6,6 +6,7 @@ import { useParams } from 'react-router';
 import { useCurrentUser } from '../api/currentUser';
 import { type OrgMember, PAGE_SIZE, useOrgMembers, useRemoveOrgMember, useSetMemberEnabled } from '../api/organisations';
 import ConfirmModal from '../components/ConfirmModal';
+import SuspensionBadge from '../components/SuspensionBadge';
 import AddMemberModal from './AddMemberModal';
 import { ROLE_COLORS } from './orgRoles';
 import { personName } from './personName';
@@ -63,11 +64,10 @@ export default function OrgMembersPage() {
 
   function confirmStatus() {
     if (statusTarget) {
-      // a member is enabled unless the core says otherwise: the action is the opposite of the current status
-      setMemberEnabled.mutate(
-        { userId: statusTarget.id, enabled: statusTarget.enabled === false },
-        { onSuccess: closeStatusConfirm },
-      );
+      // a member is enabled unless the core says otherwise: the action is the opposite of the current status.
+      // A suspended member can only be disabled (the core answers 409 to enabling one): never "enable" here
+      const enable = statusTarget.suspension === null && statusTarget.enabled === false;
+      setMemberEnabled.mutate({ userId: statusTarget.id, enabled: enable }, { onSuccess: closeStatusConfirm });
     }
   }
 
@@ -76,8 +76,8 @@ export default function OrgMembersPage() {
     return member.role !== 'ORG_OWNER' && member.username !== currentUser?.username;
   }
 
-  // the action offered on the member being confirmed: disable an enabled member, enable a disabled one
-  const statusAction = statusTarget?.enabled === false ? 'enable' : 'disable';
+  // the action offered on the member being confirmed: disable an enabled or suspended member, enable a disabled one
+  const statusAction = statusTarget && statusTarget.suspension === null && statusTarget.enabled === false ? 'enable' : 'disable';
 
   if (isPending) {
     return (
@@ -139,9 +139,13 @@ export default function OrgMembersPage() {
                     </Badge>
                   </Table.Td>
                   <Table.Td>
-                    <Badge color={member.enabled === false ? 'gray' : 'green'} variant="light">
-                      {t(member.enabled === false ? 'members.status.disabled' : 'members.status.active')}
-                    </Badge>
+                    {member.suspension ? (
+                      <SuspensionBadge suspension={member.suspension} />
+                    ) : (
+                      <Badge color={member.enabled === false ? 'gray' : 'green'} variant="light">
+                        {t(member.enabled === false ? 'members.status.disabled' : 'members.status.active')}
+                      </Badge>
+                    )}
                   </Table.Td>
                   <Table.Td>
                     <Group justify="flex-end" align="flex-start" wrap="nowrap">
@@ -150,10 +154,15 @@ export default function OrgMembersPage() {
                         <Button
                           variant="subtle"
                           size="xs"
-                          color={member.enabled === false ? 'green' : 'orange'}
+                          // a suspended member only offers "Disable" (never "Enable": the core answers 409 to it)
+                          color={member.suspension === null && member.enabled === false ? 'green' : 'orange'}
                           onClick={() => setStatusTarget(member)}
                         >
-                          {t(member.enabled === false ? 'members.enable.button' : 'members.disable.button')}
+                          {t(
+                            member.suspension === null && member.enabled === false
+                              ? 'members.enable.button'
+                              : 'members.disable.button',
+                          )}
                         </Button>
                       )}
                       {/* the core refuses to remove an owner (409): not offered */}

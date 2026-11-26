@@ -6,14 +6,18 @@ import {
   type ServiceAccount,
   type ServiceAccountCredentials,
   useDeleteServiceAccount,
+  useLiftServiceAccountSuspension,
   useOrgCatalogs,
   useRotateServiceAccountSecret,
   useServiceAccounts,
   useSetServiceAccountEnabled,
+  useSuspendServiceAccount,
 } from '../api/serviceAccounts';
 import ConfirmModal from '../components/ConfirmModal';
 import GearIcon from '../components/GearIcon';
 import ServiceAccountSecretModal from '../components/ServiceAccountSecretModal';
+import SuspendModal from '../components/SuspendModal';
+import SuspensionBadge from '../components/SuspensionBadge';
 import ServiceAccountModal from './ServiceAccountModal';
 
 interface ServiceAccountsSectionProps {
@@ -35,12 +39,19 @@ export default function ServiceAccountsSection({ org, realmOwner = false }: Serv
   const rotate = useRotateServiceAccountSecret(org);
   const setEnabled = useSetServiceAccountEnabled(org);
   const remove = useDeleteServiceAccount(org);
+  // realm owner only: suspend / edit reason and lift suspension
+  const suspend = useSuspendServiceAccount(org);
+  const liftSuspension = useLiftServiceAccountSuspension(org);
 
   // null = closed, 'new' = creation, a service account = edition
   const [formTarget, setFormTarget] = useState<ServiceAccount | 'new' | null>(null);
   const [action, setAction] = useState<Action | null>(null);
   // the teams of a service account, shown in a modal when its count is clicked
   const [teamsOf, setTeamsOf] = useState<ServiceAccount | null>(null);
+  // null = closed. Set to open SuspendModal, either to suspend (no suspension yet) or to edit the reason
+  const [suspendTarget, setSuspendTarget] = useState<ServiceAccount | null>(null);
+  // null = closed, the account whose "Lift suspension" confirmation is open
+  const [liftTarget, setLiftTarget] = useState<ServiceAccount | null>(null);
   // The secret shown once. It lives in the state of this component only while the modal is open: never in the query
   // cache, and the core does not give it again. rotated: after a rotation, the text says the old secret is dead
   const [secret, setSecret] = useState<{ credentials: ServiceAccountCredentials; rotated: boolean } | null>(null);
@@ -81,6 +92,16 @@ export default function ServiceAccountsSection({ org, realmOwner = false }: Serv
       default:
         setEnabled.mutate({ name, enabled: action.kind === 'enable' }, { onSuccess: closeAction });
     }
+  }
+
+  function closeSuspend() {
+    suspend.reset();
+    setSuspendTarget(null);
+  }
+
+  function closeLift() {
+    liftSuspension.reset();
+    setLiftTarget(null);
   }
 
   const teamPath = (team: string) => (realmOwner ? `/organisations/${org}/teams/${team}` : `/orgs/${org}/teams/${team}`);
@@ -148,9 +169,13 @@ export default function ServiceAccountsSection({ org, realmOwner = false }: Serv
                   </Table.Td>
                   <Table.Td>{account.description}</Table.Td>
                   <Table.Td>
-                    <Badge variant="light" color={account.enabled ? 'green' : 'gray'}>
-                      {t(account.enabled ? 'serviceAccounts.status.enabled' : 'serviceAccounts.status.disabled')}
-                    </Badge>
+                    {account.suspension ? (
+                      <SuspensionBadge suspension={account.suspension} realmOwner={realmOwner} />
+                    ) : (
+                      <Badge variant="light" color={account.enabled ? 'green' : 'gray'}>
+                        {t(account.enabled ? 'serviceAccounts.status.enabled' : 'serviceAccounts.status.disabled')}
+                      </Badge>
+                    )}
                   </Table.Td>
                   <Table.Td ta="right">
                     {/* a count, the names in a tooltip: the list can grow */}
@@ -181,9 +206,25 @@ export default function ServiceAccountsSection({ org, realmOwner = false }: Serv
                           <Menu.Item onClick={() => setAction({ kind: 'rotate', account })}>
                             {t('serviceAccounts.rotate.button')}
                           </Menu.Item>
-                          <Menu.Item onClick={() => setAction({ kind: account.enabled ? 'disable' : 'enable', account })}>
-                            {t(account.enabled ? 'serviceAccounts.disable.button' : 'serviceAccounts.enable.button')}
-                          </Menu.Item>
+                          {/* enabling a suspended account always fails (409): offered only when not suspended.
+                              An org admin may still disable one, to record its own choice for the realm owner's lift */}
+                          {(!account.suspension || !realmOwner) && (
+                            <Menu.Item
+                              onClick={() => setAction({ kind: account.suspension || account.enabled ? 'disable' : 'enable', account })}
+                            >
+                              {t(account.suspension || account.enabled ? 'serviceAccounts.disable.button' : 'serviceAccounts.enable.button')}
+                            </Menu.Item>
+                          )}
+                          {realmOwner && (
+                            <>
+                              <Menu.Item onClick={() => setSuspendTarget(account)}>
+                                {t(account.suspension ? 'suspension.suspend.editButton' : 'suspension.suspend.button')}
+                              </Menu.Item>
+                              {account.suspension && (
+                                <Menu.Item onClick={() => setLiftTarget(account)}>{t('suspension.lift.button')}</Menu.Item>
+                              )}
+                            </>
+                          )}
                           <Menu.Item color="red" onClick={() => setAction({ kind: 'delete', account })}>
                             {t('common.delete')}
                           </Menu.Item>
@@ -215,6 +256,34 @@ export default function ServiceAccountsSection({ org, realmOwner = false }: Serv
       )}
 
       <ServiceAccountSecretModal credentials={secret?.credentials ?? null} rotated={secret?.rotated ?? false} onClose={closeSecret} />
+
+      {realmOwner && (
+        <>
+          {/* key: a new form per target, so "Edit reason" starts from its current reason (useForm reads it once) */}
+          <SuspendModal
+            key={suspendTarget?.name ?? 'closed'}
+            opened={suspendTarget !== null}
+            onClose={closeSuspend}
+            target={suspendTarget?.name ?? ''}
+            currentReason={suspendTarget?.suspension?.reason ?? null}
+            pending={suspend.isPending}
+            error={suspend.error}
+            onSubmit={(reason) => suspend.mutate({ name: suspendTarget!.name, reason }, { onSuccess: closeSuspend })}
+          />
+
+          <ConfirmModal
+            opened={liftTarget !== null}
+            title={t('suspension.lift.title', { target: liftTarget?.name ?? '' })}
+            message={t('suspension.lift.message')}
+            confirmLabel={t('suspension.lift.confirm')}
+            confirmColor="green"
+            pending={liftSuspension.isPending}
+            error={liftSuspension.error}
+            onConfirm={() => liftTarget && liftSuspension.mutate(liftTarget.name, { onSuccess: closeLift })}
+            onClose={closeLift}
+          />
+        </>
+      )}
 
       <ConfirmModal
         opened={action !== null}

@@ -96,3 +96,8 @@ export async function putRequest(url: string): Promise<void> {
 export async function deleteRequest(url: string): Promise<void> {
   await request('DELETE', url);
 }
+
+// A DELETE that answers 200 with the changed resource (e.g. lifting a suspension), unlike deleteRequest above
+export async function deleteJson<T>(url: string): Promise<T> {
+  return (await request('DELETE', url)).json();
+}

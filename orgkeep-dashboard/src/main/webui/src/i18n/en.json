@@ -148,7 +148,8 @@
       "columns": {
         "name": "Name",
         "email": "Email",
-        "role": "Role"
+        "role": "Role",
+        "status": "Status"
       },
       "makeOwner": {
         "button": "Make owner",
@@ -588,6 +589,29 @@
         "title": "Turn on the lightweight tokens of {{name}}?",
         "message": "Every API receiving the tokens of this service account must introspect them first, with the credentials of its catalog (it works with full tokens too), or it no longer sees its rights. Tokens already issued do not change."
       }
+    }
+  },
+  "suspension": {
+    "badge": "Suspended by provider",
+    "since": "Since {{date}}",
+    "by": "Suspended by {{who}}",
+    "suspend": {
+      "button": "Suspend",
+      "editButton": "Edit reason",
+      "title": "Suspend {{target}}?",
+      "editTitle": "Edit the suspension reason of {{target}}",
+      "message": "The account is disabled and its sessions end at once. Only the realm owner can lift the suspension.",
+      "reasonLabel": "Reason",
+      "reasonPlaceholder": "Why this account is suspended",
+      "reasonRequired": "A reason is required",
+      "reasonTooLong": "500 characters at most",
+      "submit": "Suspend"
+    },
+    "lift": {
+      "button": "Lift suspension",
+      "title": "Lift the suspension of {{target}}?",
+      "message": "The account comes back only if its organisation is enabled and its org admins had not separately disabled it; otherwise it stays disabled.",
+      "confirm": "Lift suspension"
     }
   },
   "team": {

@@ -1,6 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deleteJson, deleteRequest, getJson, postJson, postRequest, putJson, putRequest } from './http';
-import { SERVICE_ACCOUNTS_KEY } from './queryKeys';
+import { SEATS_KEY, SERVICE_ACCOUNTS_KEY } from './queryKeys';
 
 // The organisations endpoints of the API of the core (OrganisationsResource, OrgProductsResource,
 // OrgCatalogsResource and OrgAdminResource in orgkeep-core), called directly by the front.
@@ -26,6 +26,9 @@ export interface OrgSummary {
   memberCount: number;
   // the assigned products as "catalog/product", sorted
   products: string[];
+  // the seat limits set by the realm owner, null = no limit
+  maxMembers: number | null;
+  maxServiceAccounts: number | null;
 }
 
 // The envelope of every paged list of the core (Page<T>): the items of the page, and the total number of elements
@@ -45,6 +48,9 @@ export interface CreateOrgRequest {
   ownerEmail: string | null;
   ownerFirstName: string | null;
   ownerLastName: string | null;
+  // optional seat limits, null = no limit. The core refuses maxMembers=0 with an ownerEmail: the owner takes a seat
+  maxMembers: number | null;
+  maxServiceAccounts: number | null;
 }
 
 export interface CreateOrgResponse {
@@ -137,6 +143,9 @@ export interface OrgDetails {
   // the client holding the org roles, e.g. "org-acme"
   clientId: string;
   owners: OrgOwner[];
+  // the seat limits set by the realm owner, null = no limit
+  maxMembers: number | null;
+  maxServiceAccounts: number | null;
 }
 
 // Values of the OrgRole enum of the core, as Jackson writes them
@@ -215,6 +224,50 @@ export function useOrganisation(org: string) {
   });
 }
 
+// The seats of one kind (members or service accounts): max null = no limit, used may exceed max when a limit
+// was lowered (nobody is removed, only new additions are refused)
+export interface SeatCount {
+  used: number;
+  max: number | null;
+}
+
+export interface Seats {
+  members: SeatCount;
+  serviceAccounts: SeatCount;
+}
+
+export interface UpdateSeatsRequest {
+  maxMembers: number | null;
+  maxServiceAccounts: number | null;
+}
+
+// GET is open to any org admin of this org (org-owner included) and to the realm owner, so it uses the org
+// admins' path (SeatsResource), unlike the admin-only PUT below (OrgSeatsResource)
+function seatsUrl(org: string): string {
+  return `/api/organisations/${encodeURIComponent(org)}/seats`;
+}
+
+export function useSeats(org: string) {
+  return useQuery({
+    queryKey: [SEATS_KEY, org],
+    queryFn: () => getJson<Seats>(seatsUrl(org)),
+  });
+}
+
+// Realm owner only. Replaces both limits at once; a null value removes that limit
+export function useUpdateSeats(org: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (request: UpdateSeatsRequest) => putJson<Seats>(`/api/admin/organisations/${encodeURIComponent(org)}/seats`, request),
+    onSuccess: (seats) => {
+      // the response already has the new counts: no need to ask the server again for this query
+      queryClient.setQueryData([SEATS_KEY, org], seats);
+      // the org list ("12 / 20") and the detail page carry the limits too, but not the response of this call
+      return queryClient.invalidateQueries({ queryKey: [ORGANISATIONS_KEY] });
+    },
+  });
+}
+
 // Every filter is optional: left out of the query means "no filter". page starts at 1 (like the organisation
 // list); max overrides PAGE_SIZE for a picker that only needs a handful of names (e.g. 20 by default too);
 // enabled lets a caller that mounts the hook ahead of time (e.g. a modal) skip the request until it is shown
@@ -271,12 +324,22 @@ function useInvalidateMembers(org: string) {
   };
 }
 
+// Adding or removing a member changes the seats used: refresh that query too
+function useInvalidateSeats(org: string) {
+  const queryClient = useQueryClient();
+  return () => queryClient.invalidateQueries({ queryKey: [SEATS_KEY, org] });
+}
+
 // The core creates the user if needed and sends the invitation email (choose a password)
 export function useAddOrgMember(org: string) {
   const invalidate = useInvalidateMembers(org);
+  const invalidateSeats = useInvalidateSeats(org);
   return useMutation({
     mutationFn: (request: AddMemberRequest) => postJson<OrgMember>(membersUrl(org), request),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      invalidateSeats();
+    },
   });
 }
 
@@ -291,9 +354,13 @@ export function useResendInvitation(org: string) {
 // The user is kept in Keycloak, only taken out of the org (and of its teams)
 export function useRemoveOrgMember(org: string) {
   const invalidate = useInvalidateMembers(org);
+  const invalidateSeats = useInvalidateSeats(org);
   return useMutation({
     mutationFn: (userId: string) => deleteRequest(`${membersUrl(org)}/${encodeURIComponent(userId)}`),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      invalidateSeats();
+    },
   });
 }
 

@@ -3,3 +3,4 @@
 // in a circle. A small file with no import breaks the circle.
 export const TEAMS_KEY = 'teams';
 export const SERVICE_ACCOUNTS_KEY = 'serviceAccounts';
+export const SEATS_KEY = 'seats';

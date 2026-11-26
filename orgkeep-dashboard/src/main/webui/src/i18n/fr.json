@@ -57,7 +57,7 @@
       "name": "Nom",
       "emailDomains": "Domaines email",
       "owner": "Owner",
-      "members": "Membres",
+      "seats": "Seats",
       "products": "Produits",
       "status": "Statut"
     },
@@ -82,6 +82,11 @@
       "ownerLastName": "Nom",
       "ownerDescription": "Prénom et nom sont obligatoires avec un email. Un user existant est réutilisé (avec ses propres prénom et nom), mais certains ne peuvent pas être ajoutés à cette organisation : un membre d'une autre organisation, ou un administrateur du realm.",
       "emailInvalid": "Adresse email invalide",
+      "seats": "Seats (facultatif)",
+      "maxMembers": "Maximum de membres",
+      "maxServiceAccounts": "Maximum de service accounts",
+      "noLimit": "Pas de limite",
+      "seatsDescription": "Laissez un champ vide pour ne pas mettre de limite. L'owner prend un seat de membre : une limite de 0 membre est refusée avec un owner.",
       "submit": "Créer",
       "failed": "Organisation non créée"
     }
@@ -99,6 +104,16 @@
       "products": "Produits",
       "teams": "Teams",
       "serviceAccounts": "Service accounts"
+    },
+    "seats": {
+      "title": "Seats",
+      "loadError": "Impossible de charger les seats de {{org}}",
+      "members": "Membres :",
+      "serviceAccounts": "Service accounts :",
+      "editTitle": "Seats de {{org}}",
+      "maxMembers": "Maximum de membres",
+      "maxServiceAccounts": "Maximum de service accounts",
+      "noLimitHint": "Vide pour ne pas mettre de limite."
     },
     "teams": {
       "loadError": "Impossible de charger les teams",
@@ -454,6 +469,9 @@
     "empty": "Aucun membre pour l'instant.",
     "noMatch": "Aucun membre ne correspond à cette recherche.",
     "add": "Ajouter un membre",
+    "seatsUsed": "{{used}} / {{max}} seats utilisés",
+    "seatsNoLimit": "{{used}} seats utilisés",
+    "addDisabledTooltip": "Plus de seat disponible ({{used}} sur {{max}} membres).",
     "searchLabel": "Rechercher des membres",
     "searchPlaceholder": "Rechercher par prénom, nom d'utilisateur ou email",
     "columns": {
@@ -516,6 +534,9 @@
     "title": "Service accounts de {{org}}",
     "hint": "Un service account est une application de l'organisation (un batch, un backend, un job de CI) qui obtient des tokens avec son client ID et son secret. Ses droits viennent de ses teams, comme ceux d'un user.",
     "create": "Nouveau service account",
+    "seatsUsed": "{{used}} / {{max}} seats utilisés",
+    "seatsNoLimit": "{{used}} seats utilisés",
+    "createDisabledTooltip": "Plus de seat disponible ({{used}} sur {{max}} service accounts).",
     "empty": "Aucun service account pour le moment.",
     "loadError": "Impossible de charger les service accounts de {{org}}",
     "catalogsError": "Impossible de charger les catalogues de l'organisation",

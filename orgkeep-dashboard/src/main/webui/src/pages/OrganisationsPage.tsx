@@ -119,7 +119,7 @@ export default function OrganisationsPage() {
                 <Table.Th>{t('organisations.columns.name')}</Table.Th>
                 <Table.Th>{t('organisations.columns.emailDomains')}</Table.Th>
                 <Table.Th>{t('organisations.columns.owner')}</Table.Th>
-                <Table.Th>{t('organisations.columns.members')}</Table.Th>
+                <Table.Th>{t('organisations.columns.seats')}</Table.Th>
                 <Table.Th>{t('organisations.columns.products')}</Table.Th>
                 <Table.Th>{t('organisations.columns.status')}</Table.Th>
               </Table.Tr>
@@ -144,7 +144,8 @@ export default function OrganisationsPage() {
                       org.owners.map((owner) => <div key={owner.id}>{personName(owner)}</div>)
                     )}
                   </Table.Td>
-                  <Table.Td>{org.memberCount}</Table.Td>
+                  {/* "12 / 20" with a limit, just the count when the organisation has none */}
+                  <Table.Td>{org.maxMembers === null ? org.memberCount : `${org.memberCount} / ${org.maxMembers}`}</Table.Td>
                   {/* a count, not the list: it opens the products tab of the org, with the quotas.
                       The "catalog/product" pairs are in the tooltip (title) */}
                   <Table.Td title={org.products.join(', ')}>

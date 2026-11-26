@@ -57,7 +57,7 @@
       "name": "Name",
       "emailDomains": "Email domains",
       "owner": "Owner",
-      "members": "Members",
+      "seats": "Seats",
       "products": "Products",
       "status": "Status"
     },
@@ -82,6 +82,11 @@
       "ownerLastName": "Last name",
       "ownerDescription": "First and last name are required with an email. An existing user is reused (with their own names), but some cannot be added to this organisation: a member of another organisation, or an administrator of the realm.",
       "emailInvalid": "Invalid email address",
+      "seats": "Seats (optional)",
+      "maxMembers": "Maximum members",
+      "maxServiceAccounts": "Maximum service accounts",
+      "noLimit": "No limit",
+      "seatsDescription": "Leave a field empty for no limit. The owner takes a member seat, so a limit of 0 members is refused with an owner.",
       "submit": "Create",
       "failed": "Organisation not created"
     }
@@ -99,6 +104,16 @@
       "products": "Products",
       "teams": "Teams",
       "serviceAccounts": "Service accounts"
+    },
+    "seats": {
+      "title": "Seats",
+      "loadError": "Could not load the seats of {{org}}",
+      "members": "Members:",
+      "serviceAccounts": "Service accounts:",
+      "editTitle": "Seats of {{org}}",
+      "maxMembers": "Maximum members",
+      "maxServiceAccounts": "Maximum service accounts",
+      "noLimitHint": "Empty for no limit."
     },
     "teams": {
       "loadError": "Could not load the teams",
@@ -454,6 +469,9 @@
     "empty": "No member yet.",
     "noMatch": "No member matches this search.",
     "add": "Add a member",
+    "seatsUsed": "{{used}} / {{max}} seats used",
+    "seatsNoLimit": "{{used}} seats used",
+    "addDisabledTooltip": "No seat left ({{used}} of {{max}} members).",
     "searchLabel": "Search members",
     "searchPlaceholder": "Search by first name, username or email",
     "columns": {
@@ -516,6 +534,9 @@
     "title": "Service accounts of {{org}}",
     "hint": "A service account is an application of the organisation (a batch, a backend, a CI job) that gets tokens with its client ID and secret. Its rights come from its teams, like a user.",
     "create": "New service account",
+    "seatsUsed": "{{used}} / {{max}} seats used",
+    "seatsNoLimit": "{{used}} seats used",
+    "createDisabledTooltip": "No seat left ({{used}} of {{max}} service accounts).",
     "empty": "No service account yet.",
     "loadError": "Could not load the service accounts of {{org}}",
     "catalogsError": "Could not load the catalogs of the organisation",

@@ -4,6 +4,7 @@ import org.orgkeep.api.model.AddMemberRequest;
 import org.orgkeep.api.model.OrgMember;
 import org.orgkeep.api.model.OrgRole;
 import org.orgkeep.components.organisation.member.invitation.InvitationMailer;
+import org.orgkeep.components.organisation.suspension.SuspensionAttributes;
 import org.keycloak.representations.idm.UserRepresentation;
 import org.mapstruct.AfterMapping;
 import org.mapstruct.BeanMapping;
@@ -14,7 +15,7 @@ import org.mapstruct.ReportingPolicy;
 
 import java.util.List;
 
-@Mapper(componentModel = "cdi", unmappedTargetPolicy = ReportingPolicy.WARN)
+@Mapper(componentModel = "cdi", unmappedTargetPolicy = ReportingPolicy.WARN, imports = SuspensionAttributes.class)
 public interface MemberMapper {
 
     /**
@@ -39,9 +40,11 @@ public interface MemberMapper {
     }
 
     // several sources: the user properties come from user, the other parameters fill the properties of the same name
+    @Mapping(target = "suspension", expression = "java(SuspensionAttributes.toSuspension(user))")
     OrgMember toOrgMember(UserRepresentation user, OrgRole role, Boolean invitationPending);
 
     /** Without the invitation status: for the owners of the organisation lists and details, where it is not shown. */
     @Mapping(target = "invitationPending", ignore = true)
+    @Mapping(target = "suspension", expression = "java(SuspensionAttributes.toSuspension(user))")
     OrgMember toOrgMember(UserRepresentation user, OrgRole role);
 }

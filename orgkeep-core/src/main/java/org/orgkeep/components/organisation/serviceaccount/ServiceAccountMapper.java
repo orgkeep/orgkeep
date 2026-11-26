@@ -9,12 +9,14 @@ import org.mapstruct.ReportingPolicy;
 import org.orgkeep.api.model.CreateServiceAccountRequest;
 import org.orgkeep.api.model.OrgClients;
 import org.orgkeep.api.model.ServiceAccount;
+import org.orgkeep.components.organisation.suspension.SuspensionAttributes;
 
 import java.util.List;
 import java.util.Map;
 
 // imports: the classes the expressions below may use without their package
-@Mapper(componentModel = "cdi", unmappedTargetPolicy = ReportingPolicy.WARN, imports = OrgClients.class)
+@Mapper(componentModel = "cdi", unmappedTargetPolicy = ReportingPolicy.WARN,
+        imports = {OrgClients.class, SuspensionAttributes.class})
 public interface ServiceAccountMapper {
     /**
      * The client of a service account: confidential, client credentials only, no browser flow, never the whole scope
@@ -54,6 +56,7 @@ public interface ServiceAccountMapper {
     @Mapping(target = "enabled", source = "user.enabled")
     @Mapping(target = "defaultCatalogs", source = "defaultCatalogs")
     @Mapping(target = "teams", source = "teams")
+    @Mapping(target = "suspension", expression = "java(SuspensionAttributes.toSuspension(user))")
     ServiceAccount toServiceAccount(String name, ClientRepresentation client, UserRepresentation user,
                                     List<String> defaultCatalogs, List<String> teams);
 }

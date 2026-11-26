@@ -12,6 +12,8 @@ import java.util.List;
  * @param enabled         false: no new token is issued
  * @param defaultCatalogs catalogs in every token of the service account; the others are asked with the scope parameter
  * @param teams           names of the teams (user groups of the org) it is a member of, sorted: what gives it its products
+ * @param suspension      set by the realm owner only, null when the account is not suspended. suspendedBy is
+ *                        null for an org admin (see SuspensionViews)
  */
 public record ServiceAccount(
     String name,
@@ -20,4 +22,5 @@ public record ServiceAccount(
     String description,
     boolean enabled,
     List<String> defaultCatalogs,
-    List<String> teams){ }
+    List<String> teams,
+    Suspension suspension){ }

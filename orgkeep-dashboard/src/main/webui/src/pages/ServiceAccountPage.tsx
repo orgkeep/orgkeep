@@ -25,6 +25,7 @@ import {
 } from '../api/serviceAccounts';
 import ConfirmModal from '../components/ConfirmModal';
 import CopyValue from '../components/CopyValue';
+import SuspensionBadge from '../components/SuspensionBadge';
 
 // A service account of an org, for the realm owner only (route /organisations/:org/service-accounts/:sa): what the
 // org admins also see, plus the mode of its tokens, which only the realm owner changes. The other actions (edit,
@@ -63,9 +64,13 @@ export default function ServiceAccountPage() {
           <Title order={2} ff="monospace">
             {account.name}
           </Title>
-          <Badge variant="light" color={account.enabled ? 'green' : 'gray'}>
-            {t(account.enabled ? 'serviceAccounts.status.enabled' : 'serviceAccounts.status.disabled')}
-          </Badge>
+          {account.suspension ? (
+            <SuspensionBadge suspension={account.suspension} realmOwner />
+          ) : (
+            <Badge variant="light" color={account.enabled ? 'green' : 'gray'}>
+              {t(account.enabled ? 'serviceAccounts.status.enabled' : 'serviceAccounts.status.disabled')}
+            </Badge>
+          )}
         </Group>
         {account.description && <Text c="dimmed">{account.description}</Text>}
       </Stack>

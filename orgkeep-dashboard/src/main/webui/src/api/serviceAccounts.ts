@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { deleteRequest, getJson, postJson, putJson } from './http';
+import { deleteJson, deleteRequest, getJson, postJson, putJson } from './http';
 import { SERVICE_ACCOUNTS_KEY, TEAMS_KEY } from './queryKeys';
+import { type Suspension } from './organisations';
 
 // The service accounts of an organisation, managed by its org admins and by the realm owner
 // (ServiceAccountsResource in orgkeep-core). A service account is an application of the org that gets tokens
@@ -21,6 +22,8 @@ export interface ServiceAccount {
   defaultCatalogs: string[];
   // names of the teams it belongs to
   teams: string[];
+  // null when not suspended. Set and lifted by the realm owner only
+  suspension: Suspension | null;
 }
 
 // What the application needs to get a token. The secret is only in the answers of the creation and of a rotation:
@@ -85,9 +88,13 @@ export function useServiceAccount(org: string, name: string) {
   });
 }
 
-// Realm owner only, under /api/admin: the same path with the settings of the service account
+// Realm owner only, under /api/admin: the same path as serviceAccountUrl, for the endpoints only it may call
+function adminServiceAccountUrl(org: string, name: string): string {
+  return `/api/admin/organisations/${encodeURIComponent(org)}/service-accounts/${encodeURIComponent(name)}`;
+}
+
 function settingsUrl(org: string, name: string): string {
-  return `/api/admin/organisations/${encodeURIComponent(org)}/service-accounts/${encodeURIComponent(name)}/settings`;
+  return `${adminServiceAccountUrl(org, name)}/settings`;
 }
 
 export function useServiceAccountSettings(org: string, name: string) {
@@ -155,6 +162,31 @@ export function useSetServiceAccountEnabled(org: string) {
   return useMutation({
     mutationFn: ({ name, enabled }: { name: string; enabled: boolean }) =>
       putJson<ServiceAccount>(`${serviceAccountUrl(org, name)}/enabled`, { enabled }),
+    onSuccess: invalidate,
+  });
+}
+
+function suspensionUrl(org: string, name: string): string {
+  return `${adminServiceAccountUrl(org, name)}/suspension`;
+}
+
+// Realm owner only. Disables the service account and ends its sessions; suspending an already suspended one
+// replaces the reason only (the date and the suspender are kept by the core).
+export function useSuspendServiceAccount(org: string) {
+  const invalidate = useInvalidate(org);
+  return useMutation({
+    mutationFn: ({ name, reason }: { name: string; reason: string }) =>
+      putJson<ServiceAccount>(suspensionUrl(org, name), { reason }),
+    onSuccess: invalidate,
+  });
+}
+
+// Realm owner only. Enables the service account again only if its organisation is enabled and its org admins had
+// not separately disabled it; otherwise it stays disabled. Always 200, even when it was not suspended.
+export function useLiftServiceAccountSuspension(org: string) {
+  const invalidate = useInvalidate(org);
+  return useMutation({
+    mutationFn: (name: string) => deleteJson<ServiceAccount>(suspensionUrl(org, name)),
     onSuccess: invalidate,
   });
 }

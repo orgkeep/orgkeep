@@ -31,11 +31,13 @@ import {
   PAGE_SIZE,
   useDeleteOrganisation,
   useGrantOwnership,
+  useLiftMemberSuspension,
   useOrganisation,
   useOrgMembers,
   useOrgProducts,
   useRevokeOwnership,
   useSetOrgEnabled,
+  useSuspendMember,
   useUnassignProduct,
 } from '../api/organisations';
 import { type Product, productKey, useProducts } from '../api/products';
@@ -43,6 +45,8 @@ import { useServiceAccounts } from '../api/serviceAccounts';
 import { type UserGroup, useUserGroups } from '../api/teams';
 import ConfirmModal from '../components/ConfirmModal';
 import GearIcon from '../components/GearIcon';
+import SuspendModal from '../components/SuspendModal';
+import SuspensionBadge from '../components/SuspensionBadge';
 import TokenPreviewModal from '../components/TokenPreviewModal';
 import AssignProductModal from './AssignProductModal';
 import { ROLE_COLORS } from './orgRoles';
@@ -340,6 +344,13 @@ function MembersTab({ org }: MembersTabProps) {
   const [transferTarget, setTransferTarget] = useState<OrgMember | null>(null);
   const grantOwnership = useGrantOwnership(org);
   const revokeOwnership = useRevokeOwnership(org);
+  // suspend / edit reason and lift suspension: realm owner only, this whole tab is
+  const suspend = useSuspendMember(org);
+  const liftSuspension = useLiftMemberSuspension(org);
+  // null = closed. Set to open SuspendModal, either to suspend (no suspension yet) or to edit the reason
+  const [suspendTarget, setSuspendTarget] = useState<OrgMember | null>(null);
+  // null = closed, the member whose "Lift suspension" confirmation is open
+  const [liftTarget, setLiftTarget] = useState<OrgMember | null>(null);
   const totalPages = memberPage ? Math.ceil(memberPage.total / PAGE_SIZE) : 0;
 
   function closeOwnershipAction() {
@@ -362,6 +373,16 @@ function MembersTab({ org }: MembersTabProps) {
 
   // the mutation of the current confirmation, to show its pending state and its error in the modal
   const ownershipRunning = ownershipAction?.kind === 'removeOwnership' ? revokeOwnership : grantOwnership;
+
+  function closeSuspend() {
+    suspend.reset();
+    setSuspendTarget(null);
+  }
+
+  function closeLift() {
+    liftSuspension.reset();
+    setLiftTarget(null);
+  }
 
   // A page can become empty when the list shrinks (same dead end as OrgMembersPage): bring it back within range
   useEffect(() => {
@@ -409,6 +430,7 @@ function MembersTab({ org }: MembersTabProps) {
                 <Table.Th>{t('orgDetail.members.columns.name')}</Table.Th>
                 <Table.Th>{t('orgDetail.members.columns.email')}</Table.Th>
                 <Table.Th>{t('orgDetail.members.columns.role')}</Table.Th>
+                <Table.Th>{t('orgDetail.members.columns.status')}</Table.Th>
                 <Table.Th />
               </Table.Tr>
             </Table.Thead>
@@ -423,6 +445,15 @@ function MembersTab({ org }: MembersTabProps) {
                     <Badge color={ROLE_COLORS[member.role]} variant="light">
                       {t(`orgDetail.roles.${member.role}`)}
                     </Badge>
+                  </Table.Td>
+                  <Table.Td>
+                    {member.suspension ? (
+                      <SuspensionBadge suspension={member.suspension} realmOwner />
+                    ) : (
+                      <Badge color={member.enabled === false ? 'gray' : 'green'} variant="light">
+                        {t(member.enabled === false ? 'members.status.disabled' : 'members.status.active')}
+                      </Badge>
+                    )}
                   </Table.Td>
                   <Table.Td>
                     <Group justify="flex-end" align="flex-start" wrap="nowrap">
@@ -451,6 +482,13 @@ function MembersTab({ org }: MembersTabProps) {
                             <Menu.Item onClick={() => setOwnershipAction({ kind: 'makeOwner', member })}>
                               {t('orgDetail.members.makeOwner.button')}
                             </Menu.Item>
+                          )}
+                          <Menu.Divider />
+                          <Menu.Item onClick={() => setSuspendTarget(member)}>
+                            {t(member.suspension ? 'suspension.suspend.editButton' : 'suspension.suspend.button')}
+                          </Menu.Item>
+                          {member.suspension && (
+                            <Menu.Item onClick={() => setLiftTarget(member)}>{t('suspension.lift.button')}</Menu.Item>
                           )}
                         </Menu.Dropdown>
                       </Menu>
@@ -495,6 +533,30 @@ function MembersTab({ org }: MembersTabProps) {
       />
 
       <TransferOwnershipModal org={org} owner={transferTarget} onClose={() => setTransferTarget(null)} />
+
+      {/* key: a new form per target, so "Edit reason" starts from its current reason (useForm reads it once) */}
+      <SuspendModal
+        key={suspendTarget?.id ?? 'closed'}
+        opened={suspendTarget !== null}
+        onClose={closeSuspend}
+        target={suspendTarget ? personName(suspendTarget) : ''}
+        currentReason={suspendTarget?.suspension?.reason ?? null}
+        pending={suspend.isPending}
+        error={suspend.error}
+        onSubmit={(reason) => suspend.mutate({ userId: suspendTarget!.id, reason }, { onSuccess: closeSuspend })}
+      />
+
+      <ConfirmModal
+        opened={liftTarget !== null}
+        title={t('suspension.lift.title', { target: liftTarget ? personName(liftTarget) : '' })}
+        message={t('suspension.lift.message')}
+        confirmLabel={t('suspension.lift.confirm')}
+        confirmColor="green"
+        pending={liftSuspension.isPending}
+        error={liftSuspension.error}
+        onConfirm={() => liftTarget && liftSuspension.mutate(liftTarget.id, { onSuccess: closeLift })}
+        onClose={closeLift}
+      />
     </Stack>
   );
 }

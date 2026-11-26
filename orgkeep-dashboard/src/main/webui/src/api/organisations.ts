@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { deleteRequest, getJson, postJson, postRequest, putJson, putRequest } from './http';
+import { deleteJson, deleteRequest, getJson, postJson, postRequest, putJson, putRequest } from './http';
 import { SERVICE_ACCOUNTS_KEY } from './queryKeys';
 
 // The organisations endpoints of the API of the core (OrganisationsResource, OrgProductsResource,
@@ -142,6 +142,15 @@ export interface OrgDetails {
 // Values of the OrgRole enum of the core, as Jackson writes them
 export type OrgRole = 'ORG_OWNER' | 'ORG_ADMIN' | 'ORG_USER';
 
+// Set and lifted by the realm owner only (AccountSuspensionService in orgkeep-core). suspendedBy is the id of the
+// realm owner who suspended the account; it is null for an org admin, who never sees who suspended. suspendedAt is
+// null when the core could not parse the underlying attribute (set by a console edit rather than this code).
+export interface Suspension {
+  reason: string;
+  suspendedAt: string | null;
+  suspendedBy: string | null;
+}
+
 export interface OrgMember {
   id: string;
   username: string;
@@ -152,6 +161,8 @@ export interface OrgMember {
   role: OrgRole;
   // true while the member has not chosen a password from the invitation email: it can be sent again
   invitationPending: boolean | null;
+  // null when not suspended
+  suspension: Suspension | null;
 }
 
 // Values of the QuotaCycle enum of the core
@@ -293,6 +304,31 @@ export function useSetMemberEnabled(org: string) {
   return useMutation({
     mutationFn: ({ userId, enabled }: { userId: string; enabled: boolean }) =>
       putJson<OrgMember>(`${membersUrl(org)}/${encodeURIComponent(userId)}/enabled`, { enabled }),
+    onSuccess: invalidate,
+  });
+}
+
+function suspensionUrl(org: string, userId: string): string {
+  return `${orgUrl(org)}/members/${encodeURIComponent(userId)}/suspension`;
+}
+
+// Realm owner only. Disables the member and ends their sessions; suspending an already suspended member replaces
+// the reason only (the date and the suspender are kept by the core).
+export function useSuspendMember(org: string) {
+  const invalidate = useInvalidateMembers(org);
+  return useMutation({
+    mutationFn: ({ userId, reason }: { userId: string; reason: string }) =>
+      putJson<OrgMember>(suspensionUrl(org, userId), { reason }),
+    onSuccess: invalidate,
+  });
+}
+
+// Realm owner only. Enables the member again only if its organisation is enabled and its org admins had not
+// separately disabled it; otherwise it stays disabled. Always 200, even when the member was not suspended.
+export function useLiftMemberSuspension(org: string) {
+  const invalidate = useInvalidateMembers(org);
+  return useMutation({
+    mutationFn: (userId: string) => deleteJson<OrgMember>(suspensionUrl(org, userId)),
     onSuccess: invalidate,
   });
 }

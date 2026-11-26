@@ -148,7 +148,8 @@
       "columns": {
         "name": "Nom",
         "email": "Email",
-        "role": "Rôle"
+        "role": "Rôle",
+        "status": "Statut"
       },
       "makeOwner": {
         "button": "Nommer owner",
@@ -588,6 +589,29 @@
         "title": "Activer les tokens légers de {{name}} ?",
         "message": "Chaque API qui reçoit les tokens de ce service account doit d'abord les introspecter, avec les identifiants de son catalogue (ça marche aussi avec les tokens complets), sinon elle ne voit plus ses droits. Les tokens déjà émis ne changent pas."
       }
+    }
+  },
+  "suspension": {
+    "badge": "Suspendu par le fournisseur",
+    "since": "Depuis le {{date}}",
+    "by": "Suspendu par {{who}}",
+    "suspend": {
+      "button": "Suspendre",
+      "editButton": "Modifier le motif",
+      "title": "Suspendre {{target}} ?",
+      "editTitle": "Modifier le motif de suspension de {{target}}",
+      "message": "Le compte est désactivé et ses sessions se terminent immédiatement. Seul le realm owner peut lever la suspension.",
+      "reasonLabel": "Motif",
+      "reasonPlaceholder": "Pourquoi ce compte est suspendu",
+      "reasonRequired": "Un motif est requis",
+      "reasonTooLong": "500 caractères au maximum",
+      "submit": "Suspendre"
+    },
+    "lift": {
+      "button": "Lever la suspension",
+      "title": "Lever la suspension de {{target}} ?",
+      "message": "Le compte ne revient que si son organisation est activée et que ses org admins ne l'avaient pas désactivé séparément ; sinon il reste désactivé.",
+      "confirm": "Lever la suspension"
     }
   },
   "team": {

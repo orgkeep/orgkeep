@@ -27,6 +27,7 @@ import org.orgkeep.components.lock.LockRequest;
 import org.orgkeep.components.lock.ResourceLocks;
 import org.orgkeep.components.organisation.member.DisabledMembers;
 import org.orgkeep.components.organisation.member.MemberEligibility;
+import org.orgkeep.components.organisation.seats.SeatGuard;
 import org.orgkeep.components.organisation.suspension.SuspensionAttributes;
 import org.orgkeep.components.organisation.usergroup.team.TeamAlignment;
 import org.orgkeep.components.realm.lightweight.LightweightClients;
@@ -76,16 +77,21 @@ public class ServiceAccountServiceImpl implements ServiceAccountService {
     private final ResourceLocks locks;
     private final KeycloakUrls urls;
     private final ServiceAccountMapper mapper;
+    private final SeatGuard seatGuard;
 
     /**
      * A short write: ORG is locked shared, compatible with other creations but refused (409, after a short wait) while
      * a heavy operation holds the org: a disable or a deletion in progress. The unicity of the name is Keycloak's, the
      * clientId is unique.
+     * <p>
+     * SEATS is locked exclusively too, so two creations of the same org never both pass the seat check with the last
+     * slot: the second waits for the first (and then sees it taken) or gets a 409 after the short wait.
      */
     @Override
     public ServiceAccountCreated create(String realm, String orgName, CreateServiceAccountRequest request) {
         ServiceAccounts.requireName(request.name());
-        try (HeldLocks ignored = locks.acquire(LockRequest.org(realm, orgName, LockMode.SHARED))) {
+        try (HeldLocks ignored = locks.acquire(LockRequest.org(realm, orgName, LockMode.SHARED),
+                LockRequest.seats(realm, orgName))) {
             return createLocked(realm, orgName, request);
         }
     }
@@ -96,6 +102,12 @@ public class ServiceAccountServiceImpl implements ServiceAccountService {
         requireEnabledAndSettled(org);
         List<String> defaultCatalogs = request.defaultCatalogs() == null ? List.of() : request.defaultCatalogs();
         Map<String, String> catalogScopeIds = checkDefaultCatalogs(realm, orgName, defaultCatalogs);
+        // reported here, before the seat check, so that a duplicate name in a full org answers "already exists",
+        // not "no slot left"; clients.create()'s Optional below keeps its own check as a backstop
+        if (clients.find(realm, OrgClients.serviceAccountClientId(orgName, request.name())).isPresent()) {
+            throw new ServiceAccountAlreadyExistsException(orgName, request.name());
+        }
+        seatGuard.checkServiceAccountSeat(realm, org);
         // the default of the realm, read under the lock before the first write: absent means full tokens
         boolean lightweight = realms.attribute(realm, LightweightTokens.SERVICE_ACCOUNTS_REALM_ATTRIBUTE)
                 .map(Boolean::parseBoolean)

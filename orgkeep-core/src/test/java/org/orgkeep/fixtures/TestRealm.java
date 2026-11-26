@@ -9,13 +9,19 @@ import org.keycloak.admin.client.CreatedResponseUtil;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.KeycloakBuilder;
 import org.keycloak.admin.client.resource.RealmResource;
+import org.keycloak.admin.client.resource.UserProfileResource;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.GroupRepresentation;
 import org.keycloak.representations.idm.RealmRepresentation;
 import org.keycloak.representations.idm.RoleRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
+import org.keycloak.representations.userprofile.config.UPAttribute;
+import org.keycloak.representations.userprofile.config.UPAttributePermissions;
+import org.keycloak.representations.userprofile.config.UPConfig;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -145,6 +151,47 @@ public class TestRealm implements AutoCloseable {
 
     public void leaveGroup(String userId, String groupPath) {
         realm.users().get(userId).leaveGroup(groupId(groupPath));
+    }
+
+    /**
+     * Declares the four suspension attributes (see Suspensions) in the user profile, like
+     * RealmProvisionerImpl.completeCreation does at realm creation: this fixture builds its realm through
+     * ensureDefaults only (see RealmProvisionerTest for the full creation flow), so tests of the suspension
+     * feature call this once their org is set up. Idempotent.
+     */
+    public void declareSuspensionAttributes() {
+        UserProfileResource userProfile = realm.users().userProfile();
+        UPConfig config = userProfile.getConfiguration();
+        boolean changed = false;
+        for (String name : List.of("suspension-reason", "suspended-at", "suspended-by", "suspension-org-choice")) {
+            if (config.getAttribute(name) != null) {
+                continue;
+            }
+            UPAttribute attribute = new UPAttribute(name, new UPAttributePermissions(Set.of("admin"), Set.of("admin")));
+            if ("suspension-reason".equals(name)) {
+                Map<String, Object> maxLength = new HashMap<>();
+                maxLength.put("max", 500);
+                attribute.addValidation("length", maxLength);
+            }
+            config.addOrReplaceAttribute(attribute);
+            changed = true;
+        }
+        if (changed) {
+            userProfile.update(config);
+        }
+    }
+
+    /** Removes the four suspension attributes: simulates a realm created before the feature existed. */
+    public void removeSuspensionAttributes() {
+        UserProfileResource userProfile = realm.users().userProfile();
+        UPConfig config = userProfile.getConfiguration();
+        boolean changed = false;
+        for (String name : List.of("suspension-reason", "suspended-at", "suspended-by", "suspension-org-choice")) {
+            changed |= config.removeAttribute(name);
+        }
+        if (changed) {
+            userProfile.update(config);
+        }
     }
 
     public Set<String> groupPaths(String userId) {

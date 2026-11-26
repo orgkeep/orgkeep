@@ -12,7 +12,10 @@ import org.keycloak.representations.idm.UserRepresentation;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -62,6 +65,31 @@ public class KeycloakUsers {
     public void setEnabled(String realm, String userId, boolean enabled) {
         UserRepresentation user = get(realm, userId);
         user.setEnabled(enabled);
+        keycloak.realm(realm).users().get(userId).update(user);
+    }
+
+    /**
+     * Sets these attributes, as single values, leaving the user's other attributes untouched. Read then written
+     * whole, like {@link #setEnabled}: always called under the USER(id) exclusive lock of the caller.
+     */
+    public void setAttributes(String realm, String userId, Map<String, String> values) {
+        UserRepresentation user = get(realm, userId);
+        Map<String, List<String>> attributes = user.getAttributes() == null
+                ? new HashMap<>() : new HashMap<>(user.getAttributes());
+        values.forEach((name, value) -> attributes.put(name, List.of(value)));
+        user.setAttributes(attributes);
+        keycloak.realm(realm).users().get(userId).update(user);
+    }
+
+    /** Removes these attributes, leaving the others untouched. Idempotent: an absent attribute is left out. */
+    public void removeAttributes(String realm, String userId, Collection<String> names) {
+        UserRepresentation user = get(realm, userId);
+        if (user.getAttributes() == null) {
+            return;
+        }
+        Map<String, List<String>> attributes = new HashMap<>(user.getAttributes());
+        names.forEach(attributes::remove);
+        user.setAttributes(attributes);
         keycloak.realm(realm).users().get(userId).update(user);
     }
 

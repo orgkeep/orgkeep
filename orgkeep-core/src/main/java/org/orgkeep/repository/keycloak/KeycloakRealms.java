@@ -6,8 +6,11 @@ import jakarta.ws.rs.core.Response;
 import lombok.RequiredArgsConstructor;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.RealmResource;
+import org.keycloak.admin.client.resource.UserProfileResource;
 import org.keycloak.representations.idm.RealmRepresentation;
 import org.keycloak.representations.idm.RoleRepresentation;
+import org.keycloak.representations.userprofile.config.UPAttribute;
+import org.keycloak.representations.userprofile.config.UPConfig;
 
 import java.util.HashMap;
 import java.util.List;
@@ -116,5 +119,26 @@ public class KeycloakRealms {
 
     public void delete(String realm) {
         keycloak.realm(realm).remove();
+    }
+
+    /**
+     * Declares these attributes in the realm's user profile, read then written back whole: the admin API replaces
+     * the whole configuration. Idempotent, an attribute already declared with that name is left as is (its
+     * permissions and validators are not touched). Called only at realm creation (see RealmProvisionerImpl): a
+     * realm created before this declaration existed is never caught up (no migration in 0.x).
+     */
+    public void declareUserAttributes(String realm, List<UPAttribute> attributes) {
+        UserProfileResource userProfile = keycloak.realm(realm).users().userProfile();
+        UPConfig config = userProfile.getConfiguration();
+        boolean changed = false;
+        for (UPAttribute attribute : attributes) {
+            if (config.getAttribute(attribute.getName()) == null) {
+                config.addOrReplaceAttribute(attribute);
+                changed = true;
+            }
+        }
+        if (changed) {
+            userProfile.update(config);
+        }
     }
 }

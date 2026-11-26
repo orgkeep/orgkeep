@@ -92,8 +92,9 @@ public class KeycloakOrgs {
     }
 
     /**
-     * Every member of the organisation. Keycloak pages them, 10 by default even without paging parameters
-     * (the deprecated getAll() returned the first 10 only): read every page.
+     * Every member of the organisation, full representation (suspension attributes included: its only caller,
+     * the disable loop, needs them). Keycloak pages them, 10 by default even without paging parameters (the
+     * deprecated getAll() returned the first 10 only): read every page.
      * Keyed by id: a member added while the pages are read can shift one onto the next page.
      */
     public List<MemberRepresentation> members(String realm, String orgId) {
@@ -101,7 +102,7 @@ public class KeycloakOrgs {
         List<MemberRepresentation> page;
         int first = 0;
         do {
-            page = organisation(realm, orgId).members().list(first, PAGE_SIZE);
+            page = organisation(realm, orgId).members().list(first, PAGE_SIZE, false);
             page.forEach(member -> members.putIfAbsent(member.getId(), member));
             first += PAGE_SIZE;
         } while (page.size() == PAGE_SIZE);

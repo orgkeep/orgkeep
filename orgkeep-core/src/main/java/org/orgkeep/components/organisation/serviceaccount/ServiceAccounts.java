@@ -120,6 +120,16 @@ public class ServiceAccounts {
     }
 
     /**
+     * Like {@link #users}, but full representation (suspension attributes included): for the service accounts
+     * list of an org, small enough to read whole with the full representation (same variant used for a team).
+     */
+    public List<UserRepresentation> usersFull(String realm, String orgName) {
+        return groups.findId(realm, OrgGroups.serviceAccounts(orgName))
+                .map(groupId -> groups.membersFull(realm, groupId))
+                .orElse(List.of());
+    }
+
+    /**
      * The client of a user of the group, if it really is the service account of this org: the username
      * "service-account-org-{org}.{name}" names a client that carries the attribute "org" of this org. A client created
      * by hand in the console, with a matching clientId, is not one.

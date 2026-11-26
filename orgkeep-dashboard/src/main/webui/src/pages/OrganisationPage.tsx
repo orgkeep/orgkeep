@@ -12,6 +12,7 @@ import {
   Loader,
   Menu,
   Modal,
+  Paper,
   Pagination,
   Select,
   Stack,
@@ -36,6 +37,7 @@ import {
   useOrgMembers,
   useOrgProducts,
   useRevokeOwnership,
+  useSeats,
   useSetOrgEnabled,
   useSuspendMember,
   useUnassignProduct,
@@ -51,6 +53,7 @@ import TokenPreviewModal from '../components/TokenPreviewModal';
 import AssignProductModal from './AssignProductModal';
 import { ROLE_COLORS } from './orgRoles';
 import { personName } from './personName';
+import SeatsModal from './SeatsModal';
 import ServiceAccountsSection from './ServiceAccountsSection';
 import MemberName from "../components/MemberName";
 import ResendInvitationButton from '../components/ResendInvitationButton';
@@ -114,6 +117,8 @@ export default function OrganisationPage() {
       </Breadcrumbs>
 
       <OrgHeader details={details} />
+
+      <SeatsSection org={org} />
 
       <Tabs value={tab} onChange={changeTab}>
         <Tabs.List>
@@ -255,6 +260,63 @@ function StatusButton({ details }: { details: OrgDetails }) {
         onClose={closeModal}
       />
     </>
+  );
+}
+
+// How many members / service accounts are used, and the limit if any: "12 / 20", or just "12" with no limit
+function seatsValue(seats: { used: number; max: number | null }): string | number {
+  return seats.max === null ? seats.used : `${seats.used} / ${seats.max}`;
+}
+
+// Used and available seats of the organisation, with the realm owner's edit form (empty field = no limit)
+function SeatsSection({ org }: { org: string }) {
+  const { t } = useTranslation();
+  const { data: seats, isPending, error } = useSeats(org);
+  const [editOpened, { open: openEdit, close: closeEdit }] = useDisclosure();
+
+  if (isPending) {
+    return <Loader size="sm" />;
+  }
+  if (error) {
+    return (
+      <Alert color="red" title={t('orgDetail.seats.loadError', { org })}>
+        {error.message}
+      </Alert>
+    );
+  }
+
+  return (
+    <Paper withBorder p="sm">
+      <Group justify="space-between" align="center">
+        <Group gap="lg">
+          <Text fw={500}>{t('orgDetail.seats.title')}</Text>
+          <Text c="dimmed">
+            {t('orgDetail.seats.members')}{' '}
+            <Text span c="var(--mantine-color-text)" fw={500}>
+              {seatsValue(seats.members)}
+            </Text>
+          </Text>
+          <Text c="dimmed">
+            {t('orgDetail.seats.serviceAccounts')}{' '}
+            <Text span c="var(--mantine-color-text)" fw={500}>
+              {seatsValue(seats.serviceAccounts)}
+            </Text>
+          </Text>
+        </Group>
+        <Button variant="subtle" size="xs" onClick={openEdit}>
+          {t('common.edit')}
+        </Button>
+      </Group>
+
+      {/* key: a fresh form after a save, so it starts again from the limits just applied */}
+      <SeatsModal
+        key={`${seats.members.max}-${seats.serviceAccounts.max}`}
+        org={org}
+        seats={seats}
+        opened={editOpened}
+        onClose={closeEdit}
+      />
+    </Paper>
   );
 }
 

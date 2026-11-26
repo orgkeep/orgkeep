@@ -1,4 +1,4 @@
-import { Alert, Button, Fieldset, Group, Modal, SimpleGrid, Stack, TagsInput, Text, TextInput } from '@mantine/core';
+import { Alert, Button, Fieldset, Group, Modal, NumberInput, SimpleGrid, Stack, TagsInput, Text, TextInput } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useTranslation } from 'react-i18next';
 import { type CreateOrgRequest, useCreateOrganisation } from '../api/organisations';
@@ -19,6 +19,9 @@ interface FormValues {
   ownerEmail: string;
   ownerFirstName: string;
   ownerLastName: string;
+  // NumberInput gives '' while the field is empty: no limit
+  maxMembers: number | '';
+  maxServiceAccounts: number | '';
 }
 
 // '' -> null: the core treats a missing owner as "no owner", not as an owner with an empty email
@@ -39,6 +42,8 @@ function toRequest(values: FormValues): CreateOrgRequest {
     ownerEmail: emptyToNull(values.ownerEmail),
     ownerFirstName: emptyToNull(values.ownerFirstName),
     ownerLastName: emptyToNull(values.ownerLastName),
+    maxMembers: values.maxMembers === '' ? null : values.maxMembers,
+    maxServiceAccounts: values.maxServiceAccounts === '' ? null : values.maxServiceAccounts,
   };
 }
 
@@ -49,7 +54,15 @@ export default function CreateOrganisationModal({ opened, onClose }: CreateOrgan
   // useForm holds the values, the validation rules and the errors of the form,
   // a bit like a form-backing bean with Bean Validation annotations in Spring MVC
   const form = useForm<FormValues>({
-    initialValues: { name: '', emailDomains: [], ownerEmail: '', ownerFirstName: '', ownerLastName: '' },
+    initialValues: {
+      name: '',
+      emailDomains: [],
+      ownerEmail: '',
+      ownerFirstName: '',
+      ownerLastName: '',
+      maxMembers: '',
+      maxServiceAccounts: '',
+    },
     // each rule returns null when the value is valid, else the error message.
     // The second argument is all the values of the form: the names are required only with an owner email
     validate: {
@@ -121,6 +134,32 @@ export default function CreateOrganisationModal({ opened, onClose }: CreateOrgan
               </SimpleGrid>
               <Text size="xs" c="dimmed">
                 {t('organisations.create.ownerDescription')}
+              </Text>
+            </Stack>
+          </Fieldset>
+
+          <Fieldset legend={t('organisations.create.seats')}>
+            <Stack gap="sm">
+              <SimpleGrid cols={{ base: 1, xs: 2 }}>
+                <NumberInput
+                  label={t('organisations.create.maxMembers')}
+                  placeholder={t('organisations.create.noLimit')}
+                  min={0}
+                  allowDecimal={false}
+                  allowNegative={false}
+                  {...form.getInputProps('maxMembers')}
+                />
+                <NumberInput
+                  label={t('organisations.create.maxServiceAccounts')}
+                  placeholder={t('organisations.create.noLimit')}
+                  min={0}
+                  allowDecimal={false}
+                  allowNegative={false}
+                  {...form.getInputProps('maxServiceAccounts')}
+                />
+              </SimpleGrid>
+              <Text size="xs" c="dimmed">
+                {t('organisations.create.seatsDescription')}
               </Text>
             </Stack>
           </Fieldset>

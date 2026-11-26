@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ActionIcon, Alert, Anchor, Badge, Button, Group, Loader, Menu, Modal, Stack, Table, Text, Tooltip } from '@mantine/core';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
+import { useSeats } from '../api/organisations';
 import {
   type ServiceAccount,
   type ServiceAccountCredentials,
@@ -35,6 +36,7 @@ type Action = { kind: 'rotate' | 'disable' | 'enable' | 'delete'; account: Servi
 export default function ServiceAccountsSection({ org, realmOwner = false }: ServiceAccountsSectionProps) {
   const { t } = useTranslation();
   const { data: accounts, isPending, error } = useServiceAccounts(org);
+  const { data: seats } = useSeats(org);
   const catalogs = useOrgCatalogs(org);
   const rotate = useRotateServiceAccountSecret(org);
   const setEnabled = useSetServiceAccountEnabled(org);
@@ -117,16 +119,38 @@ export default function ServiceAccountsSection({ org, realmOwner = false }: Serv
     );
   }
 
+  // the core refuses to create once used >= max; the button is disabled only as a convenience, the core still checks
+  const full = seats !== undefined && seats.serviceAccounts.max !== null && seats.serviceAccounts.used >= seats.serviceAccounts.max;
+
   return (
     <Stack gap="sm">
       <Group justify="space-between" align="flex-start">
-        <Text c="dimmed" size="sm" maw={720}>
-          {t('serviceAccounts.hint')}
-        </Text>
-        {/* the form needs the catalogs of the org: not before they are loaded */}
-        <Button onClick={() => setFormTarget('new')} disabled={!catalogs.data}>
-          {t('serviceAccounts.create')}
-        </Button>
+        <Stack gap={4} maw={720}>
+          <Text c="dimmed" size="sm">
+            {t('serviceAccounts.hint')}
+          </Text>
+          {seats && (
+            <Text c="dimmed" size="sm">
+              {seats.serviceAccounts.max === null
+                ? t('serviceAccounts.seatsNoLimit', { used: seats.serviceAccounts.used })
+                : t('serviceAccounts.seatsUsed', { used: seats.serviceAccounts.used, max: seats.serviceAccounts.max })}
+            </Text>
+          )}
+        </Stack>
+        <Tooltip
+          label={t('serviceAccounts.createDisabledTooltip', {
+            used: seats?.serviceAccounts.used,
+            max: seats?.serviceAccounts.max,
+          })}
+          disabled={!full}
+        >
+          {/* the form needs the catalogs of the org: not before they are loaded */}
+          <span>
+            <Button onClick={() => setFormTarget('new')} disabled={!catalogs.data || full}>
+              {t('serviceAccounts.create')}
+            </Button>
+          </span>
+        </Tooltip>
       </Group>
       {catalogs.error && (
         <Alert color="red" title={t('serviceAccounts.catalogsError')}>

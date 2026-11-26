@@ -1,10 +1,24 @@
 import { useEffect, useState } from 'react';
-import { Alert, Badge, Button, Center, Group, Loader, Pagination, Stack, Table, Text, TextInput, Title } from '@mantine/core';
+import {
+  Alert,
+  Badge,
+  Button,
+  Center,
+  Group,
+  Loader,
+  Pagination,
+  Stack,
+  Table,
+  Text,
+  TextInput,
+  Title,
+  Tooltip,
+} from '@mantine/core';
 import { useDebouncedValue, useDisclosure } from '@mantine/hooks';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 import { useCurrentUser } from '../api/currentUser';
-import { type OrgMember, PAGE_SIZE, useOrgMembers, useRemoveOrgMember, useSetMemberEnabled } from '../api/organisations';
+import { type OrgMember, PAGE_SIZE, useOrgMembers, useRemoveOrgMember, useSeats, useSetMemberEnabled } from '../api/organisations';
 import ConfirmModal from '../components/ConfirmModal';
 import SuspensionBadge from '../components/SuspensionBadge';
 import AddMemberModal from './AddMemberModal';
@@ -22,6 +36,7 @@ export default function OrgMembersPage() {
   const [debouncedSearch] = useDebouncedValue(search.trim(), 300);
   const [page, setPage] = useState(1);
   const { data: memberPage, isPending, error } = useOrgMembers(org, { search: debouncedSearch, page });
+  const { data: seats } = useSeats(org);
   const removeMember = useRemoveOrgMember(org);
   const [addOpened, { open: openAdd, close: closeAdd }] = useDisclosure();
   const [removeTarget, setRemoveTarget] = useState<OrgMember | null>(null);
@@ -95,12 +110,32 @@ export default function OrgMembersPage() {
   }
 
   const members = memberPage.items;
+  // the core refuses to add once used >= max; the button is disabled only as a convenience, the core still checks
+  const full = seats !== undefined && seats.members.max !== null && seats.members.used >= seats.members.max;
 
   return (
     <Stack maw={1100}>
-      <Group justify="space-between">
-        <Title order={2}>{t('members.title', { org })}</Title>
-        <Button onClick={openAdd}>{t('members.add')}</Button>
+      <Group justify="space-between" align="flex-end">
+        <Stack gap={0}>
+          <Title order={2}>{t('members.title', { org })}</Title>
+          {seats && (
+            <Text c="dimmed" size="sm">
+              {seats.members.max === null
+                ? t('members.seatsNoLimit', { used: seats.members.used })
+                : t('members.seatsUsed', { used: seats.members.used, max: seats.members.max })}
+            </Text>
+          )}
+        </Stack>
+        <Tooltip
+          label={t('members.addDisabledTooltip', { used: seats?.members.used, max: seats?.members.max })}
+          disabled={!full}
+        >
+          <span>
+            <Button onClick={openAdd} disabled={full}>
+              {t('members.add')}
+            </Button>
+          </span>
+        </Tooltip>
       </Group>
 
       <TextInput

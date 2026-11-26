@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deleteJson, deleteRequest, getJson, postJson, putJson } from './http';
-import { SERVICE_ACCOUNTS_KEY, TEAMS_KEY } from './queryKeys';
+import { SEATS_KEY, SERVICE_ACCOUNTS_KEY, TEAMS_KEY } from './queryKeys';
 import { type Suspension } from './organisations';
 
 // The service accounts of an organisation, managed by its org admins and by the realm owner
@@ -131,13 +131,23 @@ function useInvalidate(org: string) {
   };
 }
 
+// Creating or deleting a service account changes the seats used: refresh that query too
+function useInvalidateSeats(org: string) {
+  const queryClient = useQueryClient();
+  return () => queryClient.invalidateQueries({ queryKey: [SEATS_KEY, org] });
+}
+
 // The credentials come in the answer: the caller copies them into its own state to show them once (and resets this
 // mutation), they are never put in the query cache
 export function useCreateServiceAccount(org: string) {
   const invalidate = useInvalidate(org);
+  const invalidateSeats = useInvalidateSeats(org);
   return useMutation({
     mutationFn: (request: CreateServiceAccountRequest) => postJson<ServiceAccountCreated>(serviceAccountsUrl(org), request),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      invalidateSeats();
+    },
   });
 }
 
@@ -193,8 +203,12 @@ export function useLiftServiceAccountSuspension(org: string) {
 
 export function useDeleteServiceAccount(org: string) {
   const invalidate = useInvalidate(org);
+  const invalidateSeats = useInvalidateSeats(org);
   return useMutation({
     mutationFn: (name: string) => deleteRequest(serviceAccountUrl(org, name)),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      invalidateSeats();
+    },
   });
 }

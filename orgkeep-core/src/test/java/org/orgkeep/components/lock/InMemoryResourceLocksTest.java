@@ -179,6 +179,38 @@ class InMemoryResourceLocksTest {
         assertEquals(0, locks.size());
     }
 
+    // SEATS ranks between ORG and TEAM: a call holding ORG can add SEATS, and SEATS can add TEAM, but not the reverse
+    @Test
+    void seatsRanksBetweenOrgAndTeam() {
+        try (HeldLocks held = locks.acquire(org("a", SHARED))) {
+            held.add(LockRequest.seats(REALM, "a"));
+            assertEquals(2, locks.size());
+        }
+        assertEquals(0, locks.size());
+
+        try (HeldLocks held = locks.acquire(LockRequest.seats(REALM, "a"))) {
+            held.add(LockRequest.team(REALM, "a", "t", EXCLUSIVE));
+            assertEquals(2, locks.size());
+            assertThrows(IllegalStateException.class, () -> held.add(org("a", SHARED)), "ORG ranks before SEATS");
+        }
+        assertEquals(0, locks.size());
+
+        try (HeldLocks held = locks.acquire(LockRequest.team(REALM, "a", "t", EXCLUSIVE))) {
+            assertThrows(IllegalStateException.class, () -> held.add(LockRequest.seats(REALM, "a")),
+                    "SEATS ranks before TEAM");
+        }
+    }
+
+    // a USER lock still ranks after SEATS, as it does after ORG and TEAM
+    @Test
+    void userRanksAfterSeats() {
+        try (HeldLocks held = locks.acquire(LockRequest.seats(REALM, "a"))) {
+            held.add(LockRequest.userById(REALM, "u1", EXCLUSIVE));
+            assertEquals(2, locks.size());
+        }
+        assertEquals(0, locks.size());
+    }
+
     // the rank of a user lock comes from the factory used, never from the key: an email may contain "/id:"
     @Test
     void userRankDoesNotDependOnTheContentOfTheKey() {

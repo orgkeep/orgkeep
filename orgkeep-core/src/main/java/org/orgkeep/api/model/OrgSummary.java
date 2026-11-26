@@ -11,6 +11,8 @@ import java.util.Set;
  *                    yet, or no org client (created outside of Orgkeep)
  * @param memberCount people of the organisation, owners included (not its service accounts, which are members of the Keycloak organisation too)
  * @param products    products assigned to the org, as "catalog/product" (groups under /{org}/catalogs), sorted
+ * @param maxMembers  maximum number of members, null = no limit; memberCount is the "used" of this limit
+ * @param maxServiceAccounts maximum number of service accounts, null = no limit
  */
 public record OrgSummary(
     String id,
@@ -19,4 +21,6 @@ public record OrgSummary(
     boolean enabled,
     List<OrgMember> owners,
     long memberCount,
-    List<String> products){ }
+    List<String> products,
+    Integer maxMembers,
+    Integer maxServiceAccounts){ }

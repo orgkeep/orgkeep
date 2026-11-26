@@ -4,6 +4,7 @@ import org.orgkeep.api.model.CreateOrgRequest;
 import org.orgkeep.api.model.OrgClients;
 import org.orgkeep.api.model.OrgMember;
 import org.orgkeep.api.model.OrgSummary;
+import org.orgkeep.components.organisation.seats.SeatLimits;
 import org.keycloak.representations.idm.ClientRepresentation;
 import org.keycloak.representations.idm.CredentialRepresentation;
 import org.keycloak.representations.idm.OrganizationDomainRepresentation;
@@ -25,9 +26,11 @@ public interface OrgMapper {
     OrganizationRepresentation toOrgRepresentation(CreateOrgRequest request);
 
     // several sources: id, name and enabled come from org, the other parameters fill the properties of the same name
+    // (maxMembers and maxServiceAccounts are read by the caller through SeatLimits and passed in already resolved:
+    // the mapper only copies them, it never reads org's attributes itself)
     @Mapping(target = "emailDomains", source = "org.domains")
     OrgSummary toOrgSummary(OrganizationRepresentation org, List<OrgMember> owners, long memberCount,
-                            List<String> products);
+                            List<String> products, Integer maxMembers, Integer maxServiceAccounts);
 
     // an org without domain has null domains in Keycloak: the API always answers a set, empty here
     @IterableMapping(nullValueMappingStrategy = NullValueMappingStrategy.RETURN_DEFAULT)
@@ -68,6 +71,11 @@ public interface OrgMapper {
         }
 
         request.emailDomains().forEach(email -> org.addDomain(toDomain(email)));
+    }
+
+    @AfterMapping
+    default void mapSeatLimits(CreateOrgRequest request, @MappingTarget OrganizationRepresentation org) {
+        SeatLimits.set(org, request.maxMembers(), request.maxServiceAccounts());
     }
 
     @AfterMapping

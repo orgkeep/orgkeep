@@ -29,6 +29,7 @@ import org.orgkeep.repository.keycloak.KeycloakUsers;
 import org.orgkeep.components.organisation.member.DisabledMembers;
 import org.orgkeep.components.organisation.member.MemberEligibility;
 import org.orgkeep.components.organisation.member.MemberMapper;
+import org.orgkeep.components.organisation.seats.SeatLimits;
 import org.orgkeep.components.organisation.serviceaccount.ServiceAccounts;
 import org.orgkeep.components.organisation.suspension.SuspensionAttributes;
 import io.vertx.core.eventbus.EventBus;
@@ -201,7 +202,8 @@ public class OrgServiceImpl implements OrgService {
                 .orElse(List.of());
         List<String> products = AssignedProducts.of(org).stream().sorted().toList();
         long memberCount = serviceAccounts.peopleCount(realm, org.getName(), orgs.memberCount(realm, org.getId()));
-        return orgMapper.toOrgSummary(org, owners, memberCount, products);
+        return orgMapper.toOrgSummary(org, owners, memberCount, products,
+                SeatLimits.maxMembers(org).orElse(null), SeatLimits.maxServiceAccounts(org).orElse(null));
     }
 
     private static boolean isBlank(String value) {
@@ -219,7 +221,8 @@ public class OrgServiceImpl implements OrgService {
         String groupId = groups.findId(realm, OrgGroups.root(orgName)).orElse(null);
 
         return new OrgDetails(org.getId(), org.getName(), orgMapper.toDomainNames(org.getDomains()), org.isEnabled(),
-                clientId, clientUuid, groupId, owners);
+                clientId, clientUuid, groupId, owners,
+                SeatLimits.maxMembers(org).orElse(null), SeatLimits.maxServiceAccounts(org).orElse(null));
     }
 
     /**

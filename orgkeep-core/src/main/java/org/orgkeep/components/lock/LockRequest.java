@@ -32,6 +32,11 @@ public record LockRequest(ResourceType type, String key, LockMode mode, boolean 
         return new LockRequest(ResourceType.TEAM, realm + "/" + org + "/" + team, mode, false);
     }
 
+    /** Always exclusive: a seat check serialises every add and every service account creation of the organisation. */
+    public static LockRequest seats(String realm, String org) {
+        return new LockRequest(ResourceType.SEATS, realm + "/" + org, LockMode.EXCLUSIVE, false);
+    }
+
     public static LockRequest userByEmail(String realm, String email, LockMode mode) {
         return new LockRequest(ResourceType.USER, realm + "/email:" + email.toLowerCase(Locale.ROOT), mode, false);
     }

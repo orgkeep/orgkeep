@@ -17,6 +17,9 @@
         <!-- the Java core-embedding code and the TypeScript front: the default (src/main/java only) would miss
              the front entirely, see src/main/webui/package.json -->
         <sonar.sources>src/main/java,src/main/webui/src</sonar.sources>
+        <!-- produced by quarkus-jacoco (below) from the @QuarkusTest runs. No front coverage: the webui
+             (src/main/webui) has no test runner yet, see its package.json -->
+        <sonar.coverage.jacoco.xmlReportPaths>${project.build.directory}/jacoco-report/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
     </properties>
 
     <dependencies>
@@ -76,6 +79,12 @@
             <version>4.11.1</version>
             <scope>test</scope>
         </dependency>
+        <!-- JaCoCo XML report from the @QuarkusTest runs (target/jacoco-report/jacoco.xml), read by SonarQube Cloud -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-jacoco</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -99,6 +108,14 @@
             </plugin>
             <plugin>
                 <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>@{argLine}</argLine>
+                </configuration>
+            </plugin>
+            <!-- the JaCoCo Java agent (prepare-agent) for the plain JUnit test classes, see the parent pom -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
             </plugin>
         </plugins>
     </build>

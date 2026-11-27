@@ -45,6 +45,7 @@ dependencies: the core before the dashboard). One version for all: they are rele
         <lombok.version>1.18.42</lombok.version>
         <compiler-plugin.version>3.15.0</compiler-plugin.version>
         <surefire-plugin.version>3.5.4</surefire-plugin.version>
+        <jacoco-plugin.version>0.8.15</jacoco-plugin.version>
 
         <!-- The single source of truth for the Keycloak version: Dev Services (dev and test, overriding the
              default of the Quarkus platform) and the ghcr.io/orgkeep/orgkeep-keycloak image (orgkeep-theme/Dockerfile)
@@ -151,6 +152,30 @@ dependencies: the core before the dashboard). One version for all: they are rele
                     <groupId>org.sonarsource.scanner.maven</groupId>
                     <artifactId>sonar-maven-plugin</artifactId>
                     <version>5.9.0.7382</version>
+                </plugin>
+                <!-- The JaCoCo Java agent (prepare-agent): a -javaagent that instruments classes as they load, the
+                     only way to get coverage of the plain JUnit test classes that do not boot Quarkus (mapper
+                     tests, KeycloakErrorsTest...). quarkus-jacoco, by contrast, instruments the application's own
+                     classes at build time, for the @QuarkusTest runs. prepare-agent sets the "argLine" property
+                     read by maven-surefire-plugin (late evaluation, @{argLine}, see its configuration in each
+                     module) before the forked test JVM starts. destFile matches quarkus-jacoco's own default data
+                     file (target/jacoco-quarkus.exec): both agents then write to (and, with JaCoCo's default
+                     append=true, accumulate into) the same file, so the final report reflects both kinds of tests.
+                     See quarkus.jacoco.reuse-data-file in each module's application.properties. -->
+                <plugin>
+                    <groupId>org.jacoco</groupId>
+                    <artifactId>jacoco-maven-plugin</artifactId>
+                    <version>${jacoco-plugin.version}</version>
+                    <executions>
+                        <execution>
+                            <goals>
+                                <goal>prepare-agent</goal>
+                            </goals>
+                            <configuration>
+                                <destFile>${project.build.directory}/jacoco-quarkus.exec</destFile>
+                            </configuration>
+                        </execution>
+                    </executions>
                 </plugin>
             </plugins>
         </pluginManagement>

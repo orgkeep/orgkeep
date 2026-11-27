@@ -12,6 +12,11 @@
     <properties>
         <!-- Quinoa is a Quarkiverse extension, not part of the Quarkus BOM: its version must match the Quarkus version -->
         <quinoa.version>2.9.3</quinoa.version>
+
+        <sonar.projectKey>orgkeep-dashboard</sonar.projectKey>
+        <!-- the Java core-embedding code and the TypeScript front: the default (src/main/java only) would miss
+             the front entirely, see src/main/webui/package.json -->
+        <sonar.sources>src/main/java,src/main/webui/src</sonar.sources>
     </properties>
 
     <dependencies>

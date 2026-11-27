@@ -15,6 +15,8 @@
         <mapstruct.version>1.6.3</mapstruct.version>
         <jandex.version>3.6.0</jandex.version>
         <testcontainers.version>2.0.5</testcontainers.version>
+
+        <sonar.projectKey>orgkeep-core</sonar.projectKey>
     </properties>
 
     <dependencyManagement>

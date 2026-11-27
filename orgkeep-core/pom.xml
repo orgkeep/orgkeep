@@ -17,6 +17,8 @@
         <testcontainers.version>2.0.5</testcontainers.version>
 
         <sonar.projectKey>orgkeep-core</sonar.projectKey>
+        <!-- produced by quarkus-jacoco (below) from the @QuarkusTest runs -->
+        <sonar.coverage.jacoco.xmlReportPaths>${project.build.directory}/jacoco-report/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
     </properties>
 
     <dependencyManagement>
@@ -145,6 +147,12 @@
             <artifactId>awaitility</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- JaCoCo XML report from the @QuarkusTest runs (target/jacoco-report/jacoco.xml), read by SonarQube Cloud -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-jacoco</artifactId>
+            <scope>test</scope>
+        </dependency>
 
     </dependencies>
 
@@ -219,6 +227,11 @@
                         <maven.home>${maven.home}</maven.home>
                     </systemPropertyVariables>
                 </configuration>
+            </plugin>
+            <!-- the JaCoCo Java agent (prepare-agent) for the plain JUnit test classes, see the parent pom -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
             </plugin>
         </plugins>
     </build>

@@ -59,6 +59,11 @@ dependencies: the core before the dashboard). One version for all: they are rele
              the systemPropertyVariables of surefire/failsafe, or quarkus:dev's own configuration below) and falls
              back to the default Keycloak version of the Quarkus platform instead. -->
         <keycloak.version>26.8.1</keycloak.version>
+
+        <!-- SonarQube Cloud: one project per module (sonar.projectKey set in each module's pom), analysed by the
+             CI with `mvn -pl <module> sonar:sonar` (never bound to a build phase, see pluginManagement below). -->
+        <sonar.organization>orgkeep</sonar.organization>
+        <sonar.host.url>https://sonarcloud.io</sonar.host.url>
     </properties>
 
     <dependencyManagement>
@@ -139,6 +144,13 @@ dependencies: the core before the dashboard). One version for all: they are rele
                             <quarkus.keycloak.devservices.image-name>quay.io/keycloak/keycloak:${keycloak.version}</quarkus.keycloak.devservices.image-name>
                         </systemPropertyVariables>
                     </configuration>
+                </plugin>
+                <!-- invoked explicitly from the CI (mvn -pl <module> sonar:sonar), never during a normal build:
+                     no execution bound to it here. -->
+                <plugin>
+                    <groupId>org.sonarsource.scanner.maven</groupId>
+                    <artifactId>sonar-maven-plugin</artifactId>
+                    <version>5.9.0.7382</version>
                 </plugin>
             </plugins>
         </pluginManagement>

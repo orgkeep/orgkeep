@@ -22,6 +22,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # full history, not just the latest commit: SonarQube Cloud needs it to tell new code from old on a PR
+          fetch-depth: 0
 
       - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
@@ -31,9 +34,34 @@ jobs:
 
       # The core first, then the dashboard (which embeds it) and the theme. Quinoa is disabled in the test profile,
       # but the package phase builds the front (npm run build: TypeScript check, then Vite), with the Node.js version
-      # it downloads itself.
+      # it downloads itself. install (not verify) so the core jar lands in the local repo: the Sonar analyses below
+      # run one module at a time with -pl, and the dashboard depends on the core.
       - name: Build and test
-        run: mvn -B verify
+        run: mvn -B install
+
+      # One SonarQube Cloud project per module (sonar.projectKey in each module's pom): a reactor-wide sonar:sonar
+      # would collapse all three into one project. -pl alone is enough, no -am: the install above already built and
+      # tested every module, classes and the JaCoCo report are already on disk.
+      # SONAR_TOKEN is only in scope for these three steps (not the build step above), and only set at all on pushes
+      # to main and on pull_request runs that have the repo's secrets: Dependabot PRs and PRs from forks don't get
+      # it, so the step is skipped there instead of failing the required "build" check on a 401/403.
+      - name: Analyze orgkeep-core with SonarQube Cloud
+        if: env.SONAR_TOKEN != ''
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: mvn -B -pl orgkeep-core sonar:sonar
+
+      - name: Analyze orgkeep-dashboard with SonarQube Cloud
+        if: env.SONAR_TOKEN != ''
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: mvn -B -pl orgkeep-dashboard sonar:sonar
+
+      - name: Analyze orgkeep-theme with SonarQube Cloud
+        if: env.SONAR_TOKEN != ''
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: mvn -B -pl orgkeep-theme sonar:sonar
 
       # help:evaluate silently prints an error message and exits 0 when the expression does not resolve: checked
       # here, before the image is built, instead of failing only on the FROM line with a build-arg made of this

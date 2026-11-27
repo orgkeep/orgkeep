@@ -10,6 +10,12 @@
     <packaging>jar</packaging>
     <description>Keycloak theme with the look of Orgkeep</description>
 
+    <properties>
+        <sonar.projectKey>orgkeep-theme</sonar.projectKey>
+        <!-- no Java here: FTL templates, message bundles and images under src/main/resources -->
+        <sonar.sources>src/main/resources</sonar.sources>
+    </properties>
+
     <build>
         <!-- no version in the file name: copied as it is in /opt/keycloak/providers/ -->
         <finalName>orgkeep-theme</finalName>

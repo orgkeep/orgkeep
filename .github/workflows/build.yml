@@ -35,13 +35,18 @@ jobs:
       # The core first, then the dashboard (which embeds it) and the theme. Quinoa is disabled in the test profile,
       # but the package phase builds the front (npm run build: TypeScript check, then Vite), with the Node.js version
       # it downloads itself. install (not verify) so the core jar lands in the local repo: the Sonar analyses below
-      # run one module at a time with -pl, and the dashboard depends on the core.
+      # run one module at a time with -f, and the dashboard depends on the core.
       - name: Build and test
         run: mvn -B install
 
       # One SonarQube Cloud project per module (sonar.projectKey in each module's pom): a reactor-wide sonar:sonar
-      # would collapse all three into one project. -pl alone is enough, no -am: the install above already built and
-      # tested every module, classes and the JaCoCo report are already on disk.
+      # would collapse all three into one project. Each analysis is scoped with -f <module>/pom.xml, not -pl: -pl
+      # still loads the whole aggregator reactor before filtering it down to the selected module, and the Sonar
+      # plugin's monorepo support calls MavenSession.getTopLevelProject(), which fails once the aggregator itself
+      # is filtered out of the session ("Maven session does not declare a top level project"). -f points Maven at
+      # the module's own pom directly, with no reactor involved, which is also SonarSource's documented way to
+      # analyze each module of a Maven monorepo as its own project. The install above already built and tested
+      # every module, so classes and the JaCoCo report are already on disk.
       # SONAR_TOKEN is only in scope for these three steps (not the build step above), and only set at all on pushes
       # to main and on pull_request runs that have the repo's secrets: Dependabot PRs and PRs from forks don't get
       # it, so the step is skipped there instead of failing the required "build" check on a 401/403.
@@ -49,19 +54,19 @@ jobs:
         if: env.SONAR_TOKEN != ''
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: mvn -B -pl orgkeep-core sonar:sonar
+        run: mvn -B -f orgkeep-core/pom.xml sonar:sonar
 
       - name: Analyze orgkeep-dashboard with SonarQube Cloud
         if: env.SONAR_TOKEN != ''
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: mvn -B -pl orgkeep-dashboard sonar:sonar
+        run: mvn -B -f orgkeep-dashboard/pom.xml sonar:sonar
 
       - name: Analyze orgkeep-theme with SonarQube Cloud
         if: env.SONAR_TOKEN != ''
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: mvn -B -pl orgkeep-theme sonar:sonar
+        run: mvn -B -f orgkeep-theme/pom.xml sonar:sonar
 
       # help:evaluate silently prints an error message and exits 0 when the expression does not resolve: checked
       # here, before the image is built, instead of failing only on the FROM line with a build-arg made of this
